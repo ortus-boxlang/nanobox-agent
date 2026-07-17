@@ -1,0 +1,33 @@
+{
+	"$schema": "https://nanobox.io/schemas/v1/config.json",
+	"nanobox": {
+		"security": {
+			"enabled": true,
+			"autoDisable": true
+		},
+		"web": {
+			"enabled": true,
+			"host": "127.0.0.1",
+			"port": 8080
+		},
+		"worker": {
+			"enabled": true,
+			"debug": false
+		},
+		"cron": {
+			"enabled": true,
+			"maxJobs": 50
+		},
+		"sessions": {
+			"maxSessions": 1000,
+			"enabled": true,
+			"pruneAfterDays": 90
+		}
+	},
+	"bx-ai": {
+		"defaultModel": "",
+		"defaultProvider": "",
+		"providers": {}
+	},
+	"version": "1"
+}
