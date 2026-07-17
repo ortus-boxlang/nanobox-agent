@@ -4,16 +4,8 @@
 
 **Dependencies:** Phase 6 must be complete with all tests passing.
 
-## Tasks
+## Status (as-built 2026-07-17)
 
-| # | Task | Test | Depends On |
-|---|------|------|------------|
-| 1 | Playwright setup | Manual | — |
-| 2 | Browser tools for researcher | `tests/integration/BrowserToolTest.bx` | 1, Phase 2 |
-| 3 | Docker Compose update | Manual | 1 |
+**Blocked until Phase 10 completion.** No Playwright setup, no browser tools exist yet. All work deferred until every CLI namespace is functional through the real `nanobox.bx` entry point (Task 6).
 
-## Acceptance
-
-```
-Researcher agent can navigate web pages, take screenshots, and extract content.
-```
+**Ready for v0.1.0?** ❌ No — explicitly blocked behind Task 6.

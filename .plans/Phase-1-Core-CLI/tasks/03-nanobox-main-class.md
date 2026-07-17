@@ -20,32 +20,17 @@ Create the main entry point class with `main()` method. Parses CLI args, initial
 - [ ] Global `--debug` flag enables debug output
 - [ ] Uses BoxLang's `server` scope for persistence across calls
 
-## Test
+## Test — As-Built 2026-07-17
 
-**File:** `tests/unit/MainClassTest.bx`
+**File:** `tests/unit/MainClassTest.bx` (exists but likely shares broken import paths)
 
 ```boxlang
-class extends="testbox.system.BaseSpec" {
-
-    function run() {
-        describe( "nanobox main class", () => {
-            it( "parses --help flag", () => {
-                // ...
-            })
-            it( "parses --version flag", () => {
-                // ...
-            })
-            it( "dispatches to correct command", () => {
-                // ...
-            })
-            it( "shows help when no args provided", () => {
-                // ...
-            })
-        })
-    }
-
-}
+# Current state: cli/nanobox.bx exists with main() method, CLIGetArgs parsing, version/help flags.
+# BROKEN: References "cli.util.ConfigManager" and "cli.PrettyCli" which don't exist.
+# FIX: Change to "models.system.ConfigManager" and "models.util.PrettyCli" (Task 4).
 ```
+
+**Status:** 🟡 Exists but broken by import paths. Fix in Task 4.
 
 ## Depends On
 

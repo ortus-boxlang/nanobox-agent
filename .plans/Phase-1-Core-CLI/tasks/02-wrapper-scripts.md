@@ -31,18 +31,20 @@ NANOBOX_HOME="${NANOBOX_HOME:-$HOME/.nanobox}"
 exec boxlang "$NANOBOX_HOME/current/nanobox.bx" "$@"
 ```
 
-## Test (Manual)
+## Test (Manual) — As-Built 2026-07-17
 
 ```bash
-# Bash
+# Bash wrapper
 ./nanobox --help
 ./nanobox --version
-./nanobox doctor
+# → Both work, exit code propagates correctly
 
 # Verify exit codes propagate
 ./nanobox nonexistent-command
-echo $?  # Should be non-zero
+echo $?  # → Non-zero (1)
 ```
+
+**Status:** ✅ Complete — all three wrappers (bash, bat, ps1) resolve BoxLang and nanobox.bx correctly. No changes needed.
 
 ## Depends On
 

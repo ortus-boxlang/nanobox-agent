@@ -4,19 +4,8 @@
 
 **Dependencies:** All prior phases must be complete with all tests passing.
 
-## Tasks
+## Status (as-built 2026-07-17)
 
-| # | Task | Test | Depends On |
-|---|------|------|------------|
-| 1 | Release tarball script | Manual | All |
-| 2 | GitHub Releases setup | Manual | 1 |
-| 3 | Setup wizard polish | Manual | All |
-| 4 | Documentation for GitBook | Manual | All |
+**Blocked until Phase 10 completion.** No release tarball script, no GitHub Releases setup, no setup wizard polish, no GitBook documentation exist yet. All work deferred until every CLI namespace is functional through the real `nanobox.bx` entry point (Task 6).
 
-## Acceptance
-
-```
-$ curl -fsSL https://nanobox.io/install.sh | bash
-→ NanoBox v0.1.0 installed successfully.
-→ nanobox doctor passes all checks.
-```
+**Ready for v0.1.0?** ❌ No — explicitly blocked behind Task 6.

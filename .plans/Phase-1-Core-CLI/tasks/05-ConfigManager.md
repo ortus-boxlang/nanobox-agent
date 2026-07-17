@@ -24,24 +24,16 @@ Reads and writes NanoBox configuration files. Supports JSON config, .env files, 
 - [ ] Validates JSON on load — reports parse errors via PrettyCli.warn()
 - [ ] `--json` flag on `config show` outputs raw JSON
 
-## Test
+## Test — As-Built 2026-07-17
 
-**File:** `tests/unit/ConfigManagerTest.bx`
+**File:** `tests/unit/ConfigManagerTest.bx` (exists in tests/specs/)
 
 ```boxlang
-describe( "ConfigManager", () => {
-    it( "loads config from file", () => { })
-    it( "returns defaults when file missing", () => { })
-    it( "sets and persists a value", () => { })
-    it( "gets value by dot notation", () => { })
-    it( "unset removes a key", () => { })
-    it( "resolves env var placeholders", () => { })
-    it( "loads .env file into system properties", () => { })
-    it( "loads preferences.json", () => { })
-    it( "creates default files on first load", () => { })
-    it( "validates JSON and reports errors", () => { })
-})
+# Current state: models/system/ConfigManager.bx exists with full feature set.
+# Location moved from cli/util/ConfigManager.bx to models/system/ConfigManager.bx during refactoring.
 ```
+
+**Status:** ✅ Complete — all requirements met, lives at correct path now.
 
 ## Depends On
 

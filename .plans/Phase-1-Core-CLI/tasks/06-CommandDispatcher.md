@@ -33,23 +33,17 @@ Routes CLI commands to the appropriate handler class. Implements the command tre
 - [ ] Passes PrettyCli and ConfigManager instances to all commands
 - [ ] Global `--debug` flag available on every command
 
-## Test
+## Test — As-Built 2026-07-17
 
-**File:** `tests/unit/DispatcherTest.bx`
+**File:** `tests/unit/DispatcherTest.bx` (exists in tests/specs/)
 
 ```boxlang
-describe( "CommandDispatcher", () => {
-    it( "dispatches start command", () => { })
-    it( "dispatches web start command", () => { })
-    it( "dispatches worker stop command", () => { })
-    it( "dispatches chat command", () => { })
-    it( "dispatches config command", () => { })
-    it( "dispatches doctor command", () => { })
-    it( "shows help for unknown command", () => { })
-    it( "passes --debug flag to command handlers", () => { })
-    it( "lazy-loads command classes", () => { })
-})
+# Current state: cli/CommandDispatcher.bx exists with handler map.
+# INCOMPLETE: Handler map missing several namespaces (backup, update, web, worker, mcp, script, vault, security).
+# Most dispatching delegated to CommandRuntime which has the full list but broken import paths.
 ```
+
+**Status:** 🟡 Exists but incomplete — needs handler map reconciliation and import-path fixes (Task 4).
 
 ## Depends On
 

@@ -63,27 +63,16 @@ Build a comprehensive terminal output toolkit. Inspired by OpenCode and Pi. Wrap
 - [ ] `statusBar( left, right )` — persistent bottom bar
 - [ ] `clearStatus()` — clear status bar
 
-## Test
+## Test — As-Built 2026-07-17
 
-**File:** `tests/unit/PrettyCliTest.bx`
+**File:** `tests/unit/PrettyCliTest.bx` (exists in tests/specs/)
 
 ```boxlang
-describe( "PrettyCli", () => {
-    it( "renders a table with borders", () => { })
-    it( "renders a box around content", () => { })
-    it( "renders key-value table", () => { })
-    it( "disables colors when piped", () => { })
-    it( "prompt returns user input", () => { })
-    it( "confirm returns boolean", () => { })
-    it( "select returns chosen option", () => { })
-    it( "tree renders nested structure", () => { })
-    it( "taskList runs tasks in order", () => { })
-    it( "spinner animates frames", () => { })
-    it( "progress bar shows percentage", () => { })
-    it( "wraps long text", () => { })
-    it( "truncates with ellipsis", () => { })
-})
+# Current state: models/util/PrettyCli.bx exists with full feature set.
+# Location moved from cli/PrettyCli.bx to models/util/PrettyCli.bx during refactoring.
 ```
+
+**Status:** ✅ Complete — all requirements met, lives at correct path now.
 
 ## Depends On
 

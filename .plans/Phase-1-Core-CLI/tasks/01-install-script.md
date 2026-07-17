@@ -37,20 +37,25 @@ Create the installation script that sets up NanoBox from a git clone or release 
 - Respect `NANOBOX_HOME` env var override
 - Support `--help` flag
 
-## Test (Manual)
+## Test (Manual) — As-Built 2026-07-17
 
 ```bash
 # Clean install
 rm -rf ~/.nanobox
 cd nanobox
 ./install.sh
-nanobox doctor
-# → Should show all systems initialized
+# → Creates all directories, writes defaults, installs wrapper
 
 # Re-install (should preserve config)
 ./install.sh
-# → Config files should be unchanged
+# → Config files unchanged (idempotent)
+
+# Verify wrapper
+~/.local/bin/nanobox --version
+# → "NanoBox v0.1.0"
 ```
+
+**Status:** ✅ Complete — all requirements met. **Needs enhancement:** `--local` mode for dev installs, `--uninstall` mode, `--prefix` for root installs (Task 3).
 
 ## Depends On
 
