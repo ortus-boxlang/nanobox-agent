@@ -3,9 +3,9 @@
 	"classResolverCache": true,
 	"trustedCache": false,
 	"mappings": {
-		"/testbox": "${user-dir}/testbox",
+		"/testbox": "${user-dir}/lib/testbox",
 		"/tests": "${user-dir}/tests",
-		"/cli": "${user-dir}/cli"
+		"/nanobox": "${user-dir}/"
 	},
 	"modulesDirectory": [
 		"${user-dir}/lib/modules",

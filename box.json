@@ -9,9 +9,9 @@
         "bx-sqlite": "^1.2.0+5"
     },
     "installPaths": {
-        "testbox": "testbox/",
-		"bx-ai": "boxlang_modules/bx-ai/",
-		"bx-sqlite": "boxlang_modules/bx-sqlite/"
+        "testbox": "lib/testbox/",
+		"bx-ai": "lib/modules/bx-ai/",
+		"bx-sqlite": "lib/modules/bx-sqlite/"
     },
     "testbox": {
         "runner": "./testbox/run"
