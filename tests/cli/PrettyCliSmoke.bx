@@ -1,0 +1,21 @@
+import nanobox_cli.PrettyCli
+
+class {
+	function main( array args = [] ) {
+		var cli = new "nanobox-cli.PrettyCli"( false )
+		var table = cli.table( [ "Name", "State" ], [ [ "LM Studio", "Ready" ] ] )
+		if ( find( "LM Studio", table ) == 0 ) { throw( "table should contain row" ) }
+		if ( find( "State", table ) == 0 ) { throw( "table should contain header" ) }
+
+		var boxed = cli.box( "Hello" )
+		if ( find( "Hello", boxed ) == 0 ) { throw( "box should contain text" ) }
+		var keyValue = cli.kvTable( { provider: "lmstudio", model: "local" } )
+		if ( find( "lmstudio", keyValue ) == 0 ) { throw( "kv table should contain key" ) }
+		if ( find( "local", keyValue ) == 0 ) { throw( "kv table should contain value" ) }
+
+		if ( cli.truncate( "abcdef", 5 ) != "abcd…" ) { throw( "truncate should fit ellipsis" ) }
+		if ( cli.wrap( "one two three", 7 ).len() != 2 ) { throw( "wrap should produce lines" ) }
+
+		println( "PrettyCli smoke tests passed" )
+	}
+}

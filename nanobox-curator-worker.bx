@@ -1,0 +1,11 @@
+class {
+	function main( array args = [] ) {
+		var config = new "nanobox-cli.util.ConfigManager"()
+		var curator = new "nanobox-cli.SkillCurator"( expandPath( "." ) )
+		var reports = new "nanobox-cli.CuratorReportManager"( expandPath( "." ), new "nanobox-cli.VaultManager"( expandPath( ".nanobox/vault" ) ), config )
+		var lifecycle = new "nanobox-cli.CuratorLifecycle"( config, curator, reports )
+		var result = lifecycle.tick()
+		println( jsonSerialize( result ) )
+		while ( true ) { sleep( 1000 ) }
+	}
+}

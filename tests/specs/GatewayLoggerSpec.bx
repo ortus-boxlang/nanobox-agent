@@ -1,0 +1,13 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "GatewayLogger", () => {
+			it( "writes and tails a dedicated gateway log", () => {
+				var path = getTempDirectory() & "/gateway-#createUUID()#.log"
+				var logger = new "nanobox-cli.GatewayLogger"( path )
+				logger.info( "gateway test event" )
+				expect( logger.getPath() ).toBe( path )
+				expect( logger.tail( 10 ) ).toInclude( "gateway test event" )
+			} )
+		} )
+	}
+}

@@ -1,0 +1,26 @@
+class {
+	property config;
+	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		var operation = lCase( arguments.action )
+		switch ( operation ) {
+			case "show": return { success: true, config: sanitize( variables.config.load() ) }
+			case "get": return get( arguments.args.key ?: "" )
+			case "set": return set( arguments.args.key ?: "", arguments.args.value ?: "" )
+			case "unset": return unset( arguments.args.key ?: "" )
+			case "path": return { success: true, path: variables.config.getConfigPath() }
+			default: return { success: false, error: "Unknown config action: #arguments.action#" }
+		}
+	}
+	private struct function get( required string key ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; return { success: true, key: arguments.key, value: variables.config.get( arguments.key ) } }
+	private struct function set( required string key, required any value ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; variables.config.set( arguments.key, arguments.value ); return { success: true, key: arguments.key, value: variables.config.get( arguments.key ) } }
+	private struct function unset( required string key ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; variables.config.unset( arguments.key ); return { success: true, key: arguments.key } }
+	private struct function sanitize( required struct value ) {
+		var result = duplicate( arguments.value )
+		for ( var key in result ) {
+			if ( [ "apikey", "token", "password", "secret" ].contains( lCase( key ) ) ) { result[ key ] = "[REDACTED]" }
+			else if ( isStruct( result[ key ] ) ) { result[ key ] = sanitize( result[ key ] ) }
+		}
+		return result
+	}
+}

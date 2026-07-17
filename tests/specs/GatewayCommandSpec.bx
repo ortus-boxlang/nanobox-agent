@@ -1,0 +1,18 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "GatewayCommand", () => {
+			it( "supports setup, management, and unified send commands", () => {
+				var home = getTempDirectory() & "/gateway-cli-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var registry = new "nanobox-cli.GatewayRegistry"( config )
+				var command = new "nanobox-cli.commands.GatewayCommand"( registry, config )
+				var added = registry.create( "telegram", { botToken: "[REDACTED]" } )
+				expect( added.success ).toBeTrue()
+				expect( command.execute( "status" ).gateways ).toHaveLength( 1 )
+				expect( command.execute( "send", { name: "telegram", recipient: "1", message: "hello" } ).success ).toBeFalse()
+				expect( command.execute( "remove", { name: "telegram" } ).success ).toBeTrue()
+				expect( config.get( "gateways.telegram", {} ) ).toBeEmpty()
+			} )
+		} )
+	}
+}

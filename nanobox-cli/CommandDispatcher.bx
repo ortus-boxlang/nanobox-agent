@@ -1,0 +1,29 @@
+class {
+	property prettyCli;
+	property configManager;
+	property debug;
+
+	function init( required any prettyCli, required any configManager, boolean debug = false ) { variables.prettyCli = arguments.prettyCli; variables.configManager = arguments.configManager; variables.debug = arguments.debug; return this }
+
+	any function dispatch( required struct cli ) {
+		var positionals = arguments.cli.positionals ?: []
+		var options = arguments.cli.options ?: {}
+		if ( positionals.len() == 0 ) { return "help" }
+		var command = positionals.first()
+		if ( command == "gateway" ) { return dispatchGateway( positionals, options ) }
+		var handlers = { start: "StartCommand", stop: "StopCommand", status: "StatusCommand", restart: "RestartCommand", doctor: "DoctorCommand", chat: "ChatCommand", model: "ModelCommand", session: "SessionCommand", cron: "CronCommand", config: "ConfigCommand", agent: "AgentCommand", tool: "ToolCommand", skill: "SkillCommand" }
+		if ( !structKeyExists( handlers, command ) ) { variables.prettyCli.error( "Unknown command: #command#" ); return "unknown" }
+		return handlers[ command ]
+	}
+
+	private struct function dispatchGateway( required array positionals, required struct options ) {
+		var action = arguments.positionals.len() >= 2 ? arguments.positionals[ 2 ] : "status"
+		var args = duplicate( arguments.options )
+		if ( arguments.positionals.len() >= 3 && !structKeyExists( args, "name" ) ) { args.name = arguments.positionals[ 3 ] }
+		if ( structKeyExists( args, "token-env" ) ) { args.tokenEnv = args[ "token-env" ] }
+		if ( arguments.positionals.len() >= 4 && !structKeyExists( args, "recipient" ) ) { args.recipient = arguments.positionals[ 4 ] }
+		if ( arguments.positionals.len() >= 5 && !structKeyExists( args, "message" ) ) { args.message = arguments.positionals[ 5 ] }
+		return { handler: "GatewayCommand", action: action, args: args }
+	}
+	boolean function isDebug() { return variables.debug }
+}

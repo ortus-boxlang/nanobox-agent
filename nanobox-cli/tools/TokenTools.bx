@@ -1,0 +1,6 @@
+class {
+	@AITool( "Get current token usage statistics across all providers, including total tokens used, cost breakdown, and limits." )
+	public struct function token_usage() {
+		return new "/nanobox-cli/TokenTracker"().all( "", false )
+	}
+}

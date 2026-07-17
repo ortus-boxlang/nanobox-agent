@@ -1,0 +1,28 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Model/provider active CLI namespace", () => {
+			it( "returns all configured models and named models through runtime", () => {
+				var home = getTempDirectory() & "/model-active-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				var provider = new "nanobox-cli.ProviderCommand"( config )
+				var model = new "nanobox-cli.ModelCommand"( config )
+				provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				provider.execute( "set", { name: "lmstudio" } )
+				model.execute( "add", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.2 }, default: true } )
+				var result = runtime.execute( { positionals: [ "model", "status" ], options: {} } )
+				expect( result.success ).toBeTrue()
+				expect( result.providers ).toHaveKey( "lmstudio" )
+				expect( result.namedModels ).toHaveKey( "local-coder" )
+			} )
+			it( "does not expose provider secrets in status", () => {
+				var home = getTempDirectory() & "/provider-secret-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var provider = new "nanobox-cli.ProviderCommand"( config )
+				provider.execute( "add", { name: "openai", type: "openai", apiKey: "super-secret-not-output" } )
+				var status = provider.execute( "status", {} )
+				expect( jsonSerialize( status ) ).notToInclude( "super-secret-not-output" )
+			} )
+		} )
+	}
+}

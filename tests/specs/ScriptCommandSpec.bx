@@ -1,0 +1,16 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "ScriptCommand", () => {
+			it( "creates, lists, shows, and runs BoxLang scripts", () => {
+				var path = getTempDirectory() & "/scripts-#createUUID()#"
+				var manager = new "nanobox-cli.ScriptManager"( path )
+				var command = new "nanobox-cli.commands.ScriptCommand"( manager )
+				var created = command.execute( "create", { name: "hello", content: "println( 'script works' )" } )
+				expect( created.success ).toBeTrue()
+				expect( command.execute( "list" ).scripts ).toHaveLength( 1 )
+				expect( command.execute( "show", { name: "hello" } ).script.name ).toBe( "hello" )
+				expect( command.execute( "run", { name: "hello" } ).output ).toInclude( "script works" )
+			} )
+		} )
+	}
+}

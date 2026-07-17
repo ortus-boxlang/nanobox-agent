@@ -1,0 +1,21 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Skill activation", () => {
+			it( "persists enabled state and mode", () => {
+				var root = getTempDirectory() & "/activation-#createUUID()#"
+				new "nanobox-cli.SkillManager"( root & "/.agents/skills" ).create( "activation-skill", "Activation", "Content" )
+				var curator = new "nanobox-cli.SkillCurator"( root )
+				expect( curator.setMode( "activation-skill", "always-on" ).success ).toBeTrue()
+				expect( curator.setEnabled( "activation-skill", false ).success ).toBeTrue()
+				var status = curator.status().skills[ 1 ]
+				expect( status.mode ).toBe( "always-on" )
+				expect( status.enabled ).toBeFalse()
+			} )
+			it( "routes enable and disable through the active runtime", () => {
+				var result = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( true ), new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/runtime-#createUUID()#" ) ).execute( { positionals: [ "skill", "activate", "enable", "runtime-skill" ], options: {} } )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "Skill not found" )
+			} )
+		} )
+	}
+}

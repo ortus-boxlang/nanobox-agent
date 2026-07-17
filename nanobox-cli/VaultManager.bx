@@ -1,0 +1,163 @@
+class {
+	property datasource;
+	property vaultPath;
+
+	function init( string vaultPath = "" ) {
+		variables.datasource = "nanobox"
+		variables.vaultPath = len( arguments.vaultPath ) ? arguments.vaultPath : expandPath( "~/.nanobox/vault" )
+		ensureDirectories()
+		ensureTable()
+		return this
+	}
+
+	struct function importFile( required string sourcePath, string category = "imported", array tags = [] ) {
+		if ( !fileExists( arguments.sourcePath ) ) {
+			return { success: false, error: "File not found: #arguments.sourcePath#" }
+		}
+		var safe = [ "reports", "research", "imported", "manual" ].contains( lCase( arguments.category ) )
+			? lCase( arguments.category )
+			: "imported"
+		var name = getFileFromPath( arguments.sourcePath )
+		var destDir = variables.vaultPath & "/" & safe
+		if ( !directoryExists( destDir ) ) { directoryCreate( destDir, true ) }
+		var destination = destDir & "/" & name
+		fileCopy( arguments.sourcePath, destination, true )
+		var id = createUUID()
+		var content = fileRead( arguments.sourcePath )
+		var tagStr = arrayToList( arguments.tags, "," )
+		queryExecute(
+			"INSERT INTO nanobox_vault_documents (id, name, path, category, tags, content) VALUES (:id, :name, :path, :category, :tags, :content)",
+			{ id: id, name: name, path: destination, category: safe, tags: tagStr, content: content },
+			{ datasource: variables.datasource }
+		)
+		return { success: true, document: { id: id, name: name, path: destination, category: safe, tags: arguments.tags, content: content } }
+	}
+
+	array function list( string category = "" ) {
+		var sql = "SELECT id, name, path, category, tags, created_at, modified_at FROM nanobox_vault_documents"
+		var params = {}
+		if ( len( arguments.category ) ) { sql &= " WHERE category = :category"; params.category = arguments.category }
+		sql &= " ORDER BY created_at DESC"
+		var query = queryExecute( sql, params, { datasource: variables.datasource } )
+		return rowsToArray( query )
+	}
+
+	struct function get( required string id ) {
+		var query = queryExecute(
+			"SELECT id, name, path, category, tags, content, created_at, modified_at FROM nanobox_vault_documents WHERE id = :id OR name = :id",
+			{ id: arguments.id },
+			{ datasource: variables.datasource }
+		)
+		return query.recordCount ? rowsToArray( query ).first() : {}
+	}
+
+	array function search( required string query, numeric limit = 20 ) {
+		var safe = max( 1, min( 500, int( arguments.limit ) ) )
+		var result = queryExecute(
+			"SELECT id, name, path, category, tags, content, created_at, modified_at FROM nanobox_vault_documents WHERE name LIKE :q OR category LIKE :q OR tags LIKE :q OR content LIKE :q ORDER BY created_at DESC LIMIT #safe#",
+			{ q: "%#arguments.query#%" },
+			{ datasource: variables.datasource }
+		)
+		return rowsToArray( result )
+	}
+
+	struct function index() {
+		var manifest = { documents: [] }
+		for ( var category in [ "reports", "research", "imported", "manual" ] ) {
+			var catDir = variables.vaultPath & "/" & category
+			if ( !directoryExists( catDir ) ) { continue }
+			for ( var file in directoryList( catDir, true, "query" ) ) {
+				if ( file.type == "file" && file.name != ".index.json" ) {
+					manifest.documents.append( {
+						name: file.name,
+						path: file.directory & "/" & file.name,
+						category: category,
+						content: fileRead( file.directory & "/" & file.name ),
+						modified: file.dateLastModified
+					} )
+				}
+			}
+		}
+		// Upsert each found file into SQLite
+		for ( var doc in manifest.documents ) {
+			var existing = queryExecute(
+				"SELECT id FROM nanobox_vault_documents WHERE name = :name AND category = :category",
+				{ name: doc.name, category: doc.category },
+				{ datasource: variables.datasource }
+			)
+			if ( existing.recordCount ) {
+				queryExecute(
+					"UPDATE nanobox_vault_documents SET path = :path, content = :content, modified_at = CURRENT_TIMESTAMP WHERE id = :id",
+					{ path: doc.path, content: doc.content, id: existing.id[ 1 ] },
+					{ datasource: variables.datasource }
+				)
+			} else {
+				var id = createUUID()
+				queryExecute(
+					"INSERT INTO nanobox_vault_documents (id, name, path, category, content) VALUES (:id, :name, :path, :category, :content)",
+					{ id: id, name: doc.name, path: doc.path, category: doc.category, content: doc.content },
+					{ datasource: variables.datasource }
+				)
+			}
+		}
+		var total = queryExecute( "SELECT COUNT(*) AS cnt FROM nanobox_vault_documents", {}, { datasource: variables.datasource } )
+		return { success: true, total: total.cnt[ 1 ] ?: 0, imported: manifest.documents.len() }
+	}
+
+	struct function remove( required string id ) {
+		var doc = get( arguments.id )
+		if ( structIsEmpty( doc ) ) { return { success: false, error: "Document not found: #arguments.id#" } }
+		if ( fileExists( doc.path ) ) { fileDelete( doc.path ) }
+		queryExecute( "DELETE FROM nanobox_vault_documents WHERE id = :id", { id: doc.id }, { datasource: variables.datasource } )
+		return { success: true, id: doc.id }
+	}
+
+	struct function export( required string id, string output = "" ) {
+		var doc = get( arguments.id )
+		if ( structIsEmpty( doc ) ) { return { success: false, error: "Document not found: #arguments.id#" } }
+		var content = doc.content ?: ( fileExists( doc.path ) ? fileRead( doc.path ) : "" )
+		if ( len( arguments.output ) ) { fileWrite( arguments.output, content ) }
+		return { success: true, id: doc.id, output: arguments.output, content: content }
+	}
+
+	string function getVaultPath() { return variables.vaultPath }
+
+	private void function ensureTable() {
+		queryExecute( "
+			CREATE TABLE IF NOT EXISTS nanobox_vault_documents (
+				id TEXT PRIMARY KEY,
+				name TEXT,
+				path TEXT,
+				category TEXT,
+				tags TEXT DEFAULT '',
+				content TEXT,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+		", {}, { datasource: variables.datasource } )
+	}
+
+	private void function ensureDirectories() {
+		for ( var category in [ "reports", "research", "imported", "manual" ] ) {
+			var dir = variables.vaultPath & "/" & category
+			if ( !directoryExists( dir ) ) { directoryCreate( dir, true ) }
+		}
+	}
+
+	private array function rowsToArray( required query data ) {
+		var rows = []
+		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {
+			var row = {}
+			for ( var column in arguments.data.columnList.listToArray() ) {
+				var val = arguments.data[ column ][ rowIndex ]
+				if ( column == "tags" && isSimpleValue( val ) && len( val ) ) {
+					row[ column ] = listToArray( val, "," )
+				} else {
+					row[ column ] = val
+				}
+			}
+			rows.append( row )
+		}
+		return rows
+	}
+}

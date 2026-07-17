@@ -1,0 +1,30 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Core lifecycle CLI namespace", () => {
+			it( "reports status and doctor checks", () => {
+				var home = getTempDirectory() & "/lifecycle-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var command = new "nanobox-cli.CoreLifecycleCommand"( config )
+				expect( command.execute( "status" ).success ).toBeTrue()
+				expect( command.execute( "doctor" ).checks ).toHaveKey( "modules" )
+				expect( command.execute( "doctor" ).checks.config ).toBeTrue()
+			} )
+			it( "starts, reports, and stops only the web process", () => {
+				var home = getTempDirectory() & "/lifecycle-process-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var command = new "nanobox-cli.CoreLifecycleCommand"( config )
+				var started = command.execute( "start", { "web-only": true, port: 18991 } )
+				expect( started.success ).toBeTrue()
+				expect( started.web.success ).toBeTrue()
+				expect( command.execute( "status" ).processes ).notToBeEmpty()
+				var stopped = command.execute( "stop", { "web-only": true } )
+				expect( stopped.success ).toBeTrue()
+				expect( stopped.web.success ).toBeTrue()
+			} )
+			it( "rejects an unknown lifecycle action", () => {
+				var command = new "nanobox-cli.CoreLifecycleCommand"( new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/lifecycle-#createUUID()#" ) )
+				expect( command.execute( "unknown" ).success ).toBeFalse()
+			} )
+		} )
+	}
+}

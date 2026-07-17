@@ -1,0 +1,105 @@
+class {
+
+	property colorsEnabled;
+
+	function init( boolean colorsEnabled = true ) {
+		variables.colorsEnabled = arguments.colorsEnabled
+		return this
+	}
+
+	string function color( required string text, required string colorName ) {
+		if ( !variables.colorsEnabled ) {
+			return arguments.text
+		}
+		var codes = {
+			red: "31",
+			green: "32",
+			yellow: "33",
+			blue: "34",
+			dim: "2",
+			bold: "1"
+		}
+		var code = codes[ lCase( arguments.colorName ) ] ?: "0"
+		return "ESC[" & code & "m" & arguments.text & "ESC[0m"
+	}
+
+	string function red( required string text ) { return color( arguments.text, "red" ) }
+	string function green( required string text ) { return color( arguments.text, "green" ) }
+	string function yellow( required string text ) { return color( arguments.text, "yellow" ) }
+	string function blue( required string text ) { return color( arguments.text, "blue" ) }
+	string function dim( required string text ) { return color( arguments.text, "dim" ) }
+	string function bold( required string text ) { return color( arguments.text, "bold" ) }
+
+	string function success( required string message ) { return green( "✓ " & arguments.message ) }
+	string function error( required string message ) { return red( "✗ " & arguments.message ) }
+	string function warn( required string message ) { return yellow( "⚠ " & arguments.message ) }
+	string function info( required string message ) { return blue( "ℹ " & arguments.message ) }
+	string function muted( required string message ) { return dim( arguments.message ) }
+
+	string function table( required array headers, required array rows, struct options = {} ) {
+		var widths = []
+		var normalizedRows = []
+		for ( var header in arguments.headers ) {
+			widths.append( len( toString( header ) ) )
+		}
+		for ( var row in arguments.rows ) {
+			var normalized = []
+			for ( var i = 1; i <= arguments.headers.len(); i++ ) {
+				var value = row[ i ] ?: ""
+				normalized.append( toString( value ) )
+				widths[ i ] = max( widths[ i ], len( toString( value ) ) )
+			}
+			normalizedRows.append( normalized )
+		}
+		var border = "+"
+		for ( var width in widths ) { border &= repeatString( "-", width + 2 ) & "+" }
+		var output = border & "\n"
+		output &= renderRow( arguments.headers, widths ) & "\n" & border
+		for ( var row in normalizedRows ) { output &= "\n" & renderRow( row, widths ) }
+		return output & "\n" & border
+	}
+
+	private string function renderRow( required array values, required array widths ) {
+		var output = "|"
+		for ( var i = 1; i <= arguments.widths.len(); i++ ) {
+			var value = arguments.values[ i ] ?: ""
+			output &= " " & value & repeatString( " ", arguments.widths[ i ] - len( value ) + 1 ) & "|"
+		}
+		return output
+	}
+
+	string function kvTable( required struct data, struct options = {} ) {
+		var rows = []
+		for ( var key in arguments.data ) { rows.append( [ key, arguments.data[ key ] ] ) }
+		return table( [ "Key", "Value" ], rows, arguments.options )
+	}
+
+	string function box( required string text, struct options = {} ) {
+		var lines = listToArray( replace( arguments.text, "\r", "", "all" ), "\n" )
+		var width = 0
+		for ( var line in lines ) { width = max( width, len( line ) ) }
+		var output = "┌" & repeatString( "─", width + 2 ) & "┐"
+		for ( var line in lines ) { output &= "\n" & "│ " & line & repeatString( " ", width - len( line ) ) & " │" }
+		return output & "\n" & "└" & repeatString( "─", width + 2 ) & "┘"
+	}
+
+	string function section( required string title ) { return "\n" & bold( arguments.title ) & "\n" & divider() }
+	string function divider( string character = "─", numeric length = 60 ) { return repeatString( arguments.character, arguments.length ) }
+	string function truncate( required string text, required numeric maxWidth ) {
+		if ( len( arguments.text ) <= arguments.maxWidth ) { return arguments.text }
+		if ( arguments.maxWidth <= 1 ) { return left( arguments.text, arguments.maxWidth ) }
+		return left( arguments.text, arguments.maxWidth - 1 ) & "…"
+	}
+	array function wrap( required string text, required numeric maxWidth ) {
+		var lines = []
+		var current = ""
+		for ( var word in listToArray( arguments.text, " " ) ) {
+			if ( current != "" && len( current & " " & word ) > arguments.maxWidth ) { lines.append( current ); current = word }
+			else { current = current == "" ? word : current & " " & word }
+		}
+		if ( current != "" ) { lines.append( current ) }
+		return lines
+	}
+	string function indent( required string text, numeric level = 1 ) { return repeatString( "    ", arguments.level ) & arguments.text }
+	void function clear() { CLIClear() }
+}

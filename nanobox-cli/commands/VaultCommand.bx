@@ -1,0 +1,21 @@
+class {
+	property manager;
+	function init( required any vaultManager ) { variables.manager = arguments.vaultManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return { success: true, documents: variables.manager.list( arguments.args.category ?: "" ) }
+			case "import": {
+				var tags = arguments.args.tags ?: []
+				if ( isSimpleValue( tags ) ) { tags = listToArray( tags, "," ) }
+				return variables.manager.importFile( arguments.args.path ?: arguments.args.source ?: "", arguments.args.category ?: "imported", tags )
+			}
+			case "search": return { success: true, documents: variables.manager.search( arguments.args.query ?: "", arguments.args.limit ?: 20 ) }
+			case "index": return variables.manager.index()
+			case "show": return show( arguments.args.id ?: arguments.args.name ?: "" )
+			case "remove": return variables.manager.remove( arguments.args.id ?: arguments.args.name ?: "" )
+			case "export": return variables.manager.export( arguments.args.id ?: arguments.args.name ?: "", arguments.args.output ?: "" )
+			default: return { success: false, error: "Unknown vault action: #arguments.action#" }
+		}
+	}
+	private struct function show( required string id ) { if ( !len( arguments.id ) ) { return { success: false, error: "A vault document id is required" } }; var result = variables.manager.get( arguments.id ); return structIsEmpty( result ) ? { success: false, error: "Document not found: #arguments.id#" } : { success: true, document: result } }
+}

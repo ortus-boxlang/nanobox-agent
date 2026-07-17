@@ -1,0 +1,13 @@
+class {
+	property manager;
+	function init( required any scriptManager ) { variables.manager = arguments.scriptManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return { success: true, scripts: variables.manager.list() }
+			case "show": { var found = variables.manager.show( arguments.args.name ?: "" ); return { success: !structIsEmpty( found ), script: found } }
+			case "create": return { success: true, script: variables.manager.create( arguments.args.name ?: "", arguments.args.content ?: "" ) }
+			case "run": return variables.manager.run( arguments.args.name ?: "", arguments.args.scriptArgs ?: [] )
+			default: return { success: false, error: "Unknown script action: #arguments.action#" }
+		}
+	}
+}

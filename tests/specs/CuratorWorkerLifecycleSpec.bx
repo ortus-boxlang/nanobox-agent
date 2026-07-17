@@ -1,0 +1,28 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Curator worker lifecycle", () => {
+			it( "skips repeated ticks inside the configured interval", () => {
+				var root = getTempDirectory() & "/tick-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( root & "/config" )
+				config.set( "curator.intervalHours", 168 )
+				var curator = new "nanobox-cli.SkillCurator"( root )
+				var lifecycle = new "nanobox-cli.CuratorLifecycle"( config, curator, new "nanobox-cli.CuratorReportManager"( root ) )
+				var first = lifecycle.tick( true, false )
+				expect( first.success ).toBeTrue()
+				var second = lifecycle.tick()
+				expect( second.success ).toBeTrue()
+				expect( second.skipped ).toBeTrue()
+				expect( second.reason ).toBe( "interval" )
+			} )
+			it( "skips when paused", () => {
+				var root = getTempDirectory() & "/paused-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( root & "/config" )
+				var curator = new "nanobox-cli.SkillCurator"( root )
+				curator.pause()
+				var result = new "nanobox-cli.CuratorLifecycle"( config, curator, new "nanobox-cli.CuratorReportManager"( root ) ).tick()
+				expect( result.skipped ).toBeTrue()
+				expect( result.reason ).toBe( "paused" )
+			} )
+		} )
+	}
+}

@@ -1,0 +1,12 @@
+class {
+	property curator;
+	function init( required any skillCurator ) { variables.curator = arguments.skillCurator; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "enable": return variables.curator.setEnabled( arguments.args.name ?: "", true )
+			case "disable": return variables.curator.setEnabled( arguments.args.name ?: "", false )
+			case "status": return variables.curator.status()
+			default: return { success: false, error: "Unknown activation action: #arguments.action#" }
+		}
+	}
+}

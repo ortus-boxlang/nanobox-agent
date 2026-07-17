@@ -1,0 +1,21 @@
+import nanobox_cli.util.ConfigManager
+
+class {
+	function main( array args = [] ) {
+		var home = getTempDirectory() & "/nanobox-config-test-#createUUID()#"
+		directoryCreate( home, true )
+		var manager = new "nanobox-cli.util.ConfigManager"( home )
+		var configData = manager.load()
+		if ( manager.get( "nanobox.web.port" ) != 8080 ) { throw( "defaults should load" ) }
+		manager.set( "bx-ai.defaultProvider", "lmstudio" )
+		manager.set( "bx-ai.providers.lmstudio.baseURL", "http://localhost:1234/v1" )
+		if ( manager.get( "bx-ai.defaultProvider" ) != "lmstudio" ) { throw( "set/get failed" ) }
+		manager.unset( "bx-ai.providers.lmstudio.baseURL" )
+		if ( manager.get( "bx-ai.providers.lmstudio.baseURL", "missing" ) != "missing" ) { throw( "unset failed" ) }
+		var preferences = manager.loadPreferences()
+		preferences.provider = "lmstudio"
+		manager.savePreferences( preferences )
+		if ( manager.loadPreferences().provider != "lmstudio" ) { throw( "preferences failed" ) }
+		println( "ConfigManager smoke tests passed" )
+	}
+}

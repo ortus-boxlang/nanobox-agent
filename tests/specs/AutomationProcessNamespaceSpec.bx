@@ -1,0 +1,16 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Automation and process CLI namespace", () => {
+			it( "executes cron, web, worker, mcp, and script actions through runtime", () => {
+				var home = getTempDirectory() & "/automation-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				expect( runtime.execute( { positionals: [ "cron", "list" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "mcp", "list" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "script", "list" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "web", "status" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "worker", "status" ], options: {} } ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

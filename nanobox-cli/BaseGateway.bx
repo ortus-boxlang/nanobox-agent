@@ -1,0 +1,25 @@
+class implements="IGateway" {
+	property name;
+	property config;
+	property connected;
+	property connectedSince;
+	property messagesToday;
+	property lastError;
+
+	function init( required string name, struct config = {} ) {
+		variables.name = arguments.name
+		variables.config = arguments.config
+		variables.connected = false
+		variables.connectedSince = ""
+		variables.messagesToday = 0
+		variables.lastError = ""
+		return this
+	}
+	struct function connect() { variables.connected = true; variables.connectedSince = now(); variables.lastError = ""; return status() }
+	struct function disconnect() { variables.connected = false; return status() }
+	struct function status() { return { name: variables.name, connected: variables.connected, connectedSince: variables.connectedSince, messagesToday: variables.messagesToday, lastError: variables.lastError } }
+	struct function send( required string recipient, required string message ) { if ( !variables.connected ) { return { success: false, error: "Gateway is not connected" } }; return { success: true, recipient: arguments.recipient, message: arguments.message } }
+	struct function receive( required struct payload ) { variables.messagesToday++; return { success: true, gateway: variables.name, payload: arguments.payload } }
+	struct function capabilities() { return { text: true, attachments: false, images: false, audio: false, video: false, reactions: false, threads: false, buttons: false, hitl: false, hitlModes: [], hitlMode: "unsupported", hitlDecision: "none" } }
+	string function getName() { return variables.name }
+}

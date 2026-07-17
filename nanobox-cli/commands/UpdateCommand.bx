@@ -1,0 +1,13 @@
+class {
+	property manager;
+	function init( required any updateManager ) { variables.manager = arguments.updateManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return variables.manager.execute( "list", arguments.args )
+			case "status": return variables.manager.execute( "status", arguments.args )
+			case "update": return variables.manager.execute( "update", arguments.args )
+			case "rollback": return variables.manager.execute( "rollback", arguments.args )
+			default: return { success: false, error: "Unknown update action: #arguments.action#" }
+		}
+	}
+}

@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Active session CLI", () => {
+			it( "routes session lifecycle through CommandRuntime", () => {
+				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/active-session-#createUUID()#" ) )
+				var created = runtime.execute( { positionals: [ "session", "create" ], options: { title: "Runtime session", nonInteractive: true } } )
+				var id = created.session.id
+				expect( runtime.execute( { positionals: [ "session", "show", id ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "session", "rename", id, "Runtime", "renamed" ], options: {} } ).session.title ).toBe( "Runtime renamed" )
+				expect( runtime.execute( { positionals: [ "session", "stats" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "session", "delete", id ], options: {} } ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

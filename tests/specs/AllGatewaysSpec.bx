@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Gateway contracts", () => {
+			it( "all concrete gateways expose the standard contract and capabilities", () => {
+				var classes = [ "EmailGateway", "DiscordGateway", "SlackGateway", "WhatsAppGateway", "WhatsAppBusinessGateway", "SignalGateway", "SMSGateway" ]
+				for ( var className in classes ) {
+					var gateway = new "nanobox-cli.#className#"( {} )
+					expect( gateway.getName() ).notToBeEmpty()
+					expect( gateway.capabilities() ).toHaveKey( "hitlModes" )
+					expect( gateway.capabilities().hitl ).toBeTrue()
+				}
+			} )
+		} )
+	}
+}

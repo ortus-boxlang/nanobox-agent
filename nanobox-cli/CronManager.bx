@@ -1,0 +1,123 @@
+class {
+	property datasource;
+
+	function init( string tasksPath = "" ) {
+		vars.datasource = "nanobox"
+		return this
+	}
+
+	array function list( string group = "" ) {
+		var sql = "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks"
+		var params = {}
+		if ( len( arguments.group ) ) {
+			sql &= " WHERE group = :group"
+			params.group = arguments.group
+		}
+		sql &= " ORDER BY name ASC"
+		var result = queryExecute( sql, params, { datasource: variables.datasource } )
+		return queryToArray( result )
+	}
+
+	array function referencedSkills() {
+		var result = []
+		for ( var task in list() ) {
+			var taskSkills = task.skills ?: ""
+			if ( len( taskSkills ) ) {
+				for ( var name in taskSkills.listToArray( "," ) ) {
+					if ( !result.contains( name.trim() ) ) {
+						result.append( name.trim() )
+					}
+				}
+			}
+		}
+		return result
+	}
+
+	struct function create( required string name, required string schedule, string prompt = "", string group = "default", array skills = [] ) {
+		var existing = show( arguments.name )
+		if ( structKeyExists( existing, "name" ) ) {
+			return { success: false, error: "Cron task already exists" }
+		}
+		var skillsStr = arrayIsEmpty( arguments.skills ) ? "" : arrayToList( arguments.skills, "," )
+		queryExecute(
+			"INSERT INTO nanobox_cron_tasks (name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created) VALUES (:name, :schedule, :prompt, :group, :skills, 1, 0, 0, NULL, CURRENT_TIMESTAMP)",
+			{
+				name: arguments.name,
+				schedule: arguments.schedule,
+				prompt: arguments.prompt ?: "",
+				group: arguments.group,
+				skills: skillsStr
+			},
+			{ datasource: variables.datasource }
+		)
+		return { success: true, task: show( arguments.name ) }
+	}
+
+	struct function show( required string name ) {
+		var result = queryExecute( "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks WHERE name = :name", { name: arguments.name }, { datasource: variables.datasource } )
+		return queryToArray( result ).first()
+	}
+
+	struct function pause( required string name ) {
+		return setEnabled( arguments.name, false )
+	}
+
+	struct function resume( required string name ) {
+		return setEnabled( arguments.name, true )
+	}
+
+	struct function run( required string name ) {
+		var task = show( arguments.name )
+		if ( !structKeyExists( task, "name" ) ) {
+			return { success: false, error: "Cron task not found" }
+		}
+		queryExecute(
+			"UPDATE nanobox_cron_tasks SET runs = runs + 1, lastRun = CURRENT_TIMESTAMP WHERE name = :name",
+			{ name: arguments.name },
+			{ datasource: variables.datasource }
+		)
+		return { success: true, task: show( arguments.name ), note: "Run recorded; worker executes enabled tasks" }
+	}
+
+	struct function remove( required string name ) {
+		var task = show( arguments.name )
+		if ( !structKeyExists( task, "name" ) ) {
+			return { success: false, error: "Cron task not found" }
+		}
+		queryExecute( "DELETE FROM nanobox_cron_tasks WHERE name = :name", { name: arguments.name }, { datasource: variables.datasource } )
+		return { success: true, name: arguments.name }
+	}
+
+	struct function stats() {
+		var total = queryExecute( "SELECT COUNT(*) AS cnt FROM nanobox_cron_tasks", {}, { datasource: variables.datasource } )
+		var enabled = queryExecute( "SELECT COUNT(*) AS cnt FROM nanobox_cron_tasks WHERE enabled = 1", {}, { datasource: variables.datasource } )
+		var runs = queryExecute( "SELECT COALESCE(SUM(runs), 0) AS total FROM nanobox_cron_tasks", {}, { datasource: variables.datasource } )
+		return {
+			total: total.cnt[ 1 ] ?: 0,
+			enabled: enabled.cnt[ 1 ] ?: 0,
+			disabled: ( total.cnt[ 1 ] ?: 0 ) - ( enabled.cnt[ 1 ] ?: 0 ),
+			runs: runs.total[ 1 ] ?: 0
+		}
+	}
+
+	private struct function setEnabled( required string name, required boolean enabled ) {
+		var task = show( arguments.name )
+		if ( !structKeyExists( task, "name" ) ) {
+			return { success: false, error: "Cron task not found" }
+		}
+		queryExecute( "UPDATE nanobox_cron_tasks SET enabled = :enabled WHERE name = :name", { enabled: arguments.enabled ? 1 : 0, name: arguments.name }, { datasource: variables.datasource } )
+		return { success: true, task: show( arguments.name ) }
+	}
+
+	private array function queryToArray( required query data ) {
+		var rows = []
+		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {
+			var row = {}
+			for ( var column in arguments.data.columnList.listToArray() ) {
+				row[ column ] = arguments.data[ column ][ rowIndex ]
+			}
+			rows.append( row )
+		}
+		return rows
+	}
+}

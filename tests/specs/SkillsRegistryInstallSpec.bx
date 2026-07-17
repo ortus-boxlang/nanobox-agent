@@ -1,0 +1,22 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Skills registry installation", () => {
+			it( "finds a live skill and installs its SKILL.md", () => {
+				var root = getTempDirectory() & "/skill-install-#createUUID()#"
+				var manager = new "nanobox-cli.SkillManager"( root & "/skills" )
+				var found = manager.findRemote( "async-tasks" )
+				expect( found ).notToBeEmpty()
+				var slug = found.first().owner & "/" & found.first().repo & "/" & found.first().slug
+				var installed = manager.install( slug )
+				expect( installed.success ).toBeTrue()
+				expect( fileExists( installed.skill.path ) ).toBeTrue()
+				expect( installed.skill.content ).notToBeEmpty()
+			} )
+			it( "rejects an install when the registry returns no content", () => {
+				var manager = new "nanobox-cli.SkillManager"( getTempDirectory() & "/skill-empty-#createUUID()#/skills", "https://skills.boxlang.io.invalid" )
+				var result = manager.install( "ortus-boxlang/skills/no-such-skill" )
+				expect( result.success ).toBeFalse()
+			} )
+		} )
+	}
+}

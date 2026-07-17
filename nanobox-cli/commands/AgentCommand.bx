@@ -1,0 +1,19 @@
+class {
+	property manager;
+	function init( required any agentManager ) { variables.manager = arguments.agentManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		var op = lCase( arguments.action )
+		switch ( op ) {
+			case "list": return { success: true, agents: variables.manager.list() }
+			case "show": return show( arguments.args.name ?: "" )
+			case "create": return create( arguments.args )
+			case "update": return update( arguments.args )
+			case "delete": return variables.manager.delete( arguments.args.name ?: "" )
+			case "run": return variables.manager.run( arguments.args.name ?: "", arguments.args.query ?: "", arguments.args )
+			default: return { success: false, error: "Unknown agent action: #arguments.action#" }
+		}
+	}
+	private struct function show( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "An agent name is required" } }; var found = variables.manager.show( arguments.name ); return structIsEmpty( found ) ? { success: false, error: "Agent not found: #arguments.name#" } : { success: true, agent: found } }
+	private struct function create( required struct args ) { if ( !len( arguments.args.name ?: "" ) ) { return { success: false, error: "An agent name is required" } }; var result = variables.manager.create( arguments.args.name, arguments.args.description ?: "", arguments.args.model ?: "", arguments.args.instructions ?: "", arguments.args.options ?: {} ); return structKeyExists( result, "success" ) && result.success == false ? result : { success: true, agent: result } }
+	private struct function update( required struct args ) { var result = variables.manager.update( arguments.args.name ?: "", arguments.args.description ?: "", arguments.args.model ?: "", arguments.args.instructions ?: "", arguments.args.options ?: {} ); return structKeyExists( result, "success" ) && result.success == false ? result : { success: true, agent: result } }
+}

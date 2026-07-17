@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "WorkerCommand", () => {
+			it( "starts, reports, and stops the worker through ProcessManager", () => {
+				var state = getTempDirectory() & "/worker-processes-#createUUID()#.json"
+				var manager = new "nanobox-cli.ProcessManager"( state )
+				var command = new "nanobox-cli.commands.WorkerCommand"( manager, expandPath( "/tmp/test-worker.bx" ) )
+				var started = command.execute( "start" )
+				expect( started.success ).toBeTrue()
+				expect( command.execute( "status" ).status ).toBe( "running" )
+				expect( command.execute( "stop" ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "AgentCommand", () => {
+			it( "creates, lists, and shows markdown agent definitions", () => {
+				var path = getTempDirectory() & "/agents-#createUUID()#"
+				var manager = new "nanobox-cli.AgentManager"( path )
+				var command = new "nanobox-cli.commands.AgentCommand"( manager )
+				var created = command.execute( "create", { name: "tester", description: "A test agent", model: "local", instructions: "Be concise." } )
+				expect( created.success ).toBeTrue()
+				expect( command.execute( "list" ).agents ).toHaveLength( 1 )
+				expect( command.execute( "show", { name: "tester" } ).agent.metadata.name ).toBe( "tester" )
+			} )
+		} )
+	}
+}

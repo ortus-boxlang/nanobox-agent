@@ -1,0 +1,29 @@
+class {
+	property sessions;
+	function init( required any sessionManager ) { variables.sessions = arguments.sessionManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		var op = lCase( arguments.action )
+		switch ( op ) {
+			case "create": return create( arguments.args )
+			case "list": return { success: true, sessions: variables.sessions.list( arguments.args.limit ?: 20, arguments.args.offset ?: 0 ) }
+			case "show": return show( arguments.args.id ?: "" )
+			case "rename": return rename( arguments.args.id ?: "", arguments.args.title ?: "" )
+			case "search": return search( arguments.args.query ?: "", arguments.args.limit ?: 20 )
+			case "delete": return delete( arguments.args.id ?: arguments.args.name ?: "" )
+			case "prune": return { success: true, result: variables.sessions.prune( arguments.args.olderThanDays ?: arguments.args[ "older-than" ] ?: 90, arguments.args.dryRun ?: arguments.args[ "dry-run" ] ?: false ) }
+			case "stats": return { success: true, stats: variables.sessions.stats() }
+			case "export": return export( arguments.args.id ?: "", arguments.args.output ?: "" )
+			default: return { success: false, error: "Unknown session action: #arguments.action#" }
+		}
+	}
+	private struct function create( required struct args ) {
+		var title = arguments.args.title ?: "New session"
+		if ( !len( arguments.args.title ?: "" ) && !( arguments.args.nonInteractive ?: arguments.args[ "non-interactive" ] ?: false ) ) { title = cliRead( "Session title [New session]: " ).trim(); if ( !len( title ) ) { title = "New session" } }
+		return { success: true, session: variables.sessions.create( title, arguments.args.provider ?: "", arguments.args.model ?: "" ) }
+	}
+	private struct function show( required string id ) { if ( !len( arguments.id ) ) { return { success: false, error: "A session id is required" } }; var result = variables.sessions.get( arguments.id ); if ( structIsEmpty( result ) ) { return { success: false, error: "Session not found: #arguments.id#" } }; result.messages = variables.sessions.messages( arguments.id ); return { success: true, session: result } }
+	private struct function rename( required string id, required string title ) { if ( !len( arguments.id ) || !len( arguments.title ) ) { return { success: false, error: "A session id and title are required" } }; var result = variables.sessions.rename( arguments.id, arguments.title ); return structIsEmpty( result ) ? { success: false, error: "Session not found: #arguments.id#" } : { success: true, session: result } }
+	private struct function search( required string query, required numeric limit ) { if ( !len( arguments.query ) ) { return { success: false, error: "A search query is required" } }; return { success: true, sessions: variables.sessions.search( arguments.query, arguments.limit ) } }
+	private struct function delete( required string id ) { if ( !len( arguments.id ) ) { return { success: false, error: "A session id is required" } }; var result = variables.sessions.delete( arguments.id ); return { success: result.deleted, result: result, error: result.deleted ? "" : "Session not found: #arguments.id#" } }
+	private struct function export( required string id, string output = "" ) { var data = variables.sessions.exportSession( arguments.id ); if ( !data.len() ) { return { success: false, error: "Session not found: #arguments.id#" } }; var content = ""; for ( var item in data ) { content &= jsonSerialize( item ) & char( 10 ) }; if ( len( arguments.output ) ) { fileWrite( arguments.output, content ) }; return { success: true, session: arguments.id, output: arguments.output, content: content } }
+}

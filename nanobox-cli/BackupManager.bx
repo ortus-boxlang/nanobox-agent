@@ -1,0 +1,57 @@
+class {
+	property sourceRoot;
+	property backupPath;
+
+	function init( string sourceRoot = "", string backupPath = "" ) {
+		variables.sourceRoot = arguments.sourceRoot != "" ? arguments.sourceRoot : expandPath( "~/.nanobox" )
+		variables.backupPath = arguments.backupPath != "" ? arguments.backupPath : variables.sourceRoot & "/backups"
+		if ( !directoryExists( variables.backupPath ) ) { directoryCreate( variables.backupPath, true ) }
+		return this
+	}
+
+	struct function run() {
+		var stamp = dateFormat( now(), "yyyy-mm-dd" ) & "_" & timeFormat( now(), "HH-mm-ss" )
+		var target = variables.backupPath & "/nanobox-" & stamp & ".zip"
+		try {
+			bx:zip action="zip" file="#target#" source="#variables.sourceRoot#" filter="*" recurse="true" overwrite="true" {}
+			var info = getFileInfo( target )
+			var statusData = { file: target, created: now(), size: info.size }
+			fileWrite( variables.backupPath & "/latest.json", jsonSerialize( statusData, true ) )
+			writeLog( text="Backup created: #target# (#numberFormat( info.size )# bytes)", type="information", log="nanobox-backup" )
+			return { success: true, file: target, size: info.size }
+		} catch ( any exception ) {
+			writeLog( text="Backup failed: #exception.message#", type="error", log="nanobox-backup" )
+			return { success: false, error: exception.message }
+		}
+	}
+
+	array function list() {
+		var result = []
+		for ( var file in directoryList( variables.backupPath, false, "query", "*.zip" ) ) { result.append( { name: file.name, path: file.directory & "/" & file.name, size: file.size, modified: file.dateLastModified } ) }
+		return result
+	}
+
+	struct function status() {
+		var path = variables.backupPath & "/latest.json"
+		var data = fileExists( path ) ? jsonDeserialize( fileRead( path ) ) : { status: "never" }
+		writeLog( text="Backup status checked — latest: #data.file ?: data.status#", type="debug", log="nanobox-backup" )
+		return data
+	}
+
+	struct function restore( required string backup ) {
+		var path = variables.backupPath & "/" & arguments.backup
+		if ( !fileExists( path ) ) { path = arguments.backup }
+		if ( !fileExists( path ) ) {
+			writeLog( text="Backup restore failed — not found: #arguments.backup#", type="error", log="nanobox-backup" )
+			return { success: false, error: "Backup not found" }
+		}
+		try {
+			bx:zip action="unzip" file="#path#" destination="#variables.sourceRoot#" overwrite="true" {}
+			writeLog( text="Backup restored: #path#", type="information", log="nanobox-backup" )
+			return { success: true, file: path }
+		} catch ( any exception ) {
+			writeLog( text="Backup restore failed: #exception.message#", type="error", log="nanobox-backup" )
+			return { success: false, error: exception.message }
+		}
+	}
+}

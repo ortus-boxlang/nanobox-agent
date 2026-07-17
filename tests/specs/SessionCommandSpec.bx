@@ -1,0 +1,16 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "SessionCommand", () => {
+			it( "persists and searches sessions through the nanobox datasource", () => {
+				var schema = new "nanobox-cli.SessionSchema"()
+				schema.main()
+				var sessions = new "nanobox-cli.SessionManager"()
+				var command = new "nanobox-cli.commands.SessionCommand"( sessions )
+				var created = command.execute( "create", { title: "BoxLang scheduling" } )
+				expect( created.success ).toBeTrue()
+				expect( command.execute( "list", { limit: 100 } ).sessions ).notToBeEmpty()
+				expect( command.execute( "search", { query: "scheduling" } ).sessions ).notToBeEmpty()
+			} )
+		} )
+	}
+}

@@ -1,0 +1,46 @@
+class {
+	property installRoot;
+	property versionSource;
+
+	function init( string installRoot = "", string versionSource = "" ) {
+		variables.installRoot = arguments.installRoot != "" ? arguments.installRoot : expandPath( "~/.nanobox" )
+		variables.versionSource = arguments.versionSource != "" ? arguments.versionSource : "https://api.github.com/repos/ortus-solutions/nanobox/releases"
+		return this
+	}
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return listRemote()
+			case "status": return status()
+			case "update": return update( arguments.args.version ?: "" )
+			case "rollback": return rollback()
+			default: return { success: false, error: "Unknown update action: #arguments.action#" }
+		}
+	}
+	struct function status() {
+		var current = variables.installRoot & "/current"
+		var versions = listLocal()
+		return { success: true, current: fileExists( current ) ? getFileInfo( current ).path : "", versions: versions }
+	}
+	array function listLocal() {
+		var result = []
+		var path = variables.installRoot & "/versions"
+		if ( !directoryExists( path ) ) { return result }
+		for ( var item in directoryList( path, false, "query" ) ) { if ( item.type == "Dir" ) { result.append( { name: item.name, path: item.directory & "/" & item.name } ) } }
+		return result
+	}
+	struct function listRemote() {
+		try {
+			var response = http( url=variables.versionSource, method="GET", timeout=10 )
+			return { success: true, releases: jsonDeserialize( response.fileContent ?: response.content ?: "[]" ) }
+		} catch ( any exception ) { return { success: false, releases: [], error: exception.message } }
+	}
+	struct function update( string version = "" ) {
+		if ( !len( arguments.version ) ) { return { success: false, error: "A target version is required" } }
+		return { success: false, error: "Update installation is not yet connected to a release artifact", version: arguments.version }
+	}
+	struct function rollback() {
+		var versions = listLocal()
+		if ( versions.len() < 2 ) { return { success: false, error: "No previous version is available" } }
+		return { success: false, error: "Rollback requires installer activation", available: versions }
+	}
+}

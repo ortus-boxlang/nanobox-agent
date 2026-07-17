@@ -1,0 +1,14 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Active config CLI", () => {
+			it( "executes config actions through the runtime", () => {
+				var home = getTempDirectory() & "/active-config-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				expect( runtime.execute( { positionals: [ "config", "set", "cli.mode", "active" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "config", "get", "cli.mode" ], options: {} } ).value ).toBe( "active" )
+				expect( runtime.execute( { positionals: [ "config", "path" ], options: {} } ).path ).toInclude( "nanobox.json" )
+			} )
+		} )
+	}
+}

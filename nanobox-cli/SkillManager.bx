@@ -1,0 +1,214 @@
+class {
+	property skillsPath;
+	property customPath;
+	property registryUrl;
+	property manifestPath;
+	function init( string skillsPath = "", string registryUrl = "https://skills.boxlang.io" ) { variables.skillsPath = len( arguments.skillsPath ) ? arguments.skillsPath : expandPath( "~/.nanobox/skills" ); var customRoot = getDirectoryFromPath( variables.skillsPath ) & "/skills-custom"; variables.customPath = customRoot; variables.registryUrl = arguments.registryUrl; variables.manifestPath = getDirectoryFromPath( variables.skillsPath ) & "/skills-manifest.json"; ensureDirectories(); return this }
+	string function getRegistryUrl() { return variables.registryUrl }
+	struct function debugRemote() { return httpRequest( variables.registryUrl & "/api/skills/ortus-boxlang/skills", "GET", {} ) }
+	array function list() { var result = []; for ( var root in [ variables.skillsPath, variables.customPath ] ) { if ( directoryExists( root ) ) { for ( var dir in directoryList( root, false, "query" ) ) { if ( dir.type == "dir" && fileExists( dir.directory & "/" & dir.name & "/SKILL.md" ) ) { result.append( parse( dir.directory & "/" & dir.name & "/SKILL.md", root == variables.customPath ) ) } } } }; return result }
+	struct function show( required string name ) { for ( var item in list() ) { if ( item.name == arguments.name ) { recordTelemetry( arguments.name, "view" ); return item } }; return {} }
+	array function search( required string query ) { var q = lCase( arguments.query ); var result = []; for ( var item in list() ) { if ( find( q, lCase( item.name & " " & item.description & " " & item.content ) ) > 0 ) { result.append( item ) } }; return result }
+	struct function create( required string name, string description = "", string content = "" ) { if ( !validName( arguments.name ) ) { return { success: false, error: "Invalid skill name" } }; var path = variables.customPath & "/" & arguments.name; if ( directoryExists( path ) ) { return { success: false, error: "Skill already exists: #arguments.name#" } }; directoryCreate( path, true ); var skillContent = "---" & char( 10 ) & "name: " & arguments.name & char( 10 ) & "description: " & arguments.description & char( 10 ) & "---" & char( 10 ) & char( 10 ) & arguments.content; fileWrite( path & "/SKILL.md", skillContent ); recordTelemetry( arguments.name, "create" ); return { success: true, skill: parse( path & "/SKILL.md", true ) } }
+	struct function remove( required string name ) { var item = show( arguments.name ); if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }; var skillDir = getDirectoryFromPath( item.path ); if ( directoryExists( skillDir ) ) { directoryDelete( skillDir, true ) }; var manifest = readManifest(); if ( manifest.skills.keyExists( arguments.name ) ) { structDelete( manifest.skills, arguments.name ) }; writeManifest( manifest ); return { success: true, name: arguments.name } }
+	struct function install( required string source, boolean force = false, string name = "" ) {
+		var sourceType = detectSourceType( arguments.source )
+		var result = {}
+
+		if ( sourceType == "registry" ) {
+			result = installFromRegistry( arguments.source, arguments.force, arguments.name )
+		} else if ( sourceType == "http" ) {
+			result = installFromHttp( arguments.source, arguments.force, arguments.name )
+		} else if ( sourceType == "local" ) {
+			result = installFromLocal( arguments.source, arguments.force, arguments.name )
+		} else {
+			return { success: false, error: "Invalid source: must be registry slug, HTTP URL, or local path" }
+		}
+
+		if ( result.success && ( result.skill?.name ?: "" ) != "" ) {
+			recordTelemetry( result.skill.name, "create" )
+		}
+
+		return result
+	}
+
+	private string function detectSourceType( required string source ) {
+		if ( reFindNoCase( "^https?://", arguments.source ) ) {
+			return "http"
+		}
+		if ( fileExists( arguments.source ) || directoryExists( arguments.source ) ) {
+			return "local"
+		}
+		// Paths starting with /, ~, . or having a file extension are local paths
+		if ( reFind( "^(/|~|\\.)", arguments.source ) || reFind( "\\.[A-Za-z0-9]+$", arguments.source ) ) {
+			return "local"
+		}
+		// Registry slugs: owner/repo/skill pattern (no dots, 3+ segments)
+		if ( listLen( arguments.source, "/" ) >= 3 && !find( ".", arguments.source ) ) {
+			return "registry"
+		}
+		return "invalid"
+	}
+
+	private struct function installFromRegistry( required string slug, boolean force = false, string name = "" ) {
+		var parts = listToArray( arguments.slug, "/" );
+		if ( parts.len() < 3 ) { return { success: false, error: "Registry slug must be owner/repo/skill" } };
+
+		var owner = parts[ 1 ];
+		var repo = parts[ 2 ];
+		var skill = parts.len() > 3 ? arrayToList( parts.slice( 3 ), "~" ) : parts[ 3 ];
+
+		var response = httpRequest( variables.registryUrl & "/api/install", "POST", { owner: owner, repo: repo, skill: skill } );
+		if ( !response.success ) { return response };
+
+		var envelope = response.data;
+		var data = isStruct( envelope ) && envelope.keyExists( "data" ) ? envelope.data : envelope;
+		var skillData = isStruct( data ) && data.keyExists( "skill" ) ? data.skill : data;
+		var content = isStruct( data ) ? ( data.content ?: skillData.content ?: "" ) : "";
+
+		if ( !len( content ) ) {
+			return { success: false, error: "Registry install returned no SKILL.md content" }
+		}
+
+		var skillName = len( arguments.name ) ? arguments.name : ( skillData.name ?: skill.listLast( "/" ) );
+		if ( !validName( skillName ) ) {
+			return { success: false, error: "Invalid skill name: #skillName#" }
+		}
+
+		var target = variables.customPath & "/" & skillName;
+		if ( directoryExists( target ) && !arguments.force ) {
+			return { success: false, error: "Skill already exists: #skillName#" }
+		}
+
+		if ( directoryExists( target ) ) {
+			directoryDelete( target, true )
+		}
+
+		directoryCreate( target, true );
+		fileWrite( target & "/SKILL.md", content );
+
+		var manifest = readManifest();
+		manifest.skills[ skillName ] = {
+			name: skillName,
+			owner: owner,
+			repo: repo,
+			slug: skill,
+			source: "registry",
+			sha: skillData.file_sha ?: skillData.sha ?: "",
+			audit_status: skillData.audit_status ?: "",
+			installedAt: now()
+		};
+		writeManifest( manifest );
+
+		recordTelemetry( skillName, "patch" );
+		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "registry" }
+	}
+
+	private struct function installFromHttp( required string url, boolean force = false, string name = "" ) {
+		var response = httpRequest( arguments.url, "GET", {} );
+		if ( !response.success ) {
+			return { success: false, error: "HTTP download failed: #response.error ?: 'unknown error'#" }
+		}
+
+		var content = response.data ?: "";
+		if ( !len( content ) || !isSimpleValue( content ) ) {
+			return { success: false, error: "HTTP download returned no content" }
+		}
+
+		var skillName = len( arguments.name ) ? arguments.name : listLast( listLast( arguments.url, "/" ), "?" ).listFirst( "." );
+		if ( !validName( skillName ) ) {
+			return { success: false, error: "Invalid skill name: #skillName#" }
+		}
+
+		var target = variables.customPath & "/" & skillName;
+		if ( directoryExists( target ) && !arguments.force ) {
+			return { success: false, error: "Skill already exists: #skillName#" }
+		}
+
+		if ( directoryExists( target ) ) {
+			directoryDelete( target, true )
+		}
+
+		directoryCreate( target, true );
+		fileWrite( target & "/SKILL.md", content );
+
+		var manifest = readManifest();
+		manifest.skills[ skillName ] = {
+			name: skillName,
+			source: "http",
+			url: arguments.url,
+			installedAt: now()
+		};
+		writeManifest( manifest );
+
+		recordTelemetry( skillName, "patch" );
+		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "http" }
+	}
+
+	private struct function installFromLocal( required string path, boolean force = false, string name = "" ) {
+		if ( !fileExists( arguments.path ) && !directoryExists( arguments.path ) ) {
+			return { success: false, error: "Local path does not exist: #arguments.path#" }
+		}
+
+		var sourcePath = arguments.path;
+		var isDirectory = directoryExists( arguments.path );
+
+		if ( isDirectory ) {
+			sourcePath = arguments.path & "/SKILL.md";
+			if ( !fileExists( sourcePath ) ) {
+				return { success: false, error: "Directory does not contain SKILL.md: #arguments.path#" }
+			}
+		}
+
+		var content = fileRead( sourcePath );
+		if ( !len( content ) ) {
+			return { success: false, error: "Local SKILL.md is empty" }
+		}
+
+		var skillName = len( arguments.name ) ? arguments.name : ( isDirectory ? getDirectoryFromPath( sourcePath ).listLast( "/" ) : listFirst( getFileFromPath( sourcePath ), "." ) );
+		if ( !validName( skillName ) ) {
+			return { success: false, error: "Invalid skill name: #skillName#" }
+		}
+
+		var target = variables.customPath & "/" & skillName;
+		if ( directoryExists( target ) && !arguments.force ) {
+			return { success: false, error: "Skill already exists: #skillName#" }
+		}
+
+		if ( directoryExists( target ) ) {
+			directoryDelete( target, true )
+		}
+
+		if ( isDirectory ) {
+			directoryCopy( getDirectoryFromPath( sourcePath ), target, true );
+		} else {
+			directoryCreate( target, true );
+			fileWrite( target & "/SKILL.md", content );
+		}
+
+		var manifest = readManifest();
+		manifest.skills[ skillName ] = {
+			name: skillName,
+			source: "local",
+			path: arguments.path,
+			installedAt: now()
+		};
+		writeManifest( manifest );
+
+		recordTelemetry( skillName, "patch" );
+		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "local" }
+	}
+	array function findRemote( string query = "", string owner = "", string repo = "", string category = "" ) { var response = httpRequest( variables.registryUrl & "/api/skills/ortus-boxlang/skills", "GET", {} ); if ( !response.success ) { return [] }; var payload = response.data; var items = isStruct( payload ) && payload.keyExists( "data" ) ? payload.data : payload; if ( isStruct( items ) && items.keyExists( "data" ) ) { items = items.data }; if ( !isArray( items ) ) { return [] }; if ( len( arguments.query ) ) { var q = lCase( arguments.query ); var filtered = []; for ( var item in items ) { if ( find( q, lCase( jsonSerialize( item ) ) ) > 0 ) { filtered.append( item ) } }; items = filtered }; if ( len( arguments.category ) ) { var categoryItems = []; for ( var item in items ) { if ( lCase( item.category ?: "" ) == lCase( arguments.category ) ) { categoryItems.append( item ) } }; items = categoryItems }; return items }
+	struct function refresh() { var manifest = readManifest(); var count = 0; for ( var name in manifest.skills ) { var item = manifest.skills[ name ]; if ( item.owner ?: "" != "" && item.repo ?: "" != "" && item.slug ?: "" != "" ) { var result = install( "#item.owner#/#item.repo#/#item.slug#", true ); if ( result.success ) { count++ } } }; return { success: true, refreshed: count } }
+	public void function recordPatch( required string name ) { recordTelemetry( arguments.name, "patch" ) }
+	public void function recordUse( required string name ) { recordTelemetry( arguments.name, "use" ) }
+	private struct function showWithoutTelemetry( required string name ) { for ( var item in list() ) { if ( item.name == arguments.name ) { return item } }; return {} }
+	private void function recordTelemetry( required string name, required string event ) { var item = showWithoutTelemetry( arguments.name ); if ( structIsEmpty( item ) ) { return }; var dir = getDirectoryFromPath( item.path ); var path = dir & "/.usage.json"; var usage = fileExists( path ) ? jsonDeserialize( fileRead( path ) ) : { useCount: 0, viewCount: 0, patchCount: 0, activityCount: 0, createdBy: item.custom ? "user" : "registry" }; var key = arguments.event == "view" ? "viewCount" : ( arguments.event == "use" ? "useCount" : ( arguments.event == "create" ? "createCount" : "patchCount" ) ); usage[ key ] = ( usage[ key ] ?: 0 ) + 1; usage.activityCount = ( usage.activityCount ?: 0 ) + 1; usage.lastActivityAt = now(); usage[ "last#arguments.event#At" ] = now(); fileWrite( path, jsonSerialize( usage, true ) ) }
+	private struct function parse( required string path, boolean custom = false ) { var content = fileRead( arguments.path ); var metadata = { name: getFileFromPath( getDirectoryFromPath( arguments.path ) ), description: "" }; var instructions = content; if ( left( content, 3 ) == "---" ) { var end = find( "---", content, 4 ); if ( end > 0 ) { for ( var line in listToArray( mid( content, 4, end - 4 ), char( 10 ) ) ) { var clean = trim( line ); if ( left( clean, 5 ) == "name:" ) { metadata.name = trim( mid( clean, 6, len( clean ) ) ) }; if ( left( clean, 12 ) == "description:" ) { metadata.description = trim( mid( clean, 13, len( clean ) ) ) } }; instructions = trim( mid( content, end + 3, len( content ) ) ) } }; return { name: metadata.name, description: metadata.description, content: instructions, path: arguments.path, custom: arguments.custom } }
+	private struct function httpRequest( required string url, required string method, required struct data ) { try { var client = http( arguments.url ); var response = arguments.method == "GET" ? client.get().send() : client.post().formField( "owner", arguments.data.owner ?: "" ).formField( "repo", arguments.data.repo ?: "" ).formField( "skill", arguments.data.skill ?: "" ).send(); if ( val( response.statusCode ?: 500 ) >= 400 ) { return { success: false, error: "HTTP #arguments.method# returned #response.statusCode#" } }; var body = response.fileContent ?: response.content ?: ""; if ( !len( body ) ) { return { success: true, data: "" } }; try { return { success: true, data: jsonDeserialize( body ) } } catch ( any ignored ) { return { success: true, data: body } } } catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ) } } }
+	private string function urlEncoded( required struct data ) { var parts = []; for ( var key in arguments.data ) { parts.append( urlEncode( key ) & "=" & urlEncode( toString( arguments.data[ key ] ) ) ) }; return arrayToList( parts, "&" ) }
+	private struct function readManifest() { if ( !fileExists( variables.manifestPath ) ) { return { skills: {} } }; return jsonDeserialize( fileRead( variables.manifestPath ) ) }
+	private void function writeManifest( required struct data ) { fileWrite( variables.manifestPath, jsonSerialize( arguments.data, true ) ) }
+	private void function ensureDirectories() { for ( var path in [ variables.skillsPath, variables.customPath ] ) { if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }; if ( !fileExists( variables.manifestPath ) ) { writeManifest( { skills: {} } ) } }
+	private boolean function validName( required string name ) { return reFind( "^[A-Za-z0-9_-]+$", arguments.name ) == 1 }
+}

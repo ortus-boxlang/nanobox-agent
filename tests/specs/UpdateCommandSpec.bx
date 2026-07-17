@@ -1,0 +1,14 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "UpdateCommand", () => {
+			it( "reports local installed versions and protects incomplete updates", () => {
+				var root = getTempDirectory() & "/updates-#createUUID()#"
+				directoryCreate( root & "/versions/v0.1.0", true )
+				var manager = new "nanobox-cli.UpdateManager"( root, "http://127.0.0.1:1/releases" )
+				var command = new "nanobox-cli.commands.UpdateCommand"( manager )
+				expect( command.execute( "status" ).versions ).toHaveLength( 1 )
+				expect( command.execute( "update", { version: "0.2.0" } ).success ).toBeFalse()
+			} )
+		} )
+	}
+}

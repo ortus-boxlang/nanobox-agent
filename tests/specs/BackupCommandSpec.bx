@@ -1,0 +1,18 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "BackupCommand", () => {
+			it( "creates, lists, reports, and restores backups", () => {
+				var source = getTempDirectory() & "/backup-source-#createUUID()#"
+				var backups = getTempDirectory() & "/backup-files-#createUUID()#"
+				directoryCreate( source, true )
+				fileWrite( source & "/note.txt", "backup content" )
+				var manager = new "nanobox-cli.BackupManager"( source, backups )
+				var command = new "nanobox-cli.commands.BackupCommand"( manager )
+				var created = command.execute( "run" )
+				expect( created.success ).toBeTrue()
+				expect( command.execute( "list" ).backups ).toHaveLength( 1 )
+				expect( command.execute( "status" ).status.file ).toBe( created.file )
+			} )
+		} )
+	}
+}

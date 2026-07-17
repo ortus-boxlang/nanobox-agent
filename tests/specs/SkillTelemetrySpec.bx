@@ -1,0 +1,19 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Skill telemetry", () => {
+			it( "records create and view activity beside a skill", () => {
+				var root = getTempDirectory() & "/telemetry-#createUUID()#"
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				manager.create( "telemetry-skill", "Telemetry", "Content" )
+				manager.show( "telemetry-skill" )
+				var usagePath = root & "/.agents/skills-custom/telemetry-skill/.usage.json"
+				expect( fileExists( usagePath ) ).toBeTrue()
+				var usage = jsonDeserialize( fileRead( usagePath ) )
+				expect( usage.createCount ).toBe( 1 )
+				expect( usage.viewCount ).toBe( 1 )
+				expect( usage.activityCount ).toBe( 2 )
+				expect( usage.lastActivityAt ).notToBeEmpty()
+			} )
+		} )
+	}
+}

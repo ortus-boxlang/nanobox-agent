@@ -1,0 +1,22 @@
+class {
+	property processes;
+	property webRoot;
+	function init( required any processManager, string webRoot = "" ) { variables.processes = arguments.processManager; variables.webRoot = arguments.webRoot != "" ? arguments.webRoot : expandPath( "." ); return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "start": return start( arguments.args )
+			case "stop": return variables.processes.stop( "web" )
+			case "status": return variables.processes.status( "web" )
+			default: return { success: false, error: "Unknown web action: #arguments.action#" }
+		}
+	}
+	private struct function start( struct args ) {
+		var port = arguments.args.port ?: 8080
+		var host = arguments.args.host ?: "127.0.0.1"
+		var executable = "/Users/lmajano/.bvm/current/bin/boxlang-miniserver"
+		if ( !fileExists( executable ) ) { executable = "boxlang-miniserver" }
+		var commandArgs = [ "--host", host, "--port", port, "--webroot", variables.webRoot, "--health-check", "--health-check-secure" ]
+		if ( arguments.args.debug ?: false ) { commandArgs.append( "--debug" ) }
+		return variables.processes.start( "web", executable, commandArgs )
+	}
+}

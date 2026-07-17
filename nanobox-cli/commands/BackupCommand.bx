@@ -1,0 +1,13 @@
+class {
+	property manager;
+	function init( required any backupManager ) { variables.manager = arguments.backupManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "run": return variables.manager.run()
+			case "list": return { success: true, backups: variables.manager.list() }
+			case "status": return { success: true, status: variables.manager.status() }
+			case "restore": return variables.manager.restore( arguments.args.backup ?: "" )
+			default: return { success: false, error: "Unknown backup action: #arguments.action#" }
+		}
+	}
+}

@@ -1,0 +1,16 @@
+class {
+ function main(array args=[]){
+  	var scheduler = new "nanobox-cli.Scheduler"()
+  	scheduler.start()
+  	var config = new "nanobox-cli.util.ConfigManager"()
+  	var curator = new "nanobox-cli.SkillCurator"( expandPath( "." ) )
+  	var reports = new "nanobox-cli.CuratorReportManager"( expandPath( "." ), new "nanobox-cli.VaultManager"( expandPath( ".nanobox/vault" ) ), config )
+  	var lifecycle = new "nanobox-cli.CuratorLifecycle"( config, curator, reports )
+  	lifecycle.tick()
+  println("NanoBox worker online")
+  while(true){
+  	lifecycle.tick()
+  	sleep(1000)
+  }
+ }
+}

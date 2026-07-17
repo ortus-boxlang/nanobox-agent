@@ -1,0 +1,17 @@
+class {
+	property manager;
+	function init( required any cronManager ) { variables.manager = arguments.cronManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return { success: true, tasks: variables.manager.list( arguments.args.group ?: "" ) }
+			case "create": return variables.manager.create( arguments.args.name ?: "", arguments.args.schedule ?: "", arguments.args.prompt ?: "", arguments.args.group ?: "default" )
+			case "show": return { success: true, task: variables.manager.show( arguments.args.name ?: "" ) }
+			case "pause": return variables.manager.pause( arguments.args.name ?: "" )
+			case "resume": return variables.manager.resume( arguments.args.name ?: "" )
+			case "run": return variables.manager.run( arguments.args.name ?: "" )
+			case "delete": return variables.manager.remove( arguments.args.name ?: "" )
+			case "stats": return { success: true, stats: variables.manager.stats() }
+			default: return { success: false, error: "Unknown cron action: #arguments.action#" }
+		}
+	}
+}

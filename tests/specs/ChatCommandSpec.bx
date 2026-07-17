@@ -1,0 +1,29 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "ChatCommand", () => {
+			it( "reports missing provider without calling AI", () => {
+				var home = getTempDirectory() & "/chat-command-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var tracker = new "nanobox-cli.TokenTracker"( home & "/tokens.json" )
+				var command = new "nanobox-cli.commands.ChatCommand"( config, tracker )
+				var result = command.execute( "hello" )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "No AI provider" )
+			} )
+			it( "normalizes an OpenAI-compatible provider and preserves its base URL", () => {
+				var home = getTempDirectory() & "/chat-command-compatible-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				config.set( "bx-ai.defaultProvider", "lmstudio" )
+				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
+				config.set( "bx-ai.providers.lmstudio.type", "openai-compatible" )
+				config.set( "bx-ai.providers.lmstudio.baseURL", "http://localhost:1234/v1" )
+				var tracker = new "nanobox-cli.TokenTracker"( home & "/tokens.json" )
+				var command = new "nanobox-cli.commands.ChatCommand"( config, tracker )
+				var result = command.execute( "hello", { model: "qwen/qwen3.6-35b-a3b" } )
+				expect( result.success ).toBeTrue()
+				expect( result.serviceProvider ).toBe( "openai-compatible" )
+				expect( result.content ).notToBeEmpty()
+			} )
+		} )
+	}
+}

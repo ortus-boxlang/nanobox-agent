@@ -1,0 +1,11 @@
+class {
+	property path;
+	function init( string skillsPath = "" ) { variables.path = arguments.skillsPath != "" ? arguments.skillsPath : expandPath( "~/.nanobox/skills" ); if ( !directoryExists( variables.path ) ) { directoryCreate( variables.path, true ) }; return this }
+	struct function execute( required string action, struct args = {} ) {
+		var files = directoryList( variables.path, true, "query", "*.md" )
+		if ( arguments.action == "list" ) { return { success: true, skills: files } }
+		if ( arguments.action == "search" ) { var matches = []; for ( var file in files ) { if ( findNoCase( arguments.args.query ?: "", fileRead( file.directory & "/" & file.name ) ) ) { matches.append( file ) } }; return { success: true, skills: matches } }
+		if ( arguments.action == "show" ) { var path = variables.path & "/" & ( arguments.args.name ?: "" ); if ( !right( path, 3 ) == ".md" ) { path &= ".md" }; return fileExists( path ) ? { success: true, path: path, content: fileRead( path ) } : { success: false, error: "Skill not found" } }
+		return { success: false, error: "Unknown skill action: #arguments.action#" }
+	}
+}

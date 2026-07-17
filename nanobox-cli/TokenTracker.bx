@@ -1,0 +1,102 @@
+class {
+
+	property datasource;
+
+	function init() {
+		vars.datasource = "nanobox"
+		return this
+	}
+
+	struct function record( required struct usage, string provider = "", string model = "", string operation = "chat", string sessionId = "" ) {
+		var promptTokens = arguments.usage.promptTokens ?: arguments.usage.prompt_tokens ?: arguments.usage.inputTokens ?: arguments.usage.input_tokens ?: 0
+		var completionTokens = arguments.usage.completionTokens ?: arguments.usage.completion_tokens ?: arguments.usage.outputTokens ?: arguments.usage.output_tokens ?: 0
+		var totalTokens = arguments.usage.totalTokens ?: arguments.usage.total_tokens ?: ( promptTokens + completionTokens )
+		var eventId = createUUID()
+		queryExecute(
+			"INSERT INTO nanobox_token_events (id, timestamp, provider, model, operation, session_id, prompt_tokens, completion_tokens, total_tokens) VALUES (:id, CURRENT_TIMESTAMP, :provider, :model, :operation, :sessionId, :promptTokens, :completionTokens, :totalTokens)",
+			{
+				id: eventId,
+				provider: arguments.provider ?: "",
+				model: arguments.model ?: "",
+				operation: arguments.operation,
+				sessionId: arguments.sessionId ?: "",
+				promptTokens: promptTokens,
+				completionTokens: completionTokens,
+				totalTokens: totalTokens
+			},
+			{ datasource: variables.datasource }
+		)
+		return {
+			timestamp: now(),
+			provider: arguments.provider,
+			model: arguments.model,
+			operation: arguments.operation,
+			sessionId: arguments.sessionId,
+			promptTokens: promptTokens,
+			completionTokens: completionTokens,
+			totalTokens: totalTokens
+		}
+	}
+
+	struct function totals( string period = "all" ) {
+		var sql = "SELECT COALESCE(SUM(prompt_tokens), 0) AS promptTokens, COALESCE(SUM(completion_tokens), 0) AS completionTokens, COALESCE(SUM(total_tokens), 0) AS totalTokens, COUNT(*) AS events FROM nanobox_token_events"
+		if ( arguments.period == "today" ) {
+			sql &= " WHERE timestamp >= date('now')"
+		}
+		var result = queryExecute( sql, {}, { datasource: variables.datasource } )
+		var row = queryToArray( result ).first()
+		return {
+			promptTokens: row.promptTokens ?: 0,
+			completionTokens: row.completionTokens ?: 0,
+			totalTokens: row.totalTokens ?: 0,
+			events: row.events ?: 0
+		}
+	}
+
+	struct function dailyTotals( string period = "all" ) {
+		var sql = "SELECT date(timestamp) AS day, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens, COUNT(*) AS events FROM nanobox_token_events"
+		if ( arguments.period == "today" ) {
+			sql &= " WHERE timestamp >= date('now')"
+		}
+		sql &= " GROUP BY date(timestamp) ORDER BY day DESC"
+		return queryToArray( queryExecute( sql, {}, { datasource: variables.datasource } ) )
+	}
+
+	array function events( numeric limit = 0 ) {
+		var sql = "SELECT id, timestamp, provider, model, operation, session_id, prompt_tokens, completion_tokens, total_tokens FROM nanobox_token_events ORDER BY timestamp DESC"
+		if ( arguments.limit > 0 ) {
+			sql &= " LIMIT #arguments.limit#"
+		}
+		return queryToArray( queryExecute( sql, {}, { datasource: variables.datasource } ) )
+	}
+
+	struct function byModel() {
+		var result = queryExecute(
+			"SELECT model, COUNT(*) AS events, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens FROM nanobox_token_events WHERE model != '' GROUP BY model ORDER BY totalTokens DESC",
+			{},
+			{ datasource: variables.datasource }
+		)
+		return queryToArray( result )
+	}
+
+	struct function bySession( required string sessionId ) {
+		var result = queryExecute(
+			"SELECT COUNT(*) AS events, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens FROM nanobox_token_events WHERE session_id = :sessionId",
+			{ sessionId: arguments.sessionId },
+			{ datasource: variables.datasource }
+		)
+		return queryToArray( result ).first()
+	}
+
+	private array function queryToArray( required query data ) {
+		var rows = []
+		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {
+			var row = {}
+			for ( var column in arguments.data.columnList.listToArray() ) {
+				row[ column ] = arguments.data[ column ][ rowIndex ]
+			}
+			rows.append( row )
+		}
+		return rows
+	}
+}

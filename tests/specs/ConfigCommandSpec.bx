@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "ConfigCommand", () => {
+			it( "reads, writes, and removes configuration values", () => {
+				var home = getTempDirectory() & "/config-command-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var command = new "nanobox-cli.commands.ConfigCommand"( config )
+				expect( command.execute( "set", { key: "nanobox.web.port", value: 8181 } ).success ).toBeTrue()
+				expect( command.execute( "get", { key: "nanobox.web.port" } ).value ).toBe( 8181 )
+				expect( command.execute( "unset", { key: "nanobox.web.port" } ).success ).toBeTrue()
+				expect( command.execute( "get", { key: "nanobox.web.port" } ).value ).toBe( "" )
+			} )
+		} )
+	}
+}

@@ -1,0 +1,4 @@
+class extends="nanobox-cli.BaseGateway" {
+	function init( struct config = {} ) { super.init( "slack", arguments.config ); return this }
+	struct function capabilities() { return { text: true, attachments: true, images: true, audio: false, video: false, reactions: true, threads: true, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
+}

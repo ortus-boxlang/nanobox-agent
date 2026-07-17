@@ -1,0 +1,79 @@
+class {
+	property datasource;
+
+	function init( string databasePath = "" ) {
+		variables.datasource = "nanobox"
+		if ( !len( arguments.databasePath ) ) { arguments.databasePath = expandPath( "~/.nanobox/data/nanobox.db" ) }
+		var parent = getDirectoryFromPath( arguments.databasePath )
+		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		return this
+	}
+
+	struct function create( string title = "New session", string provider = "", string model = "" ) {
+		var id = createUUID()
+		queryExecute( "INSERT INTO nanobox_sessions (id, title, provider, model, created_at, updated_at) VALUES (:id, :title, :provider, :model, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", { id: id, title: arguments.title, provider: arguments.provider, model: arguments.model }, { datasource: variables.datasource } )
+		return get( id )
+	}
+	array function list( numeric limit = 20, numeric offset = 0 ) {
+		var safeLimit = max( 1, min( 500, int( arguments.limit ) ) )
+		var safeOffset = max( 0, int( arguments.offset ) )
+		var query = queryExecute( "SELECT s.*, (SELECT COUNT(*) FROM nanobox_messages m WHERE m.session_id = s.id) AS message_count FROM nanobox_sessions s ORDER BY s.updated_at DESC LIMIT #safeLimit# OFFSET #safeOffset#", {}, { datasource: variables.datasource } )
+		return queryToArray( query )
+	}
+	struct function get( required string id ) {
+		var query = queryExecute( "SELECT * FROM nanobox_sessions WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		return query.recordCount ? queryToArray( query ).first() : {}
+	}
+	struct function rename( required string id, required string title ) {
+		if ( !len( trim( arguments.title ) ) ) { return {} }
+		queryExecute( "UPDATE nanobox_sessions SET title = :title, updated_at = CURRENT_TIMESTAMP WHERE id = :id", { title: trim( arguments.title ), id: arguments.id }, { datasource: variables.datasource } )
+		return get( arguments.id )
+	}
+	struct function appendMessage( required string id, required struct message ) {
+		var messageId = createUUID()
+		queryExecute( "INSERT INTO nanobox_messages (id, session_id, role, content, created_at) VALUES (:messageId, :sessionId, :role, :content, CURRENT_TIMESTAMP)", { messageId: messageId, sessionId: arguments.id, role: arguments.message.role ?: "user", content: arguments.message.content ?: "" }, { datasource: variables.datasource } )
+		queryExecute( "UPDATE nanobox_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		return get( arguments.id )
+	}
+	array function messages( required string id ) {
+		var query = queryExecute( "SELECT id, session_id, role, content, created_at FROM nanobox_messages WHERE session_id = :id ORDER BY created_at ASC", { id: arguments.id }, { datasource: variables.datasource } )
+		return queryToArray( query )
+	}
+	struct function delete( required string id ) {
+		queryExecute( "DELETE FROM nanobox_messages WHERE session_id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		queryExecute( "DELETE FROM nanobox_sessions WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		return { deleted: !structKeyExists( get( arguments.id ), "id" ), id: arguments.id }
+	}
+	array function search( required string query, numeric limit = 20 ) {
+		var safeLimit = max( 1, min( 500, int( arguments.limit ) ) )
+		var result = queryExecute( "SELECT DISTINCT s.*, (SELECT COUNT(*) FROM nanobox_messages m2 WHERE m2.session_id = s.id) AS message_count FROM nanobox_sessions s LEFT JOIN nanobox_messages m ON m.session_id = s.id WHERE s.title LIKE :query OR s.id LIKE :query OR m.content LIKE :query ORDER BY s.updated_at DESC LIMIT #safeLimit#", { query: "%#arguments.query#%" }, { datasource: variables.datasource } )
+		return queryToArray( result )
+	}
+	struct function prune( numeric olderThanDays = 90, boolean dryRun = false ) {
+		var age = max( 0, int( arguments.olderThanDays ) )
+		var found = queryExecute( "SELECT id FROM nanobox_sessions WHERE updated_at < datetime('now', '-#age# days')", {}, { datasource: variables.datasource } )
+		var ids = queryToArray( found )
+		if ( !arguments.dryRun ) { for ( var row in ids ) { delete( row.id ) } }
+		return { removed: arguments.dryRun ? 0 : ids.len(), candidates: ids.len(), dryRun: arguments.dryRun }
+	}
+	struct function stats() {
+		var sessions = queryExecute( "SELECT COUNT(*) AS total FROM nanobox_sessions", {}, { datasource: variables.datasource } )
+		var messages = queryExecute( "SELECT COUNT(*) AS total FROM nanobox_messages", {}, { datasource: variables.datasource } )
+		var roles = queryExecute( "SELECT role, COUNT(*) AS total FROM nanobox_messages GROUP BY role", {}, { datasource: variables.datasource } )
+		return { sessions: sessions.total[ 1 ] ?: 0, messages: messages.total[ 1 ] ?: 0, byRole: queryToArray( roles ) }
+	}
+	array function exportSession( required string id ) {
+		var session = get( arguments.id )
+		if ( structIsEmpty( session ) ) { return [] }
+		return [ { type: "session", data: session }, { type: "messages", data: messages( arguments.id ) } ]
+	}
+	private array function queryToArray( required query data ) {
+		var rows = []
+		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {
+			var row = {}
+			for ( var column in arguments.data.columnList.listToArray() ) { row[ column ] = arguments.data[ column ][ rowIndex ] }
+			rows.append( row )
+		}
+		return rows
+	}
+}

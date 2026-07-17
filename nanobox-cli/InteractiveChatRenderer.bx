@@ -1,0 +1,17 @@
+class {
+	property chat;
+	property colors;
+
+	function init( required any interactiveChat, boolean colorsEnabled = true ) { variables.chat = arguments.interactiveChat; variables.colors = arguments.colorsEnabled; return this }
+	string function renderHeader( required struct state ) {
+		var title = arguments.state.title ?: "New chat"
+		var model = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
+		var provider = arguments.state.provider ?: "not configured"
+		return box( "NanoBox · #title#\n#provider# / #model#\n/help for commands · /exit to quit" )
+	}
+	string function renderUser( required string text ) { return "\n" & style( "You", "cyan" ) & " › " & arguments.text }
+	string function renderAssistant( required string text ) { return "\n" & style( "NanoBox", "green" ) & " ›\n" & arguments.text }
+	string function renderCommand( required struct result ) { if ( arguments.result.action == "help" ) { return arrayToList( arguments.result.commands, "\n" ) }; return jsonSerialize( arguments.result ) }
+	private string function box( required string text ) { var lines = listToArray( replace( arguments.text, char( 13 ), "", "all" ), char( 10 ), true ); var width = 0; for ( var line in lines ) { width = max( width, len( line ) ) }; var output = "┌" & repeatString( "─", width + 2 ) & "┐"; for ( var line in lines ) { output &= char( 10 ) & "│ " & line & repeatString( " ", width - len( line ) ) & " │" }; return output & char( 10 ) & "└" & repeatString( "─", width + 2 ) & "┘" }
+	private string function style( required string text, required string color ) { if ( !variables.colors ) { return arguments.text }; var codes = { cyan: "36", green: "32", yellow: "33", red: "31", dim: "2" }; return char( 27 ) & "[" & codes[ arguments.color ] & "m" & arguments.text & char( 27 ) & "[0m" }
+}

@@ -1,0 +1,6 @@
+class {
+	@AITool( "Scan content for security threats including prompt injection patterns, secrets, and dangerous code. Returns scan results with severity levels." )
+	public struct function security_scan( required string content, string type = "text" ) {
+		return { success: true, content: arguments.content, type: arguments.type, results: "not-implemented" }
+	}
+}

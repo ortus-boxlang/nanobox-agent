@@ -1,0 +1,26 @@
+class {
+	property logger;
+	property logPath;
+
+	function init( string logPath = "" ) {
+		variables.logPath = arguments.logPath != "" ? arguments.logPath : expandPath( "~/.nanobox/logs/gateways.log" )
+		var parent = getDirectoryFromPath( variables.logPath )
+		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		variables.logger = getBoxRuntime().getLoggingService().getLogger( variables.logPath )
+		return this
+	}
+
+	void function debug( required string message ) { variables.logger.debug( arguments.message ) }
+	void function info( required string message ) { variables.logger.info( arguments.message ) }
+	void function warn( required string message ) { variables.logger.warn( arguments.message ) }
+	void function error( required string message ) { variables.logger.error( arguments.message ) }
+	string function getPath() { return variables.logPath }
+
+	string function tail( numeric lines = 50 ) {
+		if ( !fileExists( variables.logPath ) ) { return "" }
+		var content = fileRead( variables.logPath )
+		var entries = listToArray( replace( content, char( 13 ), "", "all" ), char( 10 ), true )
+		var start = max( 1, entries.len() - arguments.lines + 1 )
+		return arrayToList( entries.slice( start ), char( 10 ) )
+	}
+}

@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "ProcessManager", () => {
+			it( "starts, reports, and stops a managed process", () => {
+				var path = getTempDirectory() & "/processes-#createUUID()#.json"
+				var manager = new "nanobox-cli.ProcessManager"( path )
+				var started = manager.start( "probe", "sleep", [ "30" ] )
+				expect( started.success ).toBeTrue()
+				expect( manager.status( "probe" ).status ).toBe( "running" )
+				expect( manager.stop( "probe" ).success ).toBeTrue()
+				expect( manager.status( "probe" ).status ).toBe( "stopped" )
+			} )
+		} )
+	}
+}

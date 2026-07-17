@@ -1,0 +1,34 @@
+class {
+	property serversPath;
+	property processes;
+
+	function init( string serversPath = "", any processManager = null ) {
+		variables.serversPath = arguments.serversPath != "" ? arguments.serversPath : expandPath( "~/.nanobox/mcp" )
+		if ( !directoryExists( variables.serversPath ) ) { directoryCreate( variables.serversPath, true ) }
+		variables.processes = isNull( arguments.processManager ) ? new "nanobox-cli.ProcessManager"( variables.serversPath & "/processes.json" ) : arguments.processManager
+		return this
+	}
+	array function list() {
+		var result = []
+		for ( var file in directoryList( variables.serversPath, false, "query", "*.json" ) ) { result.append( readConfig( file.directory & "/" & file.name ) ) }
+		return result
+	}
+	struct function add( required string name, required string url, string apiKey = "" ) { return save( { name: arguments.name, transport: "http", url: arguments.url, apiKey: arguments.apiKey, enabled: true } ) }
+	struct function addStdio( required string name, required string command, array args = [], struct env = {} ) { return save( { name: arguments.name, transport: "stdio", command: arguments.command, args: arguments.args, env: arguments.env, enabled: true } ) }
+	struct function start( required string name ) {
+		var config = variables.find( arguments.name )
+		if ( structIsEmpty( config ) ) { return { success: false, error: "MCP server not found" } }
+		if ( ( config.transport ?: "http" ) != "stdio" ) { return { success: false, error: "Only stdio MCP servers have managed processes" } }
+		return variables.processes.start( processName( arguments.name ), config.command, config.args ?: [] )
+	}
+	struct function stop( required string name ) {
+		return variables.processes.stop( processName( arguments.name ) )
+	}
+	struct function remove( required string name ) { var stopped = stop( arguments.name ); var path = variables.serversPath & "/" & arguments.name & ".json"; if ( !fileExists( path ) ) { return { success: false, error: "MCP server not found" } }; fileDelete( path ); return { success: true, name: arguments.name } }
+	struct function test( required string name ) { var config = variables.find( arguments.name ); if ( structIsEmpty( config ) ) { return { success: false, error: "MCP server not found" } }; if ( ( config.transport ?: "http" ) == "stdio" ) { return { success: true, transport: "stdio", status: "configured" } }; try { var result = http( url=config.url, method="GET", timeout=5 ); return { success: true, statusCode: result.statusCode ?: 200 } } catch ( any exception ) { return { success: false, error: exception.message } } }
+	private struct function save( required struct config ) { fileWrite( variables.serversPath & "/" & arguments.config.name & ".json", jsonSerialize( arguments.config, true ) ); return mask( arguments.config ) }
+	private struct function readConfig( required string path ) { var config = jsonDeserialize( fileRead( arguments.path ) ); return mask( config ) }
+	private struct function find( required string name ) { for ( var file in directoryList( variables.serversPath, false, "query", "*.json" ) ) { if ( file.name == arguments.name & ".json" ) { return jsonDeserialize( fileRead( file.directory & "/" & file.name ) ) } }; return {} }
+	private string function processName( required string name ) { return "mcp:" & arguments.name }
+	private struct function mask( required struct config ) { var result = duplicate( arguments.config ); if ( result.keyExists( "apiKey" ) && len( result.apiKey ) ) { result.apiKey = "[REDACTED]" }; return result }
+}

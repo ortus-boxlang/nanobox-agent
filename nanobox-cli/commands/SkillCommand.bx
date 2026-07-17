@@ -1,0 +1,20 @@
+class {
+	property manager;
+	function init( required any skillManager ) { variables.manager = arguments.skillManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return { success: true, skills: variables.manager.list() }
+			case "show": return show( arguments.args.name ?: "" )
+			case "search":
+				if ( !len( arguments.args.query ?: "" ) ) { return { success: false, error: "A search query is required" } }
+				return { success: true, skills: variables.manager.search( arguments.args.query ) }
+			case "create": return variables.manager.create( arguments.args.name ?: "", arguments.args.description ?: "", arguments.args.content ?: "" )
+			case "install": var result = variables.manager.install( arguments.args.slug ?: arguments.args.name ?: "", arguments.args.force ?: false ); if ( result.success && result.skill?.name ?: "" != "" ) { variables.manager.recordUse( result.skill.name ) }; return result
+			case "find": return { success: true, skills: variables.manager.findRemote( arguments.args.query ?: "", arguments.args.owner ?: "", arguments.args.repo ?: "", arguments.args.category ?: "" ) }
+			case "refresh": return variables.manager.refresh()
+			case "remove": return variables.manager.remove( arguments.args.name ?: "" )
+			default: return { success: false, error: "Unknown skill action: #arguments.action#" }
+		}
+	}
+	private struct function show( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A skill name is required" } }; var result = variables.manager.show( arguments.name ); return structIsEmpty( result ) ? { success: false, error: "Skill not found: #arguments.name#" } : { success: true, skill: result } }
+}

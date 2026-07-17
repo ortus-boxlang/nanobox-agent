@@ -1,0 +1,25 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Model and provider registry", () => {
+			it( "stores provider configuration and named models", () => {
+				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/model-registry-#createUUID()#" )
+				var provider = new "nanobox-cli.ProviderCommand"( config )
+				var model = new "nanobox-cli.ModelCommand"( config )
+				expect( provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1", credentialEnv: "LM_KEY" } ).success ).toBeTrue()
+				expect( model.execute( "add", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.2 }, default: true } ).success ).toBeTrue()
+				expect( model.execute( "status", {} ).namedModels[ "local-coder" ].provider ).toBe( "lmstudio" )
+				expect( model.execute( "current", {} ).namedModel ).toBe( "local-coder" )
+			} )
+			it( "discovers LM Studio models through openai-compatible bx-ai", () => {
+				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/model-discovery-#createUUID()#" )
+				var provider = new "nanobox-cli.ProviderCommand"( config )
+				var model = new "nanobox-cli.ModelCommand"( config )
+				provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				provider.execute( "set", { name: "lmstudio" } )
+				var result = model.execute( "list", { provider: "lmstudio" } )
+				expect( result.success ).toBeTrue()
+				expect( result.models ).notToBeEmpty()
+			} )
+		} )
+	}
+}

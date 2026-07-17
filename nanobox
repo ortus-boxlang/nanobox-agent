@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────
+# NanoBox — AI Agent Platform
+# macOS / Linux entry point
+# ──────────────────────────────────────────────────────────────
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NANOBOX_HOME="${NANOBOX_HOME:-$HOME/.nanobox}"
+
+BOXLANG="${BOXLANG:-$(command -v boxlang || true)}"
+if [[ -z "$BOXLANG" ]]; then
+	for candidate in \
+		"$HOME/.bvm/current/bin/boxlang" \
+		"$HOME/.boxlang/bin/boxlang" \
+		/opt/homebrew/bin/boxlang \
+		/usr/local/bin/boxlang; do
+		if [[ -x "$candidate" ]]; then
+			BOXLANG="$candidate"
+			break
+	fi
+done
+fi
+
+if [[ -z "$BOXLANG" || ! -x "$BOXLANG" ]]; then
+	printf 'Error: boxlang binary not found.\n' >&2
+	printf 'Install BoxLang: https://boxlang.ortusbooks.com/getting-started/installation\n' >&2
+	exit 4
+fi
+
+CLI_SCRIPT="$NANOBOX_HOME/current/nanobox.bx"
+if [[ ! -f "$CLI_SCRIPT" ]]; then
+	CLI_SCRIPT="$SCRIPT_DIR/nanobox.bx"
+fi
+if [[ ! -f "$CLI_SCRIPT" ]]; then
+	printf 'Error: nanobox.bx not found in %s/current or beside this wrapper.\n' "$NANOBOX_HOME" >&2
+	exit 1
+fi
+
+export NANOBOX_HOME
+exec "$BOXLANG" "$CLI_SCRIPT" "$@"

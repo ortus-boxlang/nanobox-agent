@@ -1,0 +1,11 @@
+class {
+	@AITool( "Search the vault knowledge base for documents matching a query. Returns ranked results with document IDs and excerpts." )
+	public array function vault_search( required string query, numeric limit = 10 ) {
+		return new "/nanobox-cli/VaultManager"().search( arguments.query, arguments.limit )
+	}
+
+	@AITool( "Import a document into the vault knowledge base from a file path or URL. Categorizes and indexes the content for future searches." )
+	public struct function vault_import( required string path, string category = "", string tags = "" ) {
+		return new "/nanobox-cli/VaultManager"().import( arguments.path, arguments.category, listToArray( arguments.tags, "," ) )
+	}
+}

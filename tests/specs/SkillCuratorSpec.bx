@@ -1,0 +1,30 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Skill curator", () => {
+			it( "reports, activates, pins, archives, restores, backs up, and pauses custom skills", () => {
+				var root = getTempDirectory() & "/curator-#createUUID()#"
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				manager.create( "custom-skill", "Custom", "Instructions" )
+				var curator = new "nanobox-cli.SkillCurator"( root )
+				expect( curator.status().counts.custom ).toBe( 1 )
+				expect( curator.setMode( "custom-skill", "always-on" ).success ).toBeTrue()
+				expect( curator.pin( "custom-skill" ).success ).toBeTrue()
+				expect( curator.archive( "custom-skill" ).success ).toBeFalse()
+				expect( curator.pin( "custom-skill", false ).success ).toBeTrue()
+				expect( curator.archive( "custom-skill" ).success ).toBeTrue()
+				expect( curator.restore( "custom-skill" ).success ).toBeTrue()
+				expect( curator.backup( "test" ).success ).toBeTrue()
+				expect( curator.pause().paused ).toBeTrue()
+				expect( curator.pause( false ).paused ).toBeFalse()
+			} )
+			it( "supports dry-run without changing skill state", () => {
+				var root = getTempDirectory() & "/curator-dry-#createUUID()#"
+				new "nanobox-cli.SkillManager"( root & "/.agents/skills" ).create( "dry-skill", "Dry", "Content" )
+				var result = new "nanobox-cli.SkillCurator"( root ).run( true, 0, 0 )
+				expect( result.success ).toBeTrue()
+				expect( result.dryRun ).toBeTrue()
+				expect( directoryExists( root & "/.agents/skills-custom/dry-skill" ) ).toBeTrue()
+			} )
+		} )
+	}
+}

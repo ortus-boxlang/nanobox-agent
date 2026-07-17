@@ -1,0 +1,29 @@
+class {
+	property manager;
+	function init( required any toolManager ) { variables.manager = arguments.toolManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": {
+				var tools = variables.manager.list()
+				var sorted = []
+				for ( var key in tools ) {
+					tools[ key ].key = key
+					sorted.append( tools[ key ] )
+				}
+				return { success: true, tools: sorted, total: sorted.len() }
+			}
+			case "show": {
+				var key = arguments.args.key ?: arguments.args.name ?: ""
+				var found = variables.manager.show( key )
+				if ( structIsEmpty( found ) ) { return { success: false, error: "Tool not found: " & key } }
+				found.key = key
+				return { success: true, tool: found }
+			}
+			case "enable": return variables.manager.enable( arguments.args.key ?: arguments.args.name ?: "" )
+			case "disable": return variables.manager.disable( arguments.args.key ?: arguments.args.name ?: "" )
+			case "status": return variables.manager.status()
+			case "refresh": return { success: true, index: variables.manager.refresh() }
+			default: return { success: false, error: "Unknown tool action: #arguments.action#" }
+		}
+	}
+}

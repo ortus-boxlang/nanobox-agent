@@ -1,0 +1,16 @@
+class {
+	property manager;
+	function init( required any mcpManager ) { variables.manager = arguments.mcpManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return { success: true, servers: variables.manager.list() }
+			case "add": return { success: true, server: variables.manager.add( arguments.args.name ?: "", arguments.args.url ?: "", arguments.args.apiKey ?: "" ) }
+			case "add-stdio": return { success: true, server: variables.manager.addStdio( arguments.args.name ?: "", arguments.args.command ?: "", arguments.args.commandArgs ?: [], arguments.args.env ?: {} ) }
+			case "start": return variables.manager.start( arguments.args.name ?: "" )
+			case "stop": return variables.manager.stop( arguments.args.name ?: "" )
+			case "remove": return variables.manager.remove( arguments.args.name ?: "" )
+			case "test": return variables.manager.test( arguments.args.name ?: "" )
+			default: return { success: false, error: "Unknown MCP action: #arguments.action#" }
+		}
+	}
+}

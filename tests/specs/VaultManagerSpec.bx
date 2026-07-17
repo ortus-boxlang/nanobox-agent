@@ -1,0 +1,165 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultManager", () => {
+			it( "imports a file and lists it by category", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/note-#createUUID()#.md"
+				fileWrite( source, "NanoBox architecture notes" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var imported = manager.importFile( source, "research", [ "architecture" ] )
+				expect( imported.success ).toBeTrue()
+				expect( imported.document.name ).toBe( getFileFromPath( source ) )
+
+				var docs = manager.list( "research" )
+				expect( docs ).notToBeEmpty()
+				expect( docs[ 1 ].name ).toBe( getFileFromPath( source ) )
+			} )
+
+			it( "returns error for nonexistent source file", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var result = manager.importFile( "/nonexistent/path.md", "imported", [] )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "File not found" )
+			} )
+
+			it( "searches documents by content", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/doc-#createUUID()#.md"
+				fileWrite( source, "specific-search-token-xyz" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var imported = manager.importFile( source, "research", [ "test" ] )
+
+				var results = manager.search( "specific-search-token-xyz" )
+				expect( results ).notToBeEmpty()
+				expect( results[ 1 ].name ).toBe( imported.document.name )
+			} )
+
+			it( "returns empty array for unmatched search", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/d-#createUUID()#.md"
+				fileWrite( source, "some content here" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				manager.importFile( source, "imported", [] )
+				var results = manager.search( "nonexistent-token-xyz" )
+				expect( results ).toHaveLength( 0 )
+			} )
+
+			it( "index rebuilds the manifest from disk", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var source = getTempDirectory() & "/idx-#createUUID()#.md"
+				fileWrite( source, "index content" )
+				manager.importFile( source, "reports", [] )
+				var idx = manager.index()
+				expect( idx.success ).toBeTrue()
+				expect( idx.total ).toBeGTE( 1 )
+			} )
+
+			it( "gets a document by id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/get-#createUUID()#.md"
+				fileWrite( source, "get content" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var imported = manager.importFile( source, "research", [] )
+				var doc = manager.get( imported.document.id )
+				expect( doc ).notToBeEmpty()
+				expect( doc.id ).toBe( imported.document.id )
+			} )
+
+			it( "returns empty for nonexistent document id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var doc = manager.get( "nonexistent-id" )
+				expect( doc ).toBeEmpty()
+			} )
+
+			it( "removes a document by id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/rm-#createUUID()#.md"
+				fileWrite( source, "remove content" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var imported = manager.importFile( source, "imported", [] )
+				var result = manager.remove( imported.document.id )
+				expect( result.success ).toBeTrue()
+				expect( manager.get( imported.document.id ) ).toBeEmpty()
+			} )
+
+			it( "remove returns error for nonexistent id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var result = manager.remove( "nonexistent-id" )
+				expect( result.success ).toBeFalse()
+			} )
+
+			it( "exports a document by id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var source = getTempDirectory() & "/exp-#createUUID()#.md"
+				fileWrite( source, "export content" )
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var imported = manager.importFile( source, "research", [] )
+				var result = manager.export( imported.document.id )
+				expect( result.success ).toBeTrue()
+				expect( result.content ).toInclude( "export content" )
+			} )
+
+			it( "export returns error for nonexistent id", () => {
+				var vault = getTempDirectory() & "/vault-#createUUID()#"
+				var manager = new "nanobox-cli.VaultManager"( vault )
+				var result = manager.export( "nonexistent-id" )
+				expect( result.success ).toBeFalse()
+			} )
+		} )
+
+		describe( "VaultCommand", () => {
+			it( "dispatches list, import, search, show, remove, export, index", () => {
+				var vault = getTempDirectory() & "/vcmd-#createUUID()#"
+				var source = getTempDirectory() & "/vcmd-#createUUID()#.md"
+				fileWrite( source, "vault command test" )
+				var cmd = new "nanobox-cli.commands.VaultCommand"( new "nanobox-cli.VaultManager"( vault ) )
+
+				// Import
+				var result = cmd.execute( "import", { path: source, category: "research", tags: "test" } )
+				expect( result.success ).toBeTrue()
+				var docId = result.document.id
+
+				// List
+				result = cmd.execute( "list" )
+				expect( result.success ).toBeTrue()
+				expect( result.documents ).notToBeEmpty()
+
+				// Search
+				result = cmd.execute( "search", { query: "vault command test" } )
+				expect( result.success ).toBeTrue()
+				expect( result.documents ).notToBeEmpty()
+
+				// Show
+				result = cmd.execute( "show", { id: docId } )
+				expect( result.success ).toBeTrue()
+				expect( result.document.id ).toBe( docId )
+
+				// Show — missing id
+				result = cmd.execute( "show", { id: "bad-id" } )
+				expect( result.success ).toBeFalse()
+
+				// Export
+				result = cmd.execute( "export", { id: docId } )
+				expect( result.success ).toBeTrue()
+
+				// Remove
+				result = cmd.execute( "remove", { id: docId } )
+				expect( result.success ).toBeTrue()
+
+				// Index
+				result = cmd.execute( "index" )
+				expect( result.success ).toBeTrue()
+				expect( result.total ).toBeGTE( 0 )
+
+				// Unknown action
+				result = cmd.execute( "blargh" )
+				expect( result.success ).toBeFalse()
+			} )
+		} )
+	}
+}

@@ -1,0 +1,35 @@
+class {
+	property configManager;
+	property tokenTracker;
+
+	function init( required any appConfig, required any usageTracker ) { variables.configManager = arguments.appConfig; variables.tokenTracker = arguments.usageTracker; return this }
+	struct function execute( required string query, struct options = {} ) {
+		if ( !len( trim( arguments.query ) ) ) { return { success: false, error: "A query is required" } }
+		var selection = resolveModel( arguments.options )
+		if ( !selection.success ) { return selection }
+		var params = duplicate( selection.options ); params.model = selection.model
+		if ( structKeyExists( arguments.options, "temperature" ) ) { params.temperature = arguments.options.temperature }
+		if ( structKeyExists( arguments.options, "max_tokens" ) ) { params.max_tokens = arguments.options.max_tokens }
+		var providerConfig = variables.configManager.get( "bx-ai.providers.#selection.provider#", {} )
+		var serviceProvider = selection.provider
+		var providerOptions = duplicate( providerConfig.options ?: {} )
+		if ( isStruct( providerConfig ) && lCase( providerConfig.type ?: "" ) == "openai-compatible" ) { serviceProvider = "openai-compatible" }
+		if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { providerOptions.baseURL = providerConfig.baseURL }
+		if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { providerOptions.apiKey = providerConfig.apiKey }
+		providerOptions.provider = serviceProvider; providerOptions[ "returnFormat" ] = "single"
+		try {
+			var response = aiChat( arguments.query, params, providerOptions )
+			var content = isStruct( response ) ? ( response.content ?: "" ) : response
+			return { success: true, content: content, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel, usage: {}, raw: response }
+		} catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ), provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel } }
+	}
+	private struct function resolveModel( struct options ) {
+		var named = arguments.options.namedModel ?: arguments.options[ "named-model" ] ?: variables.configManager.get( "bx-ai.defaultNamedModel", "" )
+		if ( len( named ) ) { var namedConfig = variables.configManager.get( "bx-ai.namedModels.#named#", {} ); if ( structIsEmpty( namedConfig ) ) { return { success: false, error: "Named model not found: #named#" } }; return { success: true, provider: namedConfig.provider, model: namedConfig.model, options: namedConfig.options ?: {}, namedModel: named } }
+		var provider = arguments.options.provider ?: variables.configManager.get( "bx-ai.defaultProvider", "" )
+		var model = arguments.options.model ?: variables.configManager.get( "bx-ai.defaultModel", "" )
+		if ( !len( provider ) ) { return { success: false, error: "No AI provider configured. Run nanobox model setup or config provider add." } }
+		if ( !len( model ) ) { return { success: false, error: "No model configured. Run nanobox model setup or select a named model." } }
+		return { success: true, provider: provider, model: model, options: {}, namedModel: "" }
+	}
+}

@@ -1,0 +1,48 @@
+class {
+	property scriptsPath;
+
+	function init( string scriptsPath = "" ) {
+		variables.scriptsPath = arguments.scriptsPath != "" ? arguments.scriptsPath : expandPath( "~/.nanobox/scripts" )
+		if ( !directoryExists( variables.scriptsPath ) ) { directoryCreate( variables.scriptsPath, true ) }
+		return this
+	}
+
+	array function list() {
+		var result = []
+		for ( var file in directoryList( variables.scriptsPath, false, "query", "*.bxs" ) ) {
+			result.append( { name: replace( file.name, ".bxs", "", "one" ), path: file.directory & "/" & file.name, size: file.size } )
+		}
+		return result
+	}
+
+	struct function show( required string name ) {
+		var path = variables.scriptsPath & "/" & arguments.name & ".bxs"
+		return fileExists( path ) ? { name: arguments.name, path: path, content: fileRead( path ) } : {}
+	}
+
+	struct function create( required string name, string content = "" ) {
+		var path = variables.scriptsPath & "/" & arguments.name & ".bxs"
+		fileWrite( path, arguments.content )
+		return show( arguments.name )
+	}
+
+	struct function run( required string name, array args = [] ) {
+		var script = show( arguments.name )
+		if ( structIsEmpty( script ) ) { return { success: false, error: "Script not found" } }
+		var processArgs = [ "boxlang", script.path ]
+		for ( var arg in arguments.args ) { processArgs.append( arg ) }
+		try {
+			var jvmArgs = []
+			for ( var argument in processArgs ) { jvmArgs.append( toString( argument ) ) }
+			var builder = new "java.lang.ProcessBuilder"( jvmArgs )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+			var output = process.getInputStream().readAllBytes()
+			var exitCode = process.waitFor()
+			var text = new "java.lang.String"( output )
+			return { success: exitCode == 0, output: text, exitCode: exitCode }
+		} catch ( any exception ) {
+			return { success: false, error: exception.message ?: toString( exception ) }
+		}
+	}
+}

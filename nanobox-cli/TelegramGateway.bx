@@ -1,0 +1,83 @@
+class extends="nanobox-cli.BaseGateway" {
+	property apiBase;
+	property updateOffset;
+
+	function init( struct config = {} ) {
+		super.init( "telegram", arguments.config )
+		variables.apiBase = arguments.config.apiBase ?: "https://api.telegram.org"
+		variables.updateOffset = 0
+		return this
+	}
+
+	struct function connect() {
+		if ( !len( variables.config.botToken ?: "" ) ) {
+			variables.lastError = "Telegram bot token is not configured"
+			return status()
+		}
+		try {
+			var response = callApi( "getMe", {} )
+			if ( !response.ok ) { variables.lastError = response.description ?: "Telegram authentication failed"; return status() }
+			variables.connected = true
+			variables.connectedSince = now()
+			variables.lastError = ""
+			return status()
+		} catch ( any exception ) {
+			variables.lastError = exception.message ?: "Telegram connection failed"
+			return status()
+		}
+	}
+
+	struct function send( required string recipient, required string message ) {
+		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected" } }
+		try {
+			var response = callApi( "sendMessage", { chat_id: arguments.recipient, text: arguments.message } )
+			if ( !response.ok ) { return { success: false, error: response.description ?: "Telegram send failed" } }
+			return { success: true, messageId: response.result.message_id ?: "", recipient: arguments.recipient }
+		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram send failed" } }
+	}
+
+	struct function poll( numeric timeout = 10 ) {
+		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected", updates: [] } }
+		try {
+			var response = callApi( "getUpdates", { offset: variables.updateOffset, timeout: arguments.timeout, allowed_updates: [ "message", "callback_query" ] } )
+			if ( !response.ok ) { return { success: false, error: response.description ?: "Telegram polling failed", updates: [] } }
+			var normalized = []
+			for ( var update in ( response.result ?: [] ) ) {
+				variables.updateOffset = max( variables.updateOffset, ( update.update_id ?: 0 ) + 1 )
+				normalized.append( normalizeUpdate( update ) )
+			}
+			return { success: true, updates: normalized }
+		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram polling failed", updates: [] } }
+	}
+
+	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: true, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
+
+	private struct function normalizeUpdate( required struct update ) {
+		var message = arguments.update.message ?: arguments.update.callback_query?.message ?: {}
+		var sender = message.from ?: arguments.update.callback_query?.from ?: {}
+		return {
+			id: arguments.update.update_id ?: "",
+			gateway: "telegram",
+			kind: arguments.update.keyExists( "callback_query" ) ? "callback" : "message",
+			chatId: message.chat?.id ?: "",
+			userId: sender.id ?: "",
+			username: sender.username ?: "",
+			text: message.text ?: arguments.update.callback_query?.data ?: "",
+			raw: arguments.update
+		}
+	}
+
+	private struct function callApi( required string method, struct parameters = {} ) {
+		var token = variables.config.botToken ?: ""
+		var response = http(
+			url: variables.apiBase & "/bot" & token & "/" & arguments.method,
+			method: "POST",
+			timeout: variables.config.timeout ?: 15,
+			charset: "utf-8",
+			body: jsonSerialize( arguments.parameters ),
+			headers: { "Content-Type": "application/json" }
+		)
+		var content = response.fileContent ?: response.content ?: "{}"
+		return jsonDeserialize( content )
+	}
+}

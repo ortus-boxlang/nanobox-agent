@@ -1,0 +1,116 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Multi-source skill installation", function() {
+			beforeEach( function() {
+				variables.testRoot = getTempDirectory() & "/nanobox-install-" & createUUID()
+				directoryCreate( variables.testRoot, true, true )
+				variables.manager = new "nanobox-cli.SkillManager"( variables.testRoot & "/.agents/skills" )
+			})
+
+			afterEach( function() {
+				if ( directoryExists( variables.testRoot ) ) {
+					directoryDelete( variables.testRoot, true )
+				}
+			})
+
+			it( "detects source types correctly", function() {
+				expect( variables.manager.detectSourceType( "https://example.com/SKILL.md" ) ).toBe( "http" )
+				expect( variables.manager.detectSourceType( "http://example.com/SKILL.md" ) ).toBe( "http" )
+				expect( variables.manager.detectSourceType( "owner/repo/skill" ) ).toBe( "registry" )
+				expect( variables.manager.detectSourceType( "a/b/c~d" ) ).toBe( "registry" )
+
+				var testFile = variables.testRoot & "/test.md"
+				fileWrite( testFile, "test" )
+				expect( variables.manager.detectSourceType( testFile ) ).toBe( "local" )
+
+				var testDir = variables.testRoot & "/dir"
+				directoryCreate( testDir, true, true )
+				expect( variables.manager.detectSourceType( testDir ) ).toBe( "local" )
+
+				expect( variables.manager.detectSourceType( "short" ) ).toBe( "invalid" )
+			})
+
+			it( "installs from a local SKILL.md file", function() {
+				var testFile = variables.testRoot & "/source-skill.md"
+				fileWrite( testFile, "---" & chr(10) & "name: source-skill" & chr(10) & "description: From file" & chr(10) & "---" & chr(10) & chr(10) & "File content" )
+
+				var result = variables.manager.install( testFile )
+
+				expect( result.success ).toBeTrue()
+				expect( result.skill.name ).toBe( "source-skill" )
+				expect( fileExists( variables.testRoot & "/.agents/skills-custom/source-skill/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "installs from a local SKILL.md file with name override", function() {
+				var testFile = variables.testRoot & "/original.md"
+				fileWrite( testFile, "---" & chr(10) & "name: original-name" & chr(10) & "description: From file" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+
+				var result = variables.manager.install( testFile, false, "custom-name" )
+
+				expect( result.success ).toBeTrue()
+				expect( result.skill.name ).toBe( "custom-name" )
+				expect( fileExists( variables.testRoot & "/.agents/skills-custom/custom-name/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "installs from a local directory", function() {
+				var testDir = variables.testRoot & "/my-skill-dir"
+				directoryCreate( testDir, true, true )
+				fileWrite( testDir & "/SKILL.md", "---" & chr(10) & "name: dir-skill" & chr(10) & "description: From directory" & chr(10) & "---" & chr(10) & chr(10) & "Directory content" )
+
+				var result = variables.manager.install( testDir )
+
+				expect( result.success ).toBeTrue()
+				expect( result.skill.name ).toBe( "my-skill-dir" )
+				expect( fileExists( variables.testRoot & "/.agents/skills-custom/my-skill-dir/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "fails gracefully when local path does not exist", function() {
+				var result = variables.manager.install( variables.testRoot & "/nonexistent.md" )
+
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "does not exist" )
+			})
+
+			it( "fails when local directory has no SKILL.md", function() {
+				var testDir = variables.testRoot & "/empty-dir"
+				directoryCreate( testDir, true, true )
+
+				var result = variables.manager.install( testDir )
+
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "SKILL.md" )
+			})
+
+			it( "rejects invalid source types", function() {
+				var result = variables.manager.install( "just-a-name" )
+
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "Invalid source" )
+			})
+
+			it( "prevents duplicate installation without force", function() {
+				var testFile = variables.testRoot & "/dup.md"
+				fileWrite( testFile, "---" & chr(10) & "name: dup-skill" & chr(10) & "description: Dup" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+
+				var first = variables.manager.install( testFile )
+				expect( first.success ).toBeTrue()
+
+				var second = variables.manager.install( testFile )
+				expect( second.success ).toBeFalse()
+				expect( second.error ).toContain( "already exists" )
+
+				var third = variables.manager.install( testFile, true )
+				expect( third.success ).toBeTrue()
+			})
+
+			it( "tracks source type in the manifest", function() {
+				var testFile = variables.testRoot & "/tracked.md"
+				fileWrite( testFile, "---" & chr(10) & "name: tracked-skill" & chr(10) & "description: Tracked" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+
+				var result = variables.manager.install( testFile )
+				expect( result.success ).toBeTrue()
+				expect( result.source ).toBe( "local" )
+			})
+		})
+	}
+}

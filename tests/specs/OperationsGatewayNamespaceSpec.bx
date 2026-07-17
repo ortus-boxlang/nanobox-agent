@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Operations and gateway CLI namespace", () => {
+			it( "executes backup, update, and gateway actions through runtime", () => {
+				var home = getTempDirectory() & "/ops-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				expect( runtime.execute( { positionals: [ "backup", "status" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "update", "status" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "gateway", "status" ], options: {} } ).success ).toBeTrue()
+				expect( runtime.execute( { positionals: [ "gateway", "log" ], options: { lines: 5 } } ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

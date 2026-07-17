@@ -1,0 +1,16 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "MCPCommand", () => {
+			it( "supports stdio configuration and start/stop lifecycle", () => {
+				var path = getTempDirectory() & "/mcp-#createUUID()#"
+				var manager = new "nanobox-cli.McpManager"( path, new "nanobox-cli.ProcessManager"( path & "/processes.json" ) )
+				var command = new "nanobox-cli.commands.MCPCommand"( manager )
+				var added = command.execute( "add-stdio", { name: "local-server", command: "sleep", commandArgs: [ "60" ] } )
+				expect( added.server.transport ).toBe( "stdio" )
+				expect( command.execute( "test", { name: "local-server" } ).status ).toBe( "configured" )
+				expect( command.execute( "start", { name: "local-server" } ).success ).toBeTrue()
+				expect( command.execute( "stop", { name: "local-server" } ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

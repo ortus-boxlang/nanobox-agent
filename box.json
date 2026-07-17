@@ -1,0 +1,24 @@
+{
+    "name": "nanobox",
+    "version": "0.1.0",
+    "type": "mvc",
+    "language": "boxlang",
+    "dependencies": {
+        "testbox": "^7.0.0+19"
+    },
+    "modules": {
+        "bx-ai": "^3.3.2+17",
+        "bx-sqlite": "^1.2.0+5"
+    },
+    "installPaths": {
+        "testbox": "testbox/"
+    },
+    "testbox": {
+        "runner": "./testbox/run"
+    },
+    "scripts": {
+        "test": "!./testbox/run --verbose",
+        "test:unit": "!./testbox/run --directory=tests.specs --bundles-pattern=*Spec*.bx|*Test*.bx",
+        "format:check": "!boxlang format --check --source app/,nanobox-cli/,tests/,.bx"
+    }
+}

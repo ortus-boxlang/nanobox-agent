@@ -1,0 +1,30 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Config namespace", () => {
+			it( "supports all direct config actions", () => {
+				var home = getTempDirectory() & "/config-complete-#createUUID()#"
+				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var command = new "nanobox-cli.commands.ConfigCommand"( config )
+				expect( command.execute( "show", {} ).success ).toBeTrue()
+				expect( command.execute( "path", {} ).path ).toInclude( "nanobox.json" )
+				expect( command.execute( "set", { key: "cli.mode", value: "test" } ).value ).toBe( "test" )
+				expect( command.execute( "get", { key: "cli.mode" } ).value ).toBe( "test" )
+				expect( command.execute( "unset", { key: "cli.mode" } ).success ).toBeTrue()
+				expect( command.execute( "get", { key: "cli.mode" } ).value ).toBe( "" )
+			} )
+			it( "rejects missing keys and unknown actions", () => {
+				var command = new "nanobox-cli.commands.ConfigCommand"( new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/config-errors-#createUUID()#" ) )
+				expect( command.execute( "get", {} ).success ).toBeFalse()
+				expect( command.execute( "set", { value: "x" } ).success ).toBeFalse()
+				expect( command.execute( "unknown", {} ).success ).toBeFalse()
+			} )
+			it( "redacts nested provider secrets in show output", () => {
+				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/config-secrets-#createUUID()#" )
+				config.set( "bx-ai.providers.openai", { type: "openai", apiKey: "secret-value" } )
+				var result = new "nanobox-cli.commands.ConfigCommand"( config ).execute( "show", {} )
+				expect( jsonSerialize( result ) ).notToInclude( "secret-value" )
+				expect( jsonSerialize( result ) ).toInclude( "[REDACTED]" )
+			} )
+		} )
+	}
+}

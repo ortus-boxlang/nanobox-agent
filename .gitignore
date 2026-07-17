@@ -1,0 +1,25 @@
+## Build Files ##
+.gradle
+build/**
+!gradle/wrapper/gradle-wrapper.jar
+bin/**
+
+### IntelliJ IDEA ###
+.idea/
+
+### Mac OS ###
+.DS_Store
+
+### BOXLANG ###
+boxlang_modules/**
+.env
+/libs/
+src/test/resources/libs/*
+!src/test/resources/libs/.gitkeep
+src/test/resources/modules/**
+testbox/**
+tests/results
+derby.log
+
+### Ollama Data ###
+.ollama/

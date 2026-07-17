@@ -1,0 +1,13 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "PrettyCli", () => {
+			it( "renders tables, boxes, and text helpers", () => {
+				var cli = new "nanobox-cli.PrettyCli"( false )
+				expect( cli.table( [ "Name" ], [ [ "LM Studio" ] ] ) ).toInclude( "LM Studio" )
+				expect( cli.box( "Hello" ) ).toInclude( "Hello" )
+				expect( cli.truncate( "abcdef", 5 ) ).toBe( "abcd…" )
+				expect( cli.wrap( "one two three", 7 ) ).toHaveLength( 2 )
+			} )
+		} )
+	}
+}

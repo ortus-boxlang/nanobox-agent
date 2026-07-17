@@ -1,0 +1,74 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Multi-source skill installation", () => {
+			it( "installs from HTTP URL", () => {
+				var root = getTempDirectory() & "/ms-http-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var result = manager.install( url )
+				expect( result.success ).toBeTrue()
+				expect( fileExists( root & "/.agents/skills-custom/SKILL/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "installs from HTTP URL with custom name", () => {
+				var root = getTempDirectory() & "/ms-http-named-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var result = manager.install( url, false, "my-custom-skill" )
+				expect( result.success ).toBeTrue()
+				expect( fileExists( root & "/.agents/skills-custom/my-custom-skill/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "installs from local file path", () => {
+				var root = getTempDirectory() & "/ms-local-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var testFile = root & "/test-skill.md"
+				fileWrite( testFile, "---" & char( 10 ) & "name: test-skill" & char( 10 ) & "description: Test skill" & char( 10 ) & "---" & char( 10 ) & char( 10 ) & "Test content" )
+				var result = manager.install( testFile )
+				expect( result.success ).toBeTrue()
+				expect( fileExists( root & "/.agents/skills-custom/test-skill/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "installs from local directory path", () => {
+				var root = getTempDirectory() & "/ms-local-dir-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var testDir = root & "/skill-directory"
+				directoryCreate( testDir, true, true )
+				fileWrite( testDir & "/SKILL.md", "---" & char( 10 ) & "name: dir-skill" & char( 10 ) & "description: Directory skill" & char( 10 ) & "---" & char( 10 ) & char( 10 ) & "Directory content" )
+				var result = manager.install( testDir )
+				expect( result.success ).toBeTrue()
+				expect( fileExists( root & "/.agents/skills-custom/skill-directory/SKILL.md" ) ).toBeTrue()
+			})
+
+			it( "respects force flag for existing skills", () => {
+				var root = getTempDirectory() & "/ms-force-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var result1 = manager.install( url )
+				expect( result1.success ).toBeTrue()
+				var result2 = manager.install( url )
+				expect( result2.success ).toBeFalse()
+				expect( result2.error ).toContain( "already exists" )
+				var result3 = manager.install( url, true )
+				expect( result3.success ).toBeTrue()
+			})
+
+			it( "handles HTTP errors gracefully", () => {
+				var root = getTempDirectory() & "/ms-404-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var url = "https://httpbin.org/status/404"
+				var result = manager.install( url )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "HTTP" )
+			})
+
+			it( "validates local paths exist", () => {
+				var root = getTempDirectory() & "/ms-missing-" & createUUID()
+				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var result = manager.install( root & "/nonexistent.md" )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "does not exist" )
+			})
+		})
+	}
+}

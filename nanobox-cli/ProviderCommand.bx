@@ -1,0 +1,71 @@
+class {
+	property config;
+
+	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+
+	struct function execute( required string action, struct args = {} ) {
+		var op = lCase( arguments.action )
+		switch ( op ) {
+			case "list": return listProviders()
+			case "current": return current()
+			case "add": return addProvider( arguments.args )
+			case "remove": return removeProvider( arguments.args.provider ?: arguments.args.name ?: "" )
+			case "set": return setProvider( arguments.args.provider ?: arguments.args.name ?: "" )
+			case "status": return status()
+			default: return { success: false, error: "Unknown provider action: #arguments.action#" }
+		}
+	}
+
+	private array function providerCatalog() {
+		return [ "openrouter", "openai", "anthropic", "gemini", "deepseek", "grok", "groq", "mistral", "minimax", "ollama", "openai-compatible", "huggingface", "cohere", "perplexity", "bedrock", "voyage", "docker", "elevenlabs" ]
+	}
+
+	private struct function listProviders() {
+		var providers = variables.config.get( "bx-ai.providers", {} )
+		var result = []
+		for ( var name in providers ) {
+			var item = sanitize( providers[ name ] )
+			item.name = name
+			item.configured = true
+			item.credential = credentialStatus( providers[ name ] )
+			result.append( item )
+		}
+		return { success: true, supported: providerCatalog(), providers: result }
+	}
+
+	private struct function current() { return { success: true, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } }
+
+	private struct function addProvider( struct args ) {
+		var name = lCase( arguments.args.provider ?: arguments.args.name ?: "" )
+		if ( !len( name ) ) { return { success: false, error: "A provider name is required" } }
+		var providerData = duplicate( arguments.args.options ?: {} )
+		providerData.type = arguments.args.type ?: providerData.type ?: name
+		var endpoint = arguments.args.baseURL ?: arguments.args.baseUrl ?: ""
+		if ( len( endpoint ) ) { providerData.baseURL = endpoint }
+		var credentialEnv = arguments.args.credentialEnv ?: arguments.args[ "credential-env" ] ?: ""
+		if ( len( credentialEnv ) ) { providerData.apiKey = "${" & credentialEnv & "}" }
+		variables.config.set( "bx-ai.providers.#name#", providerData )
+		return { success: true, provider: name, config: sanitize( providerData ), credential: credentialStatus( providerData ) }
+	}
+
+	private struct function removeProvider( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A provider name is required" } }; variables.config.unset( "bx-ai.providers.#lCase( arguments.name )#" ); return { success: true, provider: lCase( arguments.name ) } }
+	private struct function setProvider( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A provider name is required" } }; if ( structIsEmpty( variables.config.get( "bx-ai.providers.#lCase( arguments.name )#", {} ) ) ) { return { success: false, error: "Provider is not configured" } }; variables.config.set( "bx-ai.defaultProvider", lCase( arguments.name ) ); return current() }
+
+	private struct function status() {
+		var providers = listProviders()
+		return { success: true, default: current(), supportedCount: providerCatalog().len(), configuredCount: providers.providers.len(), providers: providers.providers }
+	}
+	private struct function sanitize( required struct source ) {
+		var result = duplicate( arguments.source )
+		for ( var key in [ "apiKey", "token", "password", "secret" ] ) { if ( structKeyExists( result, key ) ) { result[ key ] = "[REDACTED]" } }
+		return result
+	}
+
+	private struct function credentialStatus( required struct data ) {
+		var reference = arguments.data.apiKey ?: arguments.data.credentialEnv ?: ""
+		if ( !len( reference ) ) { return { configured: false, source: "none" } }
+		var data = duplicate( arguments.data )
+		for ( var secretKey in [ "apiKey", "token", "password", "secret" ] ) { if ( structKeyExists( data, secretKey ) ) { data[ secretKey ] = "[REDACTED]" } }
+		return data
+	}
+}

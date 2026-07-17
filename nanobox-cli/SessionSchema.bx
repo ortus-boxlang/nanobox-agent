@@ -1,0 +1,16 @@
+class {
+	function main( array args = [] ) {
+		var schema = [
+			"CREATE TABLE IF NOT EXISTS nanobox_sessions (id VARCHAR(36) PRIMARY KEY, title VARCHAR(255), provider VARCHAR(100), model VARCHAR(255), created_at TIMESTAMP, updated_at TIMESTAMP)",
+			"CREATE TABLE IF NOT EXISTS nanobox_messages (id VARCHAR(36) PRIMARY KEY, session_id VARCHAR(36), role VARCHAR(32), content TEXT, created_at TIMESTAMP)",
+			"CREATE TABLE IF NOT EXISTS nanobox_cron_tasks (name VARCHAR(255) PRIMARY KEY, schedule TEXT, prompt TEXT, group VARCHAR(100), skills TEXT, enabled INTEGER DEFAULT 1, runs INTEGER DEFAULT 0, failures INTEGER DEFAULT 0, lastRun TIMESTAMP, created TIMESTAMP)",
+			"CREATE TABLE IF NOT EXISTS nanobox_token_events (id VARCHAR(36) PRIMARY KEY, timestamp TIMESTAMP, provider VARCHAR(100), model VARCHAR(255), operation VARCHAR(32), session_id VARCHAR(36), prompt_tokens INTEGER DEFAULT 0, completion_tokens INTEGER DEFAULT 0, total_tokens INTEGER DEFAULT 0)",
+			"CREATE INDEX IF NOT EXISTS idx_token_events_timestamp ON nanobox_token_events(timestamp)",
+			"CREATE INDEX IF NOT EXISTS idx_token_events_session ON nanobox_token_events(session_id)",
+			"CREATE INDEX IF NOT EXISTS idx_cron_tasks_group ON nanobox_cron_tasks(group)",
+			"CREATE INDEX IF NOT EXISTS idx_cron_tasks_enabled ON nanobox_cron_tasks(enabled)"
+		]
+		for ( var sql in schema ) { queryExecute( sql, {}, { datasource: "nanobox" } ) }
+		println( "NanoBox SQLite schema initialized" )
+	}
+}

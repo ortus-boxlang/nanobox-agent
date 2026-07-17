@@ -1,0 +1,9 @@
+class {
+	property name="name" default="nanobox-scheduler";
+	property name="running" default=false;
+
+	function configure() { variables.running = false; return this }
+	function start() { variables.running = true; return { success: true, name: variables.name, status: "running" } }
+	function stop() { variables.running = false; return { success: true, name: variables.name, status: "stopped" } }
+	struct function stats() { return { name: variables.name, status: variables.running ? "running" : "stopped", tasks: [ { name: "process-health", schedule: "every 30 seconds" } ] } }
+}

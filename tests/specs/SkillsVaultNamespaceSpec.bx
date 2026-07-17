@@ -1,0 +1,28 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "Skills and vault namespaces", () => {
+			it( "manages local custom skills", () => {
+				var root = getTempDirectory() & "/skills-#createUUID()#"
+				var manager = new "nanobox-cli.SkillManager"( root & "/skills", "https://skills.boxlang.io" )
+				var command = new "nanobox-cli.commands.SkillCommand"( manager )
+				expect( command.execute( "create", { name: "boxlang-style", description: "Style", content: "Use tabs." } ).success ).toBeTrue()
+				expect( command.execute( "list", {} ).skills ).toHaveLength( 1 )
+				expect( command.execute( "show", { name: "boxlang-style" } ).skill.content ).toInclude( "Use tabs" )
+				expect( command.execute( "search", { query: "tabs" } ).skills ).toHaveLength( 1 )
+				expect( command.execute( "remove", { name: "boxlang-style" } ).success ).toBeTrue()
+			} )
+			it( "manages vault documents", () => {
+				var root = getTempDirectory() & "/vault-#createUUID()#"
+				var source = root & "/source.md"; directoryCreate( root, true ); fileWrite( source, "Vault searchable content" )
+				var command = new "nanobox-cli.commands.VaultCommand"( new "nanobox-cli.VaultManager"( root & "/vault" ) )
+				var imported = command.execute( "import", { source: source, category: "research", tags: [ "test" ] } )
+				expect( imported.success ).toBeTrue()
+				var id = imported.document.id
+				expect( command.execute( "search", { query: "searchable" } ).documents ).toHaveLength( 1 )
+				expect( command.execute( "show", { id: id } ).success ).toBeTrue()
+				expect( command.execute( "export", { id: id } ).content ).toInclude( "Vault searchable" )
+				expect( command.execute( "remove", { id: id } ).success ).toBeTrue()
+			} )
+		} )
+	}
+}

@@ -1,0 +1,38 @@
+class {
+	property storePath;
+
+	function init( string storePath = "" ) {
+		variables.storePath = arguments.storePath != "" ? arguments.storePath : expandPath( "~/.nanobox/learning.json" )
+		var parent = getDirectoryFromPath( variables.storePath )
+		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		if ( !fileExists( variables.storePath ) ) { fileWrite( variables.storePath, jsonSerialize( { observations: [], facts: [] }, true ) ) }
+		return this
+	}
+	struct function observe( required string source, required string content, string category = "general", numeric confidence = 0.5 ) {
+		var data = readData()
+		var item = { id: createUUID(), source: arguments.source, content: arguments.content, category: arguments.category, confidence: arguments.confidence, created: now(), consolidated: false }
+		data.observations.append( item )
+		writeData( data )
+		return { success: true, observation: item }
+	}
+	struct function consolidate() {
+		var data = readData()
+		var grouped = {}
+		for ( var item in data.observations ) {
+			var key = lCase( item.category & ":" & item.content )
+			if ( !structKeyExists( grouped, key ) || item.confidence > grouped[ key ].confidence ) { grouped[ key ] = item }
+		}
+		data.facts = []
+		for ( var key in grouped ) { grouped[ key ].consolidated = true; data.facts.append( grouped[ key ] ) }
+		writeData( data )
+		return { success: true, observations: data.observations.len(), facts: data.facts.len() }
+	}
+	array function facts( string category = "" ) {
+		var result = []
+		for ( var fact in readData().facts ) { if ( !len( arguments.category ) || fact.category == arguments.category ) { result.append( fact ) } }
+		return result
+	}
+	struct function stats() { var data = readData(); return { observations: data.observations.len(), facts: data.facts.len() } }
+	private struct function readData() { return jsonDeserialize( fileRead( variables.storePath ) ) }
+	private void function writeData( required struct data ) { fileWrite( variables.storePath, jsonSerialize( arguments.data, true ) ) }
+}

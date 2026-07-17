@@ -1,0 +1,137 @@
+class {
+	property skillsRoot;
+	property customRoot;
+	property archiveRoot;
+	property backupRoot;
+	property statePath;
+
+	function init( string projectRoot = "" ) {
+		var root = len( arguments.projectRoot ) ? arguments.projectRoot : getDirectoryFromPath( getCurrentTemplatePath() )
+		variables.skillsRoot = root & "/.agents/skills"
+		variables.customRoot = root & "/.agents/skills-custom"
+		variables.archiveRoot = root & "/.agents/skills-archive"
+		variables.backupRoot = root & "/.agents/skills-backups"
+		variables.statePath = root & "/.agents/skills-curator.json"
+		ensureDirectories()
+		return this
+	}
+
+	struct function status() {
+		var state = readJSON( variables.statePath, { enabled: true, paused: false, runs: 0, lastRunAt: "" } )
+		var rows = entries()
+		var counts = { active: 0, stale: 0, archived: 0, pinned: 0, custom: 0, registry: 0 }
+		for ( var item in rows ) {
+			var stateName = item.state ?: "active"
+			counts[ stateName ] = ( counts[ stateName ] ?: 0 ) + 1
+			if ( item.pinned ?: false ) { counts.pinned++ }
+			if ( item.custom ?: false ) { counts.custom++ } else { counts.registry++ }
+		}
+		return { success: true, enabled: state.enabled ?: true, paused: state.paused ?: false, runs: state.runs ?: 0, lastRunAt: state.lastRunAt ?: "", counts: counts, skills: rows }
+	}
+
+	struct function run( boolean dryRun = false, numeric staleAfterDays = 30, numeric archiveAfterDays = 90, array protectedSkills = [] ) {
+		var current = now()
+		var changes = []
+		var rows = entries()
+		for ( var item in rows ) {
+			if ( !( item.custom ?: false ) || ( item.pinned ?: false ) || arguments.protectedSkills.contains( item.name ) ) { continue }
+			var usage = item.usage ?: {}
+			var lastActivity = usage.lastActivityAt ?: item.createdAt ?: current
+			if ( !len( toString( lastActivity ) ) ) { lastActivity = current }
+			var age = dateDiff( "d", lastActivity, current )
+			var desired = age >= arguments.archiveAfterDays ? "archived" : ( age >= arguments.staleAfterDays ? "stale" : "active" )
+			if ( desired != ( item.state ?: "active" ) ) {
+				changes.append( { name: item.name, from: item.state ?: "active", to: desired, ageDays: age } )
+				if ( !arguments.dryRun ) {
+					if ( desired == "archived" ) { archive( item.name ) } else { setMetadata( item.name, { state: desired } ) }
+				}
+			}
+		}
+		if ( !arguments.dryRun ) {
+			var state = readJSON( variables.statePath, {} )
+			state.runs = ( state.runs ?: 0 ) + 1
+			state.lastRunAt = current
+			writeJSON( variables.statePath, state )
+		}
+		return { success: true, dryRun: arguments.dryRun, changes: changes, checked: rows.len() }
+	}
+
+	struct function pin( required string name, boolean value = true ) { return setMetadata( arguments.name, { pinned: arguments.value } ) }
+	struct function setMode( required string name, required string mode ) { if ( ![ "lazy", "always-on" ].contains( arguments.mode ) ) { return { success: false, error: "Mode must be lazy or always-on" } }; return setMetadata( arguments.name, { mode: arguments.mode } ) }
+
+	struct function archive( required string name ) {
+		var item = findSkill( arguments.name )
+		if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }
+		if ( item.pinned ?: false ) { return { success: false, error: "Skill is pinned: #arguments.name#" } }
+		if ( !( item.custom ?: false ) ) { return { success: false, error: "Registry skills are not curator-managed" } }
+		var source = getDirectoryFromPath( item.path )
+		var target = variables.archiveRoot & "/" & arguments.name
+		if ( directoryExists( target ) ) { directoryDelete( target, true ) }
+		directoryCreate( target, true )
+		directoryCopy( source, target, true )
+		directoryDelete( source, true )
+		return setMetadataAt( target, arguments.name, { state: "archived", archivedAt: now() } )
+	}
+
+	struct function restore( required string name ) {
+		var source = variables.archiveRoot & "/" & arguments.name
+		if ( !directoryExists( source ) ) { return { success: false, error: "Archived skill not found: #arguments.name#" } }
+		var target = variables.customRoot & "/" & arguments.name
+		if ( directoryExists( target ) ) { return { success: false, error: "Active skill already exists: #arguments.name#" } }
+		directoryCopy( source, target, true )
+		directoryDelete( source, true )
+		return setMetadataAt( target, arguments.name, { state: "active", archivedAt: "" } )
+	}
+
+	struct function backup( string reason = "manual" ) {
+		var id = dateFormat( now(), "yyyymmdd" ) & "-" & timeFormat( now(), "HHmmss" )
+		var target = variables.backupRoot & "/" & id
+		directoryCreate( target, true )
+		if ( directoryExists( variables.customRoot ) ) { directoryCopy( variables.customRoot, target & "/skills-custom", true ) }
+		writeJSON( target & "/manifest.json", { id: id, reason: arguments.reason, createdAt: now() } )
+		return { success: true, id: id, path: target }
+	}
+
+	array function backups() {
+		var result = []
+		if ( !directoryExists( variables.backupRoot ) ) { return result }
+		for ( var dir in directoryList( variables.backupRoot, false, "query" ) ) { if ( dir.type == "dir" ) { result.append( { id: dir.name, path: dir.directory & "/" & dir.name } ) } }
+		return result
+	}
+
+	struct function rollback( string id = "" ) {
+		var rows = backups()
+		if ( !len( arguments.id ) && rows.len() ) { arguments.id = rows.last().id }
+		var target = {}
+		for ( var row in rows ) { if ( row.id == arguments.id ) { target = row; break } }
+		if ( structIsEmpty( target ) || !directoryExists( target.path & "/skills-custom" ) ) { return { success: false, error: "Backup not found" } }
+		if ( directoryExists( variables.customRoot ) ) { directoryDelete( variables.customRoot, true ) }
+		directoryCopy( target.path & "/skills-custom", variables.customRoot, true )
+		return { success: true, id: arguments.id }
+	}
+
+	struct function pause( boolean value = true ) { var state = readJSON( variables.statePath, {} ); state.paused = arguments.value; writeJSON( variables.statePath, state ); return { success: true, paused: arguments.value } }
+
+	private array function entries() {
+		var result = []
+		for ( var root in [ variables.skillsRoot, variables.customRoot ] ) {
+			if ( !directoryExists( root ) ) { continue }
+			for ( var dir in directoryList( root, false, "query" ) ) {
+				if ( dir.type == "dir" && fileExists( dir.directory & "/" & dir.name & "/SKILL.md" ) ) {
+					var skillDir = dir.directory & "/" & dir.name
+					var meta = readJSON( skillDir & "/.nanobox-skill.json", {} )
+					result.append( { name: dir.name, path: skillDir & "/SKILL.md", custom: root == variables.customRoot, enabled: meta.enabled ?: true, state: meta.state ?: "active", pinned: meta.pinned ?: false, mode: meta.mode ?: "lazy", createdAt: meta.createdAt ?: "", archivedAt: meta.archivedAt ?: "", usage: readJSON( skillDir & "/.usage.json", {} ) } )
+				}
+			}
+		}
+		return result
+	}
+
+	private struct function findSkill( required string name ) { for ( var item in entries() ) { if ( item.name == arguments.name ) { return item } }; return {} }
+	struct function setEnabled( required string name, required boolean enabled ) { return setMetadata( arguments.name, { enabled: arguments.enabled } ) }
+	private struct function setMetadata( required string name, required struct values ) { var item = findSkill( arguments.name ); if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }; return setMetadataAt( getDirectoryFromPath( item.path ), arguments.name, arguments.values ) }
+	private struct function setMetadataAt( required string path, required string name, required struct values ) { var meta = readJSON( arguments.path & "/.nanobox-skill.json", { name: arguments.name, createdAt: now() } ); for ( var key in arguments.values ) { meta[ key ] = arguments.values[ key ] }; writeJSON( arguments.path & "/.nanobox-skill.json", meta ); return { success: true, skill: arguments.name, metadata: meta } }
+	private void function ensureDirectories() { for ( var path in [ variables.skillsRoot, variables.customRoot, variables.archiveRoot, variables.backupRoot ] ) { if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }; if ( !fileExists( variables.statePath ) ) { writeJSON( variables.statePath, { enabled: true, paused: false, runs: 0, lastRunAt: "" } ) } }
+	private struct function readJSON( required string path, struct fallback = {} ) { return fileExists( arguments.path ) ? jsonDeserialize( fileRead( arguments.path ) ) : arguments.fallback }
+	private void function writeJSON( required string path, required struct data ) { fileWrite( arguments.path, jsonSerialize( arguments.data, true ) ) }
+}

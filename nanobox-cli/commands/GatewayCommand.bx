@@ -1,0 +1,71 @@
+class {
+	property registry;
+	property configManager;
+	property logger;
+
+	function init( required any gatewayRegistry, any configManager = null, any gatewayLogger = null ) { variables.registry = arguments.gatewayRegistry; variables.configManager = arguments.configManager; variables.logger = arguments.gatewayLogger ?: new "nanobox-cli.GatewayLogger"(); return this }
+
+	struct function execute( required string action, struct args = {} ) {
+		var operation = lCase( arguments.action )
+		switch ( operation ) {
+			case "setup": return setup( arguments.args )
+			case "status":
+			case "list": return { success: true, gateways: variables.registry.list() }
+			case "log": return { success: true, path: variables.logger.getPath(), content: variables.logger.tail( arguments.args.lines ?: 50 ) }
+			case "clear-log": return clearLog()
+			case "test": return test( arguments.args )
+			case "health": return test( arguments.args )
+			case "connect": return variables.registry.connect( arguments.args.name ?: "" )
+			case "disconnect": return variables.registry.disconnect( arguments.args.name ?: "" )
+			case "enable": return variables.registry.enable( arguments.args.name ?: "" )
+			case "disable": return variables.registry.disable( arguments.args.name ?: "" )
+			case "restart": return variables.registry.restart( arguments.args.name ?: "" )
+			case "remove": return variables.registry.remove( arguments.args.name ?: "" )
+			case "send": return send( arguments.args )
+			case "broadcast": return broadcast( arguments.args )
+			default: return { success: false, error: "Unknown gateway action: #arguments.action#" }
+		}
+	}
+
+	private struct function setup( struct args ) {
+		var platform = arguments.args.platform ?: ""
+		if ( !len( platform ) ) { platform = cliRead( "Gateway platform (telegram/email/discord/slack/whatsapp/whatsapp-business/signal/sms): " ) }
+		var config = {}
+		if ( platform == "telegram" ) {
+			var tokenEnv = arguments.args.tokenEnv ?: arguments.args[ "token-env" ] ?: "TELEGRAM_BOT_TOKEN"
+			if ( !structKeyExists( arguments.args, "tokenEnv" ) && !structKeyExists( arguments.args, "token-env" ) && !structKeyExists( arguments.args, "nonInteractive" ) ) { tokenEnv = cliRead( "Bot token environment variable [TELEGRAM_BOT_TOKEN]: " ); if ( !len( tokenEnv ) ) { tokenEnv = "TELEGRAM_BOT_TOKEN" } }
+			config.botToken = "${" & tokenEnv & "}"
+		}
+		var result = variables.registry.create( platform, config )
+		if ( result.success ) { result.configured = true; result.secretStorage = "environment variable reference"; variables.logger.info( "Configured gateway #platform#" ) }
+		return result
+	}
+
+	private struct function test( struct args ) {
+		var target = arguments.args.name ?: arguments.args.platform ?: ""
+		var result = variables.registry.connect( target )
+		variables.logger.info( "Gateway test for #target#: #result.connected ?: false#" )
+		return { success: result.connected ?: false, gateway: target, status: result }
+	}
+
+	private struct function clearLog() {
+		fileWrite( variables.logger.getPath(), "" )
+		return { success: true, path: variables.logger.getPath() }
+	}
+
+	private struct function send( struct args ) {
+		var target = arguments.args.name ?: ""
+		var gateway = variables.registry.get( target )
+		if ( !isObject( gateway ) ) { return { success: false, error: "Gateway not found" } }
+		variables.logger.info( "Sending gateway message via #target#" )
+		var result = gateway.send( arguments.args.recipient ?: "", arguments.args.message ?: "" )
+		if ( !result.success ) { variables.logger.error( "Gateway send failed for #target#" ) }
+		return result
+	}
+
+	private struct function broadcast( struct args ) {
+		var results = []
+		for ( var gatewayStatus in variables.registry.list() ) { results.append( send( { name: gatewayStatus.name, recipient: arguments.args.recipient ?: "", message: arguments.args.message ?: "" } ) ) }
+		return { success: true, results: results }
+	}
+}

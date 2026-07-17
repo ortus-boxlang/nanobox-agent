@@ -1,0 +1,28 @@
+class {
+	property nanoboxHome;
+	property configPath;
+	property preferencesPath;
+
+	function init( string nanoboxHome = "" ) {
+		var defaultHome = getSystemSetting( "NANOBOX_HOME", "" )
+		if ( !len( defaultHome ) ) { defaultHome = getSystemSetting( "user.home", "." ) & "/.nanobox" }
+		variables.nanoboxHome = len( arguments.nanoboxHome ) ? arguments.nanoboxHome : defaultHome
+		variables.configPath = variables.nanoboxHome & "/config/nanobox.json"
+		variables.preferencesPath = variables.nanoboxHome & "/config/preferences.json"
+		return this
+	}
+
+	struct function defaults() { return { "$schema": "https://nanobox.io/schemas/v1/config.json", version: "1", "bx-ai": { defaultProvider: "", defaultModel: "", providers: {} }, nanobox: { web: { enabled: true, host: "127.0.0.1", port: 8080 }, worker: { enabled: true, debug: false }, sessions: { enabled: true, maxSessions: 1000, pruneAfterDays: 90 }, cron: { enabled: true, maxJobs: 50 }, security: { enabled: true, autoDisable: true } } } }
+	struct function load() { ensureConfigDirectory(); if ( !fileExists( variables.configPath ) ) { var data = defaults(); writeConfig( data ); return data }; try { return resolveEnvironment( jsonDeserialize( fileRead( variables.configPath ) ) ) } catch ( any exception ) { return defaults() } }
+	void function save( required struct configData ) { ensureConfigDirectory(); writeConfig( arguments.configData ) }
+	any function get( required string key, any defaultValue = "" ) { var current = load(); for ( var part in listToArray( arguments.key, "." ) ) { if ( !isStruct( current ) || !structKeyExists( current, part ) ) { return arguments.defaultValue }; current = current[ part ] }; return current }
+	void function set( required string key, required any value ) { var data = load(); var parts = listToArray( arguments.key, "." ); var current = data; for ( var i = 1; i < parts.len(); i++ ) { if ( !structKeyExists( current, parts[ i ] ) || !isStruct( current[ parts[ i ] ] ) ) { current[ parts[ i ] ] = {} }; current = current[ parts[ i ] ] }; current[ parts.last() ] = arguments.value; save( data ) }
+	void function unset( required string key ) { var data = load(); var parts = listToArray( arguments.key, "." ); var current = data; for ( var i = 1; i < parts.len(); i++ ) { if ( !structKeyExists( current, parts[ i ] ) ) { return }; current = current[ parts[ i ] ] }; if ( structKeyExists( current, parts.last() ) ) { structDelete( current, parts.last() ) }; save( data ) }
+	struct function loadPreferences() { ensureConfigDirectory(); if ( !fileExists( variables.preferencesPath ) ) { var preferences = { tone: "helpful", verbosity: "normal", model: "", provider: "" }; fileWrite( variables.preferencesPath, jsonSerialize( preferences, true ) ); return preferences }; return jsonDeserialize( fileRead( variables.preferencesPath ) ) }
+	void function savePreferences( required struct preferences ) { ensureConfigDirectory(); fileWrite( variables.preferencesPath, jsonSerialize( arguments.preferences, true ) ) }
+	string function getConfigPath() { return variables.configPath }
+	string function getNanoboxHome() { return variables.nanoboxHome }
+	private void function ensureConfigDirectory() { var path = variables.nanoboxHome & "/config"; if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }
+	private void function writeConfig( required struct configData ) { fileWrite( variables.configPath, jsonSerialize( arguments.configData, true ) ) }
+	private any function resolveEnvironment( required any value ) { if ( isStruct( arguments.value ) ) { for ( var key in arguments.value ) { arguments.value[ key ] = resolveEnvironment( arguments.value[ key ] ) }; return arguments.value }; if ( isArray( arguments.value ) ) { for ( var i = 1; i <= arguments.value.len(); i++ ) { arguments.value[ i ] = resolveEnvironment( arguments.value[ i ] ) }; return arguments.value }; if ( !isSimpleValue( arguments.value ) ) { return arguments.value }; var text = toString( arguments.value ); if ( left( text, 2 ) == "${" && right( text, 1 ) == "}" ) { return getSystemSetting( mid( text, 3, len( text ) - 3 ), "" ) }; return arguments.value }
+}

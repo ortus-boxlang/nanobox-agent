@@ -1,0 +1,3 @@
+class {
+	struct function send( required string recipient, required string message ) { return { success: true, recipient: arguments.recipient, message: arguments.message } }
+}

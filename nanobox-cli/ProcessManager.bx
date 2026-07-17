@@ -1,0 +1,51 @@
+class {
+	property statePath;
+
+	function init( string statePath = "" ) {
+		variables.statePath = arguments.statePath != "" ? arguments.statePath : expandPath( "~/.nanobox/processes.json" )
+		var parent = getDirectoryFromPath( variables.statePath )
+		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		if ( !fileExists( variables.statePath ) ) { fileWrite( variables.statePath, jsonSerialize( { processes: {} }, true ) ) }
+		return this
+	}
+	struct function start( required string name, required string command, array args = [] ) {
+		var state = readState()
+		if ( structKeyExists( state.processes, arguments.name ) ) { return status( arguments.name ) }
+		var processArgs = [ arguments.command ]
+		for ( var arg in arguments.args ) { processArgs.append( arg ) }
+		try {
+			var jvmArgs = []
+		for ( var argument in processArgs ) { jvmArgs.append( toString( argument ) ) }
+		var builder = new "java.lang.ProcessBuilder"( jvmArgs )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+			state.processes[ arguments.name ] = { pid: process.pid(), name: arguments.name, command: arguments.command, args: arguments.args, started: now() }
+			writeState( state )
+			return { success: true, status: "started", pid: process.pid(), name: arguments.name }
+		} catch ( any exception ) { return { success: false, error: exception.message } }
+	}
+	struct function stop( required string name ) {
+		var state = readState()
+		if ( !structKeyExists( state.processes, arguments.name ) ) { return { success: true, status: "stopped", name: arguments.name } }
+		var process = state.processes[ arguments.name ]
+		try {
+			var handle = createObject( "java", "java.lang.ProcessHandle" ).of( javacast( "long", process.pid ) )
+			if ( handle.isPresent() ) { handle.get().destroy() }
+		} catch ( any ignored ) {}
+		structDelete( state.processes, arguments.name )
+		writeState( state )
+		return { success: true, status: "stopped", name: arguments.name, pid: process.pid }
+	}
+	struct function status( required string name ) {
+		var state = readState()
+		if ( !structKeyExists( state.processes, arguments.name ) ) { return { name: arguments.name, status: "stopped" } }
+		var process = state.processes[ arguments.name ]
+		var alive = false
+		try { alive = createObject( "java", "java.lang.ProcessHandle" ).of( javacast( "long", process.pid ) ).isPresent() } catch ( any ignored ) {}
+		if ( !alive ) { structDelete( state.processes, arguments.name ); writeState( state ); return { name: arguments.name, status: "stopped", pid: process.pid } }
+		return { name: arguments.name, status: "running", pid: process.pid, started: process.started, command: process.command }
+	}
+	array function all() { var result = []; for ( var name in readState().processes ) { result.append( status( name ) ) }; return result }
+	private struct function readState() { return jsonDeserialize( fileRead( variables.statePath ) ) }
+	private void function writeState( required struct state ) { fileWrite( variables.statePath, jsonSerialize( arguments.state, true ) ) }
+}

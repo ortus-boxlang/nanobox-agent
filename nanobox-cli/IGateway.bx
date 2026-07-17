@@ -1,0 +1,9 @@
+interface {
+	struct function connect()
+	struct function disconnect()
+	struct function status()
+	struct function send( required string recipient, required string message )
+	struct function receive( required struct payload )
+	struct function capabilities()
+	string function getName()
+}

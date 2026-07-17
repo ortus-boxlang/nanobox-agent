@@ -1,0 +1,13 @@
+class {
+	property tracker;
+	function init( required any usageTracker ) { variables.tracker = arguments.usageTracker; return this }
+	struct function execute( string period = "all", string by = "", boolean asJson = false, struct args = {} ) {
+		var selectedPeriod = arguments.args.period ?: arguments.period
+		var dimension = arguments.args.by ?: arguments.by
+		var totals = variables.tracker.totals( selectedPeriod )
+		var result = { success: true, period: selectedPeriod, totals: totals }
+		if ( len( dimension ) ) { result.breakdown = breakdown( dimension ) }
+		return result
+	}
+	array function breakdown( required string dimension ) { var groups = {}; for ( var event in variables.tracker.events() ) { var key = event[ arguments.dimension ] ?: "unknown"; if ( !structKeyExists( groups, key ) ) { groups[ key ] = { promptTokens: 0, completionTokens: 0, totalTokens: 0, events: 0 } }; groups[ key ].promptTokens += event.promptTokens; groups[ key ].completionTokens += event.completionTokens; groups[ key ].totalTokens += event.totalTokens; groups[ key ].events++ }; var result = []; for ( var key in groups ) { result.append( { key: key, metrics: groups[ key ] } ) }; return result }
+}

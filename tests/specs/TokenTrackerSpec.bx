@@ -1,0 +1,15 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "TokenTracker", () => {
+			it( "normalizes usage and records totals", () => {
+				var path = getTempDirectory() & "/token-tracker-#createUUID()#.json"
+				var tracker = new "nanobox-cli.TokenTracker"( path )
+				tracker.record( { prompt_tokens: 10, completion_tokens: 4 }, "lmstudio", "local-model", "chat", "session-1" )
+				expect( tracker.totals( "all" ).promptTokens ).toBe( 10 )
+				expect( tracker.totals( "all" ).completionTokens ).toBe( 4 )
+				expect( tracker.totals( "all" ).totalTokens ).toBe( 14 )
+				expect( tracker.events( 1 ) ).toHaveLength( 1 )
+			} )
+		} )
+	}
+}

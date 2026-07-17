@@ -1,0 +1,53 @@
+class {
+	property quarantinePath;
+	property reportPath;
+	property patterns;
+
+	function init( string quarantinePath = "", string reportPath = "" ) {
+		variables.quarantinePath = arguments.quarantinePath != "" ? arguments.quarantinePath : expandPath( "~/.nanobox/quarantine" )
+		variables.reportPath = arguments.reportPath != "" ? arguments.reportPath : expandPath( "~/.nanobox/security-report.json" )
+		variables.patterns = [ "sk-[A-Za-z0-9]{20,}", "sk-ant-[A-Za-z0-9_-]{20,}", "ghp_[A-Za-z0-9]{36}", "AKIA[0-9A-Z]{16}", "ignore previous instructions", "systemExecute", "processBuilder" ]
+		if ( !directoryExists( variables.quarantinePath ) ) { directoryCreate( variables.quarantinePath, true ) }
+		return this
+	}
+
+	struct function scan( required string type, required string name, required string content ) {
+		var findings = []
+		for ( var pattern in variables.patterns ) { if ( reFindNoCase( pattern, arguments.content ) ) { findings.append( { pattern: pattern, severity: pattern.findNoCase( "ignore" ) ? "high" : "critical" } ) } }
+		var result = { type: arguments.type, name: arguments.name, findings: findings, scanned: now(), status: findings.len() ? "threat" : "clean" }
+		writeReport( result )
+		return result
+	}
+
+	array function scanFiles( required string type, required string directory ) {
+		var results = []
+		if ( !directoryExists( arguments.directory ) ) { return results }
+		for ( var file in directoryList( arguments.directory, true, "query", "*.md" ) ) { if ( file.type == "File" ) { results.append( scan( arguments.type, file.name, fileRead( file.directory & "/" & file.name ) ) ) } }
+		return results
+	}
+
+	struct function status() { return fileExists( variables.reportPath ) ? jsonDeserialize( fileRead( variables.reportPath ) ) : { status: "never-scanned" } }
+
+	struct function tick( string scope = "skills", string root = "" ) {
+		var scanRoot = len( arguments.root ) ? arguments.root : variables.quarantinePath
+		var start = now()
+		writeLog( text="Security scan tick starting — scope=#arguments.scope#, root=#scanRoot#", type="information", log="nanobox-security" )
+		try {
+			if ( !directoryExists( scanRoot ) ) {
+				writeLog( text="Security scan tick complete — no content to scan (#scanRoot#)", type="debug", log="nanobox-security" )
+				return { success: true, scanned: 0, threats: 0, scope: arguments.scope, duration: dateDiff( "s", start, now() ) }
+			}
+			var results = scanFiles( arguments.scope, scanRoot )
+			writeLog( text="Security scan tick complete — scope=#arguments.scope#, threats=#results.len()#, duration=#dateDiff( 's', start, now() )#s", type="information", log="nanobox-security" )
+			if ( results.len() ) {
+				writeLog( text="Security scan found #results.len()# threats in #arguments.scope#", type="warning", log="nanobox-security" )
+			}
+			return { success: true, scanned: 1, threats: results.len(), findings: results, scope: arguments.scope, duration: dateDiff( "s", start, now() ) }
+		} catch ( any e ) {
+			writeLog( text="Security scan tick failed: #e.message#", type="error", log="nanobox-security" )
+			return { success: false, error: e.message }
+		}
+	}
+
+	private void function writeReport( required struct result ) { fileWrite( variables.reportPath, jsonSerialize( arguments.result, true ) ) }
+}

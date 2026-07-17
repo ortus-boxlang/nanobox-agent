@@ -1,0 +1,20 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "SecurityMiddleware", () => {
+			it( "rejects secrets in LLM input", () => {
+				var middleware = new "nanobox-cli.middleware.SecurityMiddleware"()
+				var result = middleware.beforeLLMCall( { messages: "token sk-abcdefghijklmnopqrstuvwxyz123456" } )
+				expect( result.isRejected() ).toBeTrue()
+			} )
+			it( "rejects blocked tools", () => {
+				var middleware = new "nanobox-cli.middleware.SecurityMiddleware"( [], [ "systemExecute" ] )
+				var result = middleware.beforeToolCall( { toolName: "systemExecute" } )
+				expect( result.isRejected() ).toBeTrue()
+			} )
+			it( "continues safe input", () => {
+				var middleware = new "nanobox-cli.middleware.SecurityMiddleware"()
+				expect( middleware.beforeLLMCall( { messages: "hello" } ).isContinue() ).toBeTrue()
+			} )
+		} )
+	}
+}

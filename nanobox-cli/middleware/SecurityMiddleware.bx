@@ -1,0 +1,42 @@
+import bxModules.bxai.models.middleware.BaseAiMiddleware
+import bxModules.bxai.models.middleware.AiMiddlewareResult
+
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+	property secretPatterns;
+	property blockedTools;
+
+	function init( array secretPatterns = [], array blockedTools = [] ) {
+		variables.secretPatterns = arguments.secretPatterns.len() ? arguments.secretPatterns : [
+			"sk-[A-Za-z0-9]{20,}",
+			"sk-ant-[A-Za-z0-9_-]{20,}",
+			"ghp_[A-Za-z0-9]{36}",
+			"AKIA[0-9A-Z]{16}"
+		]
+		variables.blockedTools = arguments.blockedTools
+		return this
+	}
+
+	AiMiddlewareResult function beforeLLMCall( required struct context ) {
+		var messages = arguments.context.messages ?: arguments.context.prompt ?: ""
+		var content = isSimpleValue( messages ) ? messages : jsonSerialize( messages )
+		for ( var pattern in variables.secretPatterns ) {
+			if ( reFindNoCase( pattern, content ) ) { return AiMiddlewareResult.reject( "Secret-like value detected in LLM request" ) }
+		}
+		return AiMiddlewareResult.continue()
+	}
+
+	AiMiddlewareResult function beforeToolCall( required struct context ) {
+		var toolName = arguments.context.toolName ?: ""
+		if ( variables.blockedTools.findNoCase( toolName ) > 0 ) { return AiMiddlewareResult.reject( "Tool is blocked by NanoBox security policy" ) }
+		return AiMiddlewareResult.continue()
+	}
+
+	AiMiddlewareResult function afterAgentRun( required struct context ) {
+		var response = arguments.context.response ?: arguments.context.result ?: ""
+		var content = isSimpleValue( response ) ? response : jsonSerialize( response )
+		for ( var pattern in variables.secretPatterns ) {
+			if ( reFindNoCase( pattern, content ) ) { return AiMiddlewareResult.reject( "Secret-like value detected in agent response" ) }
+		}
+		return AiMiddlewareResult.continue()
+	}
+}

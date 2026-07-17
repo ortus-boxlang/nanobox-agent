@@ -1,0 +1,17 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "GatewayRegistry", () => {
+			it( "registers and manages gateway connections", () => {
+				var registry = new "nanobox-cli.GatewayRegistry"()
+				var gateway = new "nanobox-cli.BaseGateway"( "generic", {} )
+				expect( registry.register( gateway ).success ).toBeTrue()
+				expect( registry.connect( "generic" ).connected ).toBeTrue()
+				expect( registry.list() ).toHaveLength( 1 )
+				expect( registry.list().first().capabilities.text ).toBeTrue()
+				expect( registry.list().first().capabilities.hitl ).toBeFalse()
+				expect( registry.list().first().capabilities.hitlModes ).toBeEmpty()
+				expect( registry.disconnect( "generic" ).connected ).toBeFalse()
+			} )
+		} )
+	}
+}

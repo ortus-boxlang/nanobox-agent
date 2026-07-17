@@ -1,0 +1,52 @@
+import bxModules.bxai.models.middleware.BaseAiMiddleware
+import bxModules.bxai.models.middleware.AiMiddlewareResult
+
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+	property allowlistPath;
+	property requireApproval;
+	property dangerousPatterns;
+
+	function init( string allowlistPath = "", boolean requireApproval = true, array dangerousPatterns = [] ) {
+		variables.allowlistPath = arguments.allowlistPath != "" ? arguments.allowlistPath : expandPath( "~/.nanobox/config/allowlist.json" )
+		variables.requireApproval = arguments.requireApproval
+		variables.dangerousPatterns = arguments.dangerousPatterns.len() ? arguments.dangerousPatterns : [ "systemExecute", "processBuilder", "rm -rf", "chmod 777", "curl.*\\|.*sh" ]
+		ensureAllowlist()
+		return this
+	}
+
+	AiMiddlewareResult function beforeToolCall( required struct context ) {
+		var toolName = arguments.context.toolName ?: arguments.context.name ?: ""
+		var toolArgs = arguments.context.toolArgs ?: arguments.context.arguments ?: {}
+		var serialized = lCase( jsonSerialize( toolArgs ) )
+		for ( var pattern in variables.dangerousPatterns ) {
+			if ( reFindNoCase( pattern, toolName & " " & serialized ) ) {
+				if ( !variables.requireApproval ) { return AiMiddlewareResult.continue() }
+				return AiMiddlewareResult.suspend( {
+					question: "NanoBox approval required for #toolName#",
+					toolName: toolName,
+					toolArgs: toolArgs
+				} )
+			}
+		}
+		return AiMiddlewareResult.continue()
+	}
+
+	boolean function isAllowed( required string command, string scope = "once" ) {
+		var allowlist = readAllowlist()
+		return structKeyExists( allowlist, arguments.scope ) && allowlist[ arguments.scope ].contains( arguments.command )
+	}
+
+	void function allow( required string command, string scope = "always" ) {
+		var allowlist = readAllowlist()
+		if ( !structKeyExists( allowlist, arguments.scope ) ) { allowlist[ arguments.scope ] = [] }
+		if ( !allowlist[ arguments.scope ].contains( arguments.command ) ) { allowlist[ arguments.scope ].append( arguments.command ) }
+		fileWrite( variables.allowlistPath, jsonSerialize( allowlist, true ) )
+	}
+
+	private void function ensureAllowlist() {
+		var parent = getDirectoryFromPath( variables.allowlistPath )
+		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		if ( !fileExists( variables.allowlistPath ) ) { fileWrite( variables.allowlistPath, jsonSerialize( { always: [], session: [], once: [] }, true ) ) }
+	}
+	private struct function readAllowlist() { return jsonDeserialize( fileRead( variables.allowlistPath ) ) }
+}
