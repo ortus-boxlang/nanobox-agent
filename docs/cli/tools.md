@@ -9,7 +9,7 @@ The `tool` namespace manages **all tools available to NanoBox agents**. Tools ar
 | Source | Count | Description |
 |--------|-------|-------------|
 | bx-ai built-in | 9 | Auto-registered: `now@bxai`, `print@bxai`, `webSearch@bxai`, `speak@bxai`, etc. |
-| NanoBox shipped | 12 | Under `nanobox-cli/tools/`: vault, skill, session, system, file*, config tools |
+| NanoBox shipped | 12 | Under `cli/tools/`: vault, skill, session, system, file*, config tools |
 | bx-ai FileSystemTools | 19 | Auto-registered with path guards (CWD + NanoBox home) |
 | User-installed | ? | In `~/.nanobox/tools/*.bx` |
 

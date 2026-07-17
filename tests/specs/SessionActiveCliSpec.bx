@@ -2,7 +2,7 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "Active session CLI", () => {
 			it( "routes session lifecycle through CommandRuntime", () => {
-				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/active-session-#createUUID()#" ) )
+				var runtime = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), new "cli.util.ConfigManager"( getTempDirectory() & "/active-session-#createUUID()#" ) )
 				var created = runtime.execute( { positionals: [ "session", "create" ], options: { title: "Runtime session", nonInteractive: true } } )
 				var id = created.session.id
 				expect( runtime.execute( { positionals: [ "session", "show", id ], options: {} } ).success ).toBeTrue()

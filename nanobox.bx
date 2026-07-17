@@ -12,8 +12,8 @@ class {
 		if ( options.version ?: options.v ?: false ) { println( "NanoBox v#static.VERSION#" ); return }
 		if ( options.help ?: options.h ?: false || positionals.len() == 0 ) { print( static.HELP_TEXT ); return }
 		if ( options.z ?: options[ "z" ] ?: false ) { positionals = [ "chat" ]; if ( parsed.positionals.len() > 1 ) { for ( var positional in parsed.positionals.slice( 1 ) ) { positionals.append( positional ) } }; parsed.positionals = positionals }
-		var config = new "nanobox-cli.util.ConfigManager"()
-		var result = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( true ), config ).execute( parsed )
+		var config = new "cli.util.ConfigManager"()
+		var result = new "cli.CommandRuntime"( new "cli.PrettyCli"( true ), config ).execute( parsed )
 		if ( options.z ?: options[ "z" ] ?: false ) { if ( isStruct( result ) && result.success ) { println( result.text ?: "" ) } else { println( jsonSerialize( result, true ) ) } } else { println( jsonSerialize( result, true ) ) }
 		if ( isStruct( result ) && result.keyExists( "success" ) && !result.success ) { CLIExit( 1 ) }
 	}

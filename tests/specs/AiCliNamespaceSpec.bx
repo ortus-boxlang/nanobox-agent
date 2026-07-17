@@ -2,14 +2,14 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "AI CLI namespace", () => {
 			it( "returns a structured model error when no provider is configured", () => {
-				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/model-#createUUID()#" )
-				var result = new "nanobox-cli.ModelCommand"( config ).execute( "list", {} )
+				var config = new "cli.util.ConfigManager"( getTempDirectory() & "/model-#createUUID()#" )
+				var result = new "cli.ModelCommand"( config ).execute( "list", {} )
 				expect( result.success ).toBeFalse()
 				expect( result ).toHaveKey( "error" )
 			} )
 			it( "rejects an empty chat query", () => {
-				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/chat-#createUUID()#" )
-				var result = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: {} } )
+				var config = new "cli.util.ConfigManager"( getTempDirectory() & "/chat-#createUUID()#" )
+				var result = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: {} } )
 				expect( result.success ).toBeFalse()
 			} )
 		} )

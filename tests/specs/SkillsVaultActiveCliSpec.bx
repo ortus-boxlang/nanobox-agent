@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Active skills and vault CLI", () => {
 			it( "routes skill and vault commands through runtime", () => {
 				var home = getTempDirectory() & "/active-skills-vault-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
-				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				var config = new "cli.util.ConfigManager"( home )
+				var runtime = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "skill", "create", "runtime-skill" ], options: { content: "Runtime skill" } } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "skill", "show", "runtime-skill" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "skill", "remove", "runtime-skill" ], options: {} } ).success ).toBeTrue()

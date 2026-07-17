@@ -3,17 +3,17 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Curator report delivery", () => {
 			it( "does not deliver when disabled", () => {
 				var root = getTempDirectory() & "/delivery-off-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( root & "/config" )
-				var manager = new "nanobox-cli.CuratorReportManager"( root, new "nanobox-cli.VaultManager"( root & "/vault" ), config )
+				var config = new "cli.util.ConfigManager"( root & "/config" )
+				var manager = new "cli.CuratorReportManager"( root, new "cli.VaultManager"( root & "/vault" ), config )
 				var result = manager.write( { success: true, dryRun: true, checked: 0, changes: [] } )
 				expect( result.delivery.delivered ).toBeFalse()
 			} )
 			it( "delivers a configured summary through a gateway", () => {
 				var root = getTempDirectory() & "/delivery-on-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( root & "/config" )
+				var config = new "cli.util.ConfigManager"( root & "/config" )
 				config.set( "curator.reportDelivery", { enabled: true, gateway: "test", recipient: "user", mode: "summary" } )
 				var registry = { get: ( name ) => new "tests.support.ReportGateway"() }
-				var manager = new "nanobox-cli.CuratorReportManager"( root, new "nanobox-cli.VaultManager"( root & "/vault" ), config, registry )
+				var manager = new "cli.CuratorReportManager"( root, new "cli.VaultManager"( root & "/vault" ), config, registry )
 				var result = manager.write( { success: true, dryRun: false, checked: 1, changes: [] } )
 				expect( result.delivery.delivered ).toBeTrue()
 				expect( result.delivery.gateway ).toBe( "test" )

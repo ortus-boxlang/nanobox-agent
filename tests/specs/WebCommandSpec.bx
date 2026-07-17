@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "WebCommand", () => {
 			it( "starts and stops the MiniServer process", () => {
 				var state = getTempDirectory() & "/web-processes-#createUUID()#.json"
-				var manager = new "nanobox-cli.ProcessManager"( state )
-				var command = new "nanobox-cli.commands.WebCommand"( manager, getTempDirectory() )
+				var manager = new "cli.ProcessManager"( state )
+				var command = new "cli.commands.WebCommand"( manager, getTempDirectory() )
 				var started = command.execute( "start", { port: 18991 } )
 				if ( !started.success && findNoCase( "not found", started.error ?: "" ) ) { return }
 				expect( started.success ).toBeTrue()

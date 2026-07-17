@@ -1,0 +1,40 @@
+class {
+	property config;
+	property curator;
+	property reports;
+	property cron;
+	property agents;
+
+	function init( required any configManager, required any skillCurator, required any reportManager, any cronManager = null, any agentManager = null ) {
+		variables.config = arguments.configManager
+		variables.curator = arguments.skillCurator
+		variables.reports = arguments.reportManager
+		variables.cron = arguments.cronManager ?: new "cli.CronManager"()
+		variables.agents = arguments.agentManager ?: new "cli.AgentManager"()
+		return this
+	}
+
+	struct function tick( boolean force = false, boolean dryRun = false ) {
+		var state = variables.curator.status()
+		if ( state.paused ?: false || !( state.enabled ?: true ) ) { return { success: true, skipped: true, reason: state.paused ? "paused" : "disabled" } }
+		var intervalHours = val( variables.config.get( "curator.intervalHours", 168 ) )
+		var lastRun = state.lastRunAt ?: ""
+		if ( !arguments.force && len( lastRun ) ) { try { if ( dateDiff( "h", lastRun, now() ) < intervalHours ) { return { success: true, skipped: true, reason: "interval" } } } catch ( any ignored ) {} }
+		var protected = []
+		for ( var skill in variables.cron.referencedSkills() ) { if ( !protected.contains( skill ) ) { protected.append( skill ) } }
+		for ( var skill in variables.agents.referencedSkills() ) { if ( !protected.contains( skill ) ) { protected.append( skill ) } }
+		var result = variables.curator.run( arguments.dryRun, val( variables.config.get( "curator.staleAfterDays", 30 ) ), val( variables.config.get( "curator.archiveAfterDays", 90 ) ), protected )
+		var report = variables.reports.write( result, variables.config.get( "bx-ai.curatorModel", "" ) )
+		// Run periodic security scan on skills directory
+		securityTick()
+		return { success: true, skipped: false, protectedSkills: protected, curator: result, report: report }
+	}
+
+	private void function securityTick() {
+		try {
+			var skillsDir = variables.config.getNanoboxHome() & "/skills"
+			var czar = new "cli.SecurityCzar"()
+			czar.tick( "skills", skillsDir )
+		} catch ( any ignored ) { /* security tick is best-effort */ }
+	}
+}

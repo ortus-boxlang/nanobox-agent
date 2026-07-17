@@ -1,0 +1,1083 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Base Service for AI Providers
+ * This is the true abstraction layer: HTTP transport, request/response lifecycle hooks,
+ * logging, middleware, and configuration. Not tied to any specific provider's API format.
+ *
+ * - Extend this class directly for providers with fully custom API formats (Claude, Gemini, Ollama, Bedrock, Cohere).
+ * - Extend OpenAIService for any provider that follows the OpenAI chat/embeddings API standard.
+ *
+ * Concrete providers must implement these abstract methods:
+ * - chat()       : Send a synchronous chat request in the provider's native format
+ * - chatStream() : Handle streaming chat in the provider's native format
+ * - embeddings() : Generate vector embeddings in the provider's native format
+ *
+ * All providers have the following properties:
+ * - apiKey        : The API key for the provider
+ * - chatURL       : The chat endpoint URL
+ * - embeddingsURL : The embeddings endpoint URL
+ * - params        : Default request parameters
+ */
+import bxModules.bxai.models.util.SchemaBuilder;
+
+abstract class implements="IAiService" {
+
+	/**
+	 * The name of the LLM service provider
+	 */
+	property name="name" default="";
+
+	/**
+	 * The API key to use with the provider
+	 */
+	property name = "apiKey" default = "";
+
+	/**
+	 * The chat URL of the provider API
+	 */
+	property name = "chatURL" default = "";
+
+	/**
+	 * The embeddings URL of the provider API
+	 */
+	property name = "embeddingsURL" default = "";
+
+	/**
+	 * The default params to send to the provider on ANY request (chat, embeddings, etc.)
+	 */
+	property name = "params" type = "struct" default = {};
+
+	/**
+	 * The default headers to send to the provider on ANY request (chat, embeddings, etc.)
+	 */
+	property name = "headers" type = "struct" default = {};
+
+	/**
+	 * Maximum number of tool call interactions allowed to prevent infinite loops
+	 * Default: 10
+	 */
+	property name = "maxInteractions" type = "numeric" default = 10;
+
+	/**
+	 * Configuration options for a service provider.
+	 * This can include API keys, endpoints, and other settings.
+	 */
+	property name="options" type="struct" default={};
+
+	/**
+	 * Constants
+	 */
+	static {
+		final MODULE_SETTINGS = getModuleInfo( "bxai" ).settings
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Helper Methods
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Set the default params for the provider
+	 *
+	 * @params - The params to set as defaults
+	 *
+	 * @return The service instance
+	 */
+	IAiService function defaults( required params ){
+		variables.params.append( arguments.params, true );
+		return this;
+	}
+
+	/**
+	 * Add a header to the service definition
+	 *
+	 * @name The name of the header
+	 * @value The value of the header
+	 */
+	BaseService function addHeader( required string name, required string value ){
+		variables.headers[ arguments.name ] = arguments.value;
+		return this;
+	}
+
+	/**
+	 * Returns all capabilities this provider supports.
+	 * If the concrete class overrides getDeclaredCapabilities(), that result is used.
+	 * Otherwise capabilities are inferred from implemented interfaces.
+	 *
+	 * @return Array of capability strings
+	 */
+	public array function getCapabilities() {
+		var declared = getDeclaredCapabilities()
+		if ( !declared.isEmpty() ) {
+			return declared
+		}
+		// Fallback: infer from interfaces
+		var caps = []
+		if ( isInstanceOf( this, "IAiChatService" ) ) {
+			caps.append( "chat" )
+			caps.append( "stream" )
+		}
+		if ( isInstanceOf( this, "IAiEmbeddingsService" ) ) {
+			caps.append( "embeddings" )
+		}
+		if ( isInstanceOf( this, "IAudioService" ) ) {
+			caps.append( "transcribe" )
+			caps.append( "speak" )
+		}
+		return caps
+	}
+
+	/**
+	 * Returns true if this provider supports the given capability.
+	 *
+	 * @capability  "chat" | "stream" | "embeddings" | "transcribe" | "speak"
+	 *
+	 * @return boolean
+	 */
+	public boolean function hasCapability( required string capability ) {
+		return getCapabilities().findNoCase( arguments.capability ) > 0
+	}
+
+	/**
+	 * Override in concrete providers to declare explicit capabilities via static.CAPABILITIES.
+	 * Returning a non-empty array bypasses interface-based detection entirely.
+	 *
+	 * @return Array of capability strings, or [] to use interface detection
+	 */
+	public array function getDeclaredCapabilities() {
+		return []
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Interface Methods
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Configure the service provider with the given options
+	 *
+	 * @options - The configuration options or API key string
+	 *
+	 * @throws InvalidConfiguration if the options are not valid
+	 *
+	 * @return The configured service instance
+	 */
+	IAiService function configure( required any options ){
+		// If it's a simple value, assume it's an API key
+		if( isSimpleValue( arguments.options ) ){
+			variables.apiKey = arguments.options
+			return this
+		}
+
+		// If it's not a struct, throw an error
+		if( !isStruct( arguments.options ) ){
+			throw(
+				type   : "InvalidConfiguration",
+				message: "The configure() method expects either a simple API key string or a struct of options."
+			);
+		}
+
+		// Otherwise, it's a struct of options
+		variables.options = arguments.options
+		// Only set apiKey if provided in options (preserve existing apiKey otherwise)
+		if ( arguments.options.keyExists( "apiKey" ) ) {
+			variables.apiKey = arguments.options.apiKey;
+		}
+
+		// Merge default params first (lowest priority)
+		if( static.MODULE_SETTINGS.keyExists( "defaultParams" ) ){
+			variables.params.append( static.MODULE_SETTINGS.defaultParams, false );
+		}
+
+		// Merge provider-specific settings (higher priority - overrides defaults)
+		if( static.MODULE_SETTINGS.keyExists( "providers" ) && static.MODULE_SETTINGS.providers.keyExists( variables.name ) ){
+			var providerSettings = static.MODULE_SETTINGS.providers[ variables.name ]
+			// Merge params with OVERRIDE to let provider-specific params win over defaults
+			if( providerSettings.keyExists( "params" ) ){
+				variables.params.append( providerSettings.params, true )
+			}
+			// Merge options
+			if( providerSettings.keyExists( "options" ) ){
+				variables.options.append( providerSettings.options, true )
+			}
+		}
+
+		return this;
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Abstract Methods - Must be implemented by concrete providers
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Pre/Post Hooks
+	 * Override in concrete providers to normalize requests/responses without needing to override
+	 * the full chat(), chatStream(), or embeddings() methods.
+	 *
+	 * Each hook is a no-op by default and returns its input unchanged.
+	 * - Pre hooks  : receive and return the dataPacket struct (modify before sending)
+	 * - Post hooks : receive and return the result/streamState struct (normalize after receiving)
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Called before any outgoing request packet is sent to the provider.
+	 * Override in concrete providers to mutate the dataPacket for any operation type.
+	 *
+	 * @aiRequest   The AiBaseRequest subclass for this operation
+	 * @dataPacket  The outgoing struct — mutate and return it
+	 * @operation   The operation type: "chat" | "stream" | "embeddings" | "transcribe" | "speak"
+	 *
+	 * @return The (possibly mutated) dataPacket
+	 */
+	private struct function preRequest(
+		required AiBaseRequest aiRequest,
+		required struct dataPacket,
+		required string operation
+	) {
+		return arguments.dataPacket
+	}
+
+	/**
+	 * Called after any response is received from the provider.
+	 * Override in concrete providers to normalise the result for any operation type.
+	 *
+	 * @aiRequest   The AiBaseRequest subclass for this operation
+	 * @dataPacket  The packet that was sent
+	 * @result      The raw response — mutate and return it
+	 * @operation   The operation type: "chat" | "stream" | "embeddings" | "transcribe" | "speak"
+	 *
+	 * @return The (possibly mutated) result
+	 */
+	private any function postResponse(
+		required AiBaseRequest aiRequest,
+		required struct dataPacket,
+		required any result,
+		required string operation
+	) {
+		return arguments.result
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Private Methods
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * A generic HTTP proxy to send requests to the provider
+	 *
+	 * @chatRequest The chatRequest object to use in the request
+	 * @dataPacket The data packet to send to the provider
+	 * chatUrl Optional URL to override the default chat endpoint (some providers use the same endpoint for chat and embeddings)
+	 *
+	 * @return The response from the provider as a struct
+	 */
+	private function sendChatRequest(
+		required AiChatRequest chatRequest,
+		required struct dataPacket,
+		chatUrl = getChatURL()
+	){
+		// Announce the request
+		BoxAnnounce(
+			"onAIChatRequest",
+			{
+				"dataPacket" : arguments.dataPacket,
+				"chatRequest": arguments.chatRequest,
+				"provider"   : this
+			}
+		);
+
+		// Log the request to the logs if enabled
+		if( arguments.chatRequest.getLogRequest() ){
+			writeLog(
+				text: buildRequestLog( arguments.chatRequest, arguments.dataPacket ),
+				type: "info",
+				log : "ai"
+			)
+		}
+
+		// Log the request to the console if enabled
+		if( arguments.chatRequest.getLogRequestToConsole() ){
+			println( buildRequestLog( arguments.chatRequest, arguments.dataPacket ) )
+		}
+
+		bx: http
+			url     = arguments.chatUrl
+			method  = "post"
+			result  = "chatResult"
+			charset = "utf-8"
+			timeout = arguments.chatRequest.getTimeout()
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+
+			// Auth Header ONLY if the provider requires it
+			// This is the default for OpenAI
+			// If the provider does not require it, set it to false
+			if( arguments.chatRequest.getSendAuthHeader() ){
+				bx:httpParam type="header" name="Authorization" value="Bearer #arguments.chatRequest.getApiKey()#";
+			}
+
+			// Custom Headers
+			for( var thisHeader in arguments.chatRequest.getHeaders() ){
+				bx:httpParam
+					type="header"
+					name="#thisHeader#"
+					value="#arguments.chatRequest.getHeaders()[ thisHeader ]#";
+			}
+
+			// Body Packet
+			bx:httpParam type="body" value=jsonSerialize( arguments.dataPacket );
+		}
+
+		// Check for rate limiting (429 status code)
+		if( chatResult.statusCode == "429" || chatResult.statusCode == 429 ){
+			var errorData = {};
+			try {
+				errorData = jsonDeserialize( chatResult.filecontent );
+			} catch( any e ){
+				errorData = { message: chatResult.filecontent };
+			}
+
+			// Announce rate limit hit
+			BoxAnnounce( "onAIRateLimitHit", {
+				provider: this,
+				operation: "chat",
+				statusCode: chatResult.statusCode,
+				errorData: errorData,
+				chatRequest: arguments.chatRequest,
+				retryAfter: chatResult.responseheader.keyExists( "retry-after" ) ? chatResult.responseheader[ "retry-after" ] : ""
+			} );
+		}
+
+		// Final logging if the provider supports it
+		if( arguments.chatRequest.getLogResponse() ){
+			writeLog(
+				text: buildResponseLog( arguments.chatRequest, chatResult ),
+				type: "info",
+				log : "ai"
+			)
+		}
+
+		// Log the response to the console if enabled
+		if( arguments.chatRequest.getLogResponseToConsole() ){
+			println( buildResponseLog( arguments.chatRequest, chatResult ) )
+		}
+
+		// Try to deserialize the response
+		try{
+			var iData = {
+				"chatRequest" 	: arguments.chatRequest,
+				"response" 		: jsonDeserialize( chatResult.filecontent ),
+				"rawResponse"	: chatResult,
+				"provider" 		: this
+			}
+		}
+		catch( Any e ){
+			// Announce the error
+			BoxAnnounce( "onAIError", {
+				error: e,
+				errorMessage: "Error deserializing response: #chatResult.filecontent#",
+				provider: this,
+				operation: "sendChatRequest",
+				aiRequest: arguments.chatRequest,
+				canRetry: true
+			} );
+
+			throw(
+				type   : "JsonDeserializationError",
+				message: "Error deserializing response from provider: #e.message & e.detail#",
+				detail: "Response: #chatResult.filecontent#"
+			);
+		}
+
+		BoxAnnounce( "onAIChatResponse", iData );
+
+		return iData.response;
+	}
+
+	/**
+	 * A generic HTTP proxy to send streaming requests to the provider
+	 *
+	 * @chatRequest The chatRequest object to use in the request
+	 * @dataPacket The data packet to send to the provider
+	 * @callback A callback function to be called with each chunk of the stream: function( chunk )
+	 * chatUrl Optional URL to override the default chat endpoint (some providers use the same endpoint for chat and embeddings)
+	 *
+	 * @return void
+	 */
+	private struct function sendStreamRequest(
+		required AiChatRequest chatRequest,
+		required struct dataPacket,
+		required function callback,
+		chatUrl = getChatURL()
+	 ){
+		// Capture callback and chatRequest in local variables for closure scope
+		var userCallback = arguments.callback;
+		var thisChatRequest = arguments.chatRequest;
+		var streamState = {
+			"content": "",
+			"finishReason": "",
+			"toolCalls": [],
+			"usage": {}
+		};
+
+		// Announce the request
+		BoxAnnounce(
+			"onAIChatRequest",
+			{
+				"dataPacket" : arguments.dataPacket,
+				"chatRequest": arguments.chatRequest,
+				"provider"   : this
+			}
+		);
+
+		// Log the request
+		if( arguments.chatRequest.getLogRequest() ){
+			writeLog(
+				text: buildRequestLog( arguments.chatRequest, arguments.dataPacket ),
+				type: "info",
+				log : "ai"
+			)
+		}
+
+		// Log the request to the console if enabled
+		if( arguments.chatRequest.getLogRequestToConsole() ){
+			println( buildRequestLog( arguments.chatRequest, arguments.dataPacket ) )
+		}
+
+		// Build HTTP request with fluent API
+		var httpRequest = http( arguments.chatUrl )
+			.method( "POST" )
+			.charset( "utf-8" )
+			.timeout( arguments.chatRequest.getTimeout() )
+			.header( "content-type", "application/json" )
+			.sse( true ); // Enable SSE mode for Server-Sent Events
+
+		// Auth Header ONLY if the provider requires it
+		if( arguments.chatRequest.getSendAuthHeader() ){
+			httpRequest.header( "Authorization", "Bearer #arguments.chatRequest.getApiKey()#" );
+		}
+
+		// Add custom headers
+		for( var thisHeader in arguments.chatRequest.getHeaders() ){
+			httpRequest.header( thisHeader, arguments.chatRequest.getHeaders()[ thisHeader ] );
+		}
+
+		// Set request body and setup callbacks
+		httpRequest
+			.body( jsonSerialize( arguments.dataPacket ) )
+			.onChunk( ( chunk, lastEventId, httpResult, httpClient, response ) => {
+				// chunk is already parsed SSE data: { data, event, id, retry }
+				// For SSE streams, chunk.data contains the actual payload
+
+				// If the chunk is empty, skip it (keep-alive or heartbeat)
+				if( chunk?.data?.trim()?.isEmpty() ){
+					return;
+				}
+
+				// Check for stream end marker
+				if( chunk.data == "[DONE]" ){
+					return;
+				}
+
+				// Try to parse and send to callback
+				try {
+					var parsedChunk = jsonDeserialize( chunk.data );
+					updateStreamState( streamState, parsedChunk );
+					userCallback( parsedChunk );
+				} catch( any e ){
+					writeLog(
+						text: "Error parsing stream chunk: [#e.message#] - Data: [#chunk.data#]",
+						type: "error",
+						log : "ai"
+					)
+				}
+			} )
+			.onError( ( error, httpResult ) => {
+				var errorMessage = "HTTP Error: [#error.message#]";
+
+				writeLog(
+					text: "Stream Request Error: [#errorMessage#]",
+					type: "error",
+					log : "ai"
+				)
+
+				// Announce the error
+				BoxAnnounce( "onAIError", {
+					error: error,
+					errorMessage: errorMessage,
+					provider: this,
+					operation: "stream",
+					aiRequest: thisChatRequest,
+					canRetry: true
+				} );
+
+				throw(
+					type   : "ProviderError",
+					message: errorMessage
+				);
+			} )
+			.onComplete( ( httpResult ) => {
+				// Log the response if enabled
+				if( thisChatRequest.getLogResponse() ){
+					writeLog(
+						text: "Stream completed successfully",
+						type: "info",
+						log : "ai"
+					)
+				}
+
+				BoxAnnounce(
+					"onAIChatResponse",
+					{
+						"chatRequest" : thisChatRequest,
+						"provider"    : this,
+						"streamComplete" : true
+					}
+				);
+			} )
+			.send();
+
+		return streamState;
+	}
+
+	/**
+	 * Update stream state from a parsed chunk
+	 *
+	 * @streamState The mutable stream state accumulator
+	 * @parsedChunk The parsed JSON chunk
+	 *
+	 * @return void
+	 */
+	private void function updateStreamState( required struct streamState, required struct parsedChunk ){
+		// Capture usage from final chunk (arrives with empty choices when stream_options.include_usage is true)
+		if( arguments.parsedChunk.keyExists( "usage" ) && isStruct( arguments.parsedChunk.usage ) && !structIsEmpty( arguments.parsedChunk.usage ) ){
+			arguments.streamState.usage = arguments.parsedChunk.usage;
+		}
+
+		var choices = arguments.parsedChunk.choices ?: [];
+		if( !isArray( choices ) || choices.isEmpty() ){
+			return;
+		}
+		var firstChoice = choices.first();
+
+		// Accumulate streamed content
+		var content = firstChoice.delta?.content ?: "";
+		if( !isNull( content ) && isSimpleValue( content ) ){
+			arguments.streamState.content &= toString( content );
+		}
+
+		// Track finish reason if available
+		var finishReason = firstChoice.finish_reason ?: "";
+		if( !isNull( finishReason ) && isSimpleValue( finishReason ) && toString( finishReason ).len() ){
+			arguments.streamState.finishReason = toString( finishReason );
+		}
+
+		// Merge tool call deltas
+		var toolCallDeltas = firstChoice.delta?.tool_calls ?: [];
+		if( isArray( toolCallDeltas ) && toolCallDeltas.len() ){
+			mergeToolCallDeltas( arguments.streamState.toolCalls, toolCallDeltas );
+		}
+	}
+
+	/**
+	 * Merge partial tool-call deltas into complete tool call objects
+	 *
+	 * @toolCalls Accumulated tool calls array (mutated)
+	 * @toolCallDeltas Tool-call deltas from a single stream chunk
+	 *
+	 * @return void
+	 */
+	private void function mergeToolCallDeltas( required array toolCalls, required array toolCallDeltas ){
+		var accumulatedToolCalls = arguments.toolCalls;
+		var incomingDeltas = arguments.toolCallDeltas;
+
+		incomingDeltas.each( delta => {
+			var zeroBasedIndex = delta.keyExists( "index" ) ? val( delta.index ) : ( accumulatedToolCalls.len() );
+			var arrayIndex = zeroBasedIndex + 1;
+
+			while( accumulatedToolCalls.len() < arrayIndex ){
+				accumulatedToolCalls.append({
+					"id": "",
+					"type": "function",
+					"function": {
+						"name": "",
+						"arguments": ""
+					}
+				});
+			}
+
+			var current = accumulatedToolCalls[ arrayIndex ];
+
+			if( delta.keyExists( "id" ) && !isNull( delta.id ) && toString( delta.id ).len() ){
+				current.id = toString( delta.id );
+			}
+
+			if( delta.keyExists( "type" ) && !isNull( delta.type ) && toString( delta.type ).len() ){
+				current.type = toString( delta.type );
+			}
+
+			if( delta.keyExists( "function" ) && isStruct( delta.function ) ){
+				if( delta.function.keyExists( "name" ) && !isNull( delta.function.name ) && toString( delta.function.name ).len() ){
+					current.function.name = toString( delta.function.name );
+				}
+
+				if( delta.function.keyExists( "arguments" ) && !isNull( delta.function.arguments ) ){
+					current.function.arguments &= toString( delta.function.arguments );
+				}
+			}
+
+			accumulatedToolCalls[ arrayIndex ] = current;
+		} );
+	}
+
+	/**
+	 * A generic HTTP proxy to send embedding requests to the provider
+	 *
+	 * @embeddingRequest The embedding request object to use in the request
+	 * @dataPacket The data packet to send to the provider
+	 * @embeddingUrl Optional URL to override the default embeddings endpoint (some providers use the same endpoint for chat and embeddings)
+	 *
+	 * @return The response from the provider as a struct
+	 */
+	private function sendEmbeddingRequest(
+		required AiEmbeddingRequest embeddingRequest,
+		required struct dataPacket,
+		embeddingUrl = getEmbeddingsURL()
+	){
+		// Announce the request
+		BoxAnnounce(
+			"onAIEmbedRequest",
+			{
+				"dataPacket" : arguments.dataPacket,
+				"embeddingRequest": arguments.embeddingRequest,
+				"provider"   : this
+			}
+		);
+
+		// Log the request
+		if( arguments.embeddingRequest.getLogRequest() ){
+			writeLog(
+				text: buildEmbeddingRequestLog( arguments.embeddingRequest, arguments.dataPacket ),
+				type: "info",
+				log : "ai"
+			)
+		}
+
+		// Log the request to the console if enabled
+		if( arguments.embeddingRequest.getLogRequestToConsole() ){
+			println( buildEmbeddingRequestLog( arguments.embeddingRequest, arguments.dataPacket ) )
+		}
+
+		bx: http
+			url     = arguments.embeddingUrl
+			method  = "post"
+			result  = "embeddingResult"
+			charset = "utf-8"
+			timeout = arguments.embeddingRequest.getTimeout()
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+
+			// Auth Header ONLY if the provider requires it
+			if( arguments.embeddingRequest.getSendAuthHeader() ){
+				bx:httpParam type="header" name="Authorization" value="Bearer #arguments.embeddingRequest.getApiKey()#";
+			}
+
+			// Custom Headers
+			for( var thisHeader in arguments.embeddingRequest.getHeaders() ){
+				bx:httpParam
+					type="header"
+					name="#thisHeader#"
+					value="#arguments.embeddingRequest.getHeaders()[ thisHeader ]#";
+			}
+
+			// Body Packet
+			bx:httpParam type="body" value=jsonSerialize( arguments.dataPacket );
+		}
+
+		// Final logging if the provider supports it
+		if( arguments.embeddingRequest.getLogResponse() ){
+			writeLog(
+				text: buildEmbeddingResponseLog( arguments.embeddingRequest, embeddingResult ),
+				type: "info",
+				log : "ai"
+			)
+		}
+
+		// Log the response to the console if enabled
+		if( arguments.embeddingRequest.getLogResponseToConsole() ){
+			println( buildEmbeddingResponseLog( arguments.embeddingRequest, embeddingResult ) )
+		}
+
+		try{
+			var iData = {
+				"embeddingRequest" = arguments.embeddingRequest,
+				"response" = jsonDeserialize( embeddingResult.filecontent ),
+				"rawResponse"	: embeddingResult,
+				"provider" = this
+			}
+		} catch( Any e ){
+			// Announce the error
+			BoxAnnounce( "onAIError", {
+				error: e,
+				errorMessage: "Error deserializing response: #embeddingResult.filecontent#",
+				provider: this,
+				operation: "sendEmbeddingRequest",
+				aiRequest: arguments.embeddingRequest,
+				canRetry: true
+			} );
+
+			throw(
+				type   : "JsonDeserializationError",
+				message: "Error deserializing response from provider: #e.message & e.detail#",
+				detail: "Response: #embeddingResult.filecontent#"
+			);
+		}
+
+		BoxAnnounce( "onAIEmbedResponse", iData );
+
+		return iData.response;
+	}
+
+	/**
+	 * Extract content from markdown code blocks
+	 * LLMs often wrap JSON/XML in markdown code blocks like ```json ... ```
+	 * This method extracts the actual content
+	 *
+	 * @content The content that may contain markdown code blocks
+	 * @language Optional language identifier (json, xml, etc.)
+	 *
+	 * @return The extracted content or original content if no code block found
+	 */
+	private string function extractFromCodeBlock( required string content, string language = "" ){
+		var trimmed = arguments.content.trim();
+
+		// Check for code block with language identifier
+		if( arguments.language.len() && trimmed.startsWith( "```#arguments.language#" ) ){
+			// Extract content between ```language and ```
+			var startPos = trimmed.find( char(10) );  // Find first newline after ```language
+			if( startPos > 0 ){
+				var endMarker = "```";
+				var endPos = trimmed.find( endMarker, startPos );
+				if( endPos > 0 ){
+					return trimmed.substring( startPos, endPos - 1 ).trim();
+				}
+			}
+		}
+
+		// Check for generic code block ``` without language
+		if( trimmed.startsWith( "```" ) ){
+			var lines = trimmed.split( char(10) );
+			if( lines.len() > 2 ){
+				// Remove first and last lines (the ``` markers)
+				lines.deleteAt( 1 );
+				lines.deleteAt( lines.len() );
+				return lines.toList( char(10) ).trim();
+			}
+		}
+
+		// No code block found, return original content
+		return arguments.content;
+	}
+
+	/**
+	 * Populate structured output from LLM response
+	 * Handles classes, structs, and arrays based on the original definition
+	 *
+	 * @content The JSON content from the LLM
+	 * @chatRequest The request containing the structured output definition
+	 *
+	 * @return Populated class instance, struct, or array
+	 */
+	private any function populateStructuredOutput( required string content, required AiChatRequest chatRequest ){
+
+		// Extract from code block if needed
+		var jsonContent = extractFromCodeBlock( arguments.content, "json" );
+		// The structured output definition: class, struct, or array
+		var outputDefinition = arguments.chatRequest.getStructuredOutputDefinition();
+
+		// if chat request output response to log
+		if( arguments.chatRequest.getLogResponseToConsole() ){
+			println( "Populating structured output..." )
+			println( jsonContent )
+			println( "Definition: #arguments.chatRequest.getStructuredOutput().toString()#" )
+		}
+
+		// Class instance - populate and return
+		if( isObject( outputDefinition ) ){
+			return SchemaBuilder::populateClass( outputDefinition, jsonContent );
+		}
+
+		// Array of class instances
+		// Note: Arrays are wrapped in { items: [...] } due to OpenAI requirement
+		if( isArray( outputDefinition ) ){
+			var data = jsonDeserialize( jsonContent );
+			// Extract the items array from the wrapper object
+			var itemsArray = data.keyExists( "items" ) ? data.items : data;
+			return SchemaBuilder::populateArray( outputDefinition.first(), jsonSerialize( itemsArray ) );
+		}
+
+		// Struct schema - check if it's a merged schema
+		if( isStruct( outputDefinition ) ){
+			// Check if this is a merged schema with original definitions
+			if( outputDefinition.keyExists( "_originalSchemas" ) && !outputDefinition._originalSchemas.isEmpty() ) {
+				// Merged schema - deserialize and populate each property
+				var result = {};
+				var data = jsonDeserialize( jsonContent );
+
+				// Populate each named schema
+				for( var schemaInfo in outputDefinition._originalSchemas ) {
+					var name = schemaInfo.name;
+					var schema = schemaInfo.schema;
+
+					// Get the data for this property
+					if( data.keyExists( name ) ) {
+						var propertyData = jsonSerialize( data[ name ] );
+
+						// Populate based on schema type
+						if( isObject( schema ) ) {
+							result[ name ] = SchemaBuilder::populateClass( schema, propertyData );
+						} else if( isStruct( schema ) ) {
+							result[ name ] = SchemaBuilder::populateStruct( propertyData );
+						} else {
+							// Raw data
+							result[ name ] = data[ name ];
+						}
+					}
+				}
+
+				return result;
+			}
+
+			// Regular struct schema
+			return SchemaBuilder::populateStruct( jsonContent );
+		}
+
+		// Raw JSON schema - just deserialize
+		return jsonDeserialize( jsonContent );
+	}
+
+	/**
+	 * Build a detailed request log message for debugging
+	 *
+	 * @chatRequest The chat request object
+	 * @dataPacket The data packet being sent to the provider
+	 *
+	 * @return Formatted log message with request details
+	 */
+	private string function buildRequestLog( required AiChatRequest chatRequest, required struct dataPacket ){
+		var logLines = [];
+
+		logLines.append( "========================================" );
+		logLines.append( "** AI Request (#now()#)**" );
+		logLines.append( "Provider: #this.name# / Model: #arguments.chatRequest.getModel()#" );
+		logLines.append( "Endpoint: #getChatURL()#" );
+		logLines.append( "Timeout: #arguments.chatRequest.getTimeout()#s" );
+		logLines.append( "Message Count: #arguments.chatRequest.getMessages().len()#" );
+
+		// Show tools if present
+		if( arguments.dataPacket.keyExists( "tools" ) && arguments.dataPacket.tools.len() ){
+			logLines.append( "Tools: #arguments.dataPacket.tools.len()#" )
+		}
+
+		// Show structured output if present
+		if( arguments.chatRequest.isStructuredOutput() ){
+			logLines.append( "Structured Output: YES" );
+		}
+
+		// Show multi-tenant tracking if present
+		if( !isNull( arguments.chatRequest.getTenantId() ) && arguments.chatRequest.getTenantId().len() ){
+			logLines.append( "Tenant ID: #arguments.chatRequest.getTenantId()#" );
+		}
+
+		// Show custom headers if present
+		if( !arguments.chatRequest.getHeaders().isEmpty() ){
+			logLines.append( "Custom Headers: #arguments.chatRequest.getHeaders().keyArray().toList( ", " )#" );
+		}
+
+		logLines.append( "Request Body:" );
+		logLines.append( jsonSerialize( data: arguments.dataPacket, pretty: true ) );  // Pretty print JSON
+		logLines.append( "========================================" );
+
+		return logLines.toList( char(10) );
+	}
+
+	/**
+	 * Build a detailed response log message for debugging
+	 *
+	 * @chatRequest The chat request object
+	 * @chatResult The HTTP response result from the provider
+	 *
+	 * @return Formatted log message with response details
+	 */
+	private string function buildResponseLog( required AiChatRequest chatRequest, required struct chatResult ){
+		var logLines = [];
+
+		logLines.append( "========================================" );
+		logLines.append( "** AI Response (#now()#)**" );
+		logLines.append( "Provider: #this.name# / Model: #arguments.chatRequest.getModel()#" );
+		logLines.append( "Status: #arguments.chatResult.statusCode#" );
+		logLines.append( "Execution Time: #arguments.chatResult?.executionTime#ms" );
+
+		// Show response headers if present
+		if( arguments.chatResult.keyExists( "responseheader" ) && !arguments.chatResult.responseheader.isEmpty() ){
+			var headerKeys = arguments.chatResult.responseheader.keyArray();
+			logLines.append( "Response Headers: #headerKeys.toList( ", " )#" );
+		}
+
+		// Try to parse and pretty-print the response
+		try {
+			var parsedResponse = jsonDeserialize( arguments.chatResult.filecontent );
+
+			// Show token usage if available
+			if( parsedResponse.keyExists( "usage" ) ){
+				var usage = parsedResponse.usage;
+				logLines.append( "Token Usage: Prompt=#usage.keyExists( "prompt_tokens" ) ? usage.prompt_tokens : 0# | Completion=#usage.keyExists( "completion_tokens" ) ? usage.completion_tokens : 0# | Total=#usage.keyExists( "total_tokens" ) ? usage.total_tokens : 0#" );
+			}
+
+			logLines.append( "Deserialized Response:" );
+			logLines.append( jsonSerialize( data: parsedResponse, pretty: true ) );  // Pretty print
+		} catch( any e ){
+			// If parsing fails, show raw response
+			logLines.append( "Raw Response (JSON parsing failed):" );
+			logLines.append( arguments.chatResult.filecontent );
+		}
+
+		logLines.append( "========================================" );
+
+		return logLines.toList( char(10) );
+	}
+
+	/**
+	 * Build a detailed embedding request log message for debugging
+	 *
+	 * @embeddingRequest The embedding request object
+	 * @dataPacket The data packet being sent to the provider
+	 *
+	 * @return Formatted log message with request details
+	 */
+	private string function buildEmbeddingRequestLog( required AiEmbeddingRequest embeddingRequest, required struct dataPacket ){
+		var logLines = [];
+
+		logLines.append( "========================================" );
+		logLines.append( "** AI Embedding Request (#now()#)**" );
+		logLines.append( "Provider: #this.name# / Model: #arguments.embeddingRequest.getModel()#" );
+		logLines.append( "Endpoint: #getEmbeddingsURL()#" );
+		logLines.append( "Timeout: #arguments.embeddingRequest.getTimeout()#s" );
+
+		// Show input details
+		var input = arguments.dataPacket.keyExists( "input" ) ? arguments.dataPacket.input : "";
+		if( isArray( input ) ){
+			logLines.append( "Input Count: #input.len()# items" );
+			// Show preview of first item
+			if( input.len() > 0 ){
+				var preview = isSimpleValue( input[1] ) ? input[1] : input[1].toString();
+				if( preview.len() > 100 ){
+					preview = preview.left( 100 ) & "...";
+				}
+				logLines.append( "First Item Preview: #preview#" );
+			}
+		} else if( isSimpleValue( input ) ){
+			var preview = input.len() > 100 ? input.left( 100 ) & "..." : input;
+			logLines.append( "Input: #preview#" );
+		}
+
+		// Show dimensions if available
+		if( arguments.dataPacket.keyExists( "dimensions" ) ){
+			logLines.append( "Dimensions: #arguments.dataPacket.dimensions#" );
+		}
+
+		// Show multi-tenant tracking if present
+		if( !isNull( arguments.embeddingRequest.getTenantId() ) && arguments.embeddingRequest.getTenantId().len() ){
+			logLines.append( "Tenant ID: #arguments.embeddingRequest.getTenantId()#" );
+		}
+
+		// Show custom headers if present
+		if( !arguments.embeddingRequest.getHeaders().isEmpty() ){
+			logLines.append( "Custom Headers: #arguments.embeddingRequest.getHeaders().keyArray().toList( ", " )#" );
+		}
+
+		logLines.append( "Request Body:" );
+		logLines.append( jsonSerialize( arguments.dataPacket, true ) );  // Pretty print JSON
+		logLines.append( "========================================" );
+
+		return logLines.toList( char(10) );
+	}
+
+	/**
+	 * Build a detailed embedding response log message for debugging
+	 *
+	 * @embeddingRequest The embedding request object
+	 * @embeddingResult The HTTP response result from the provider
+	 *
+	 * @return Formatted log message with response details
+	 */
+	private string function buildEmbeddingResponseLog( required AiEmbeddingRequest embeddingRequest, required struct embeddingResult ){
+		var logLines = [];
+
+		logLines.append( "========================================" );
+		logLines.append( "** AI Embedding Response (#now()#)**" );
+		logLines.append( "Provider: #this.name# / Model: #arguments.embeddingRequest.getModel()#" );
+		logLines.append( "Status: #arguments.embeddingResult.statusCode#" );
+
+		// Show execution time if available
+		if( arguments.embeddingResult.keyExists( "executionTime" ) ){
+			logLines.append( "Execution Time: #arguments.embeddingResult.executionTime#ms" );
+		}
+
+		// Show response headers if present
+		if( arguments.embeddingResult.keyExists( "responseheader" ) && !arguments.embeddingResult.responseheader.isEmpty() ){
+			var headerKeys = arguments.embeddingResult.responseheader.keyArray();
+			logLines.append( "Response Headers: #headerKeys.toList( ", " )#" );
+		}
+
+		// Try to parse and show embedding details
+		try {
+			var parsedResponse = jsonDeserialize( arguments.embeddingResult.filecontent );
+
+			// Show embedding count and dimensions
+			if( parsedResponse.keyExists( "data" ) && isArray( parsedResponse.data ) ){
+				logLines.append( "Embeddings Count: #parsedResponse.data.len()#" );
+				if( parsedResponse.data.len() > 0 && parsedResponse.data[1].keyExists( "embedding" ) && isArray( parsedResponse.data[1].embedding ) ){
+					logLines.append( "Vector Dimensions: #parsedResponse.data[1].embedding.len()#" );
+				}
+			}
+
+			// Show token usage if available
+			if( parsedResponse.keyExists( "usage" ) ){
+				var usage = parsedResponse.usage;
+				logLines.append( "Token Usage: Prompt=#usage.keyExists( "prompt_tokens" ) ? usage.prompt_tokens : 0# | Total=#usage.keyExists( "total_tokens" ) ? usage.total_tokens : 0#" );
+			}
+
+			logLines.append( "Deserialized Response:" );
+			logLines.append( jsonSerialize( parsedResponse, true ) );  // Pretty print
+		} catch( any e ){
+			// If parsing fails, show raw response
+			logLines.append( "Raw Response (JSON parsing failed):" );
+			logLines.append( arguments.embeddingResult.filecontent );
+		}
+
+		logLines.append( "========================================" );
+
+		return logLines.toList( char(10) );
+	}
+
+}

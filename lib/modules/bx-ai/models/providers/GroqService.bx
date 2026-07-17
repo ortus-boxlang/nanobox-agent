@@ -1,0 +1,86 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ */
+import bxModules.bxai.models.providers.capabilities.IAiChatService;
+import bxModules.bxai.models.providers.capabilities.IAiTranscriptionService;
+import bxModules.bxai.models.responses.AiTranscriptionResponse;
+
+class extends="OpenAIService" implements="IAiChatService, IAiTranscriptionService" {
+
+	/**
+	 * Static defaults
+	 */
+	static {
+		CAPABILITIES = [ "chat", "stream", "transcription", "translation" ]
+		DEFAULT_CHAT_PARAMS = {
+			// https://console.groq.com/docs/models
+			// according to the docs, this is a fast, efficient model
+			"model" : "llama-3.1-8b-instant"
+		}
+		DEFAULT_TRANSCRIPTION_PARAMS = {
+			// https://console.groq.com/docs/speech-text
+			"model" : "whisper-large-v3"
+		}
+	}
+
+	/**
+	 * Constructor
+	 * https://console.groq.com/docs/api-reference
+	 */
+	function init(){
+		variables.chatURL       = "https://api.groq.com/openai/v1/chat/completions"
+		variables.transcribeURL = "https://api.groq.com/openai/v1/audio/transcriptions"
+		variables.translateURL  = "https://api.groq.com/openai/v1/audio/translations"
+		variables.name          = "Groq"
+	}
+
+	@override
+	public array function getDeclaredCapabilities() {
+		return static.CAPABILITIES
+	}
+
+	@override
+	public function chat( required AiChatRequest chatRequest, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chat( arguments.chatRequest )
+	}
+
+	@override
+	public function chatStream( required AiChatRequest chatRequest, required function callback, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chatStream( arguments.chatRequest, arguments.callback )
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiTranscriptionService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	@override
+	public AiTranscriptionResponse function transcribe( required AiTranscriptionRequest transcriptionRequest ){
+		arguments.transcriptionRequest.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+		return super.transcribe( arguments.transcriptionRequest )
+	}
+
+	@override
+	public AiTranscriptionResponse function translate( required AiTranscriptionRequest transcriptionRequest ){
+		arguments.transcriptionRequest.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+		return super.translate( arguments.transcriptionRequest )
+	}
+
+}

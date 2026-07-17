@@ -1,21 +1,20 @@
 {
-	"validTemplateExtensions": [],
 	"clearClassFilesOnStartup": true,
 	"classResolverCache": true,
 	"trustedCache": false,
 	"mappings": {
 		"/testbox": "${user-dir}/testbox",
 		"/tests": "${user-dir}/tests",
-		"/nanobox-cli": "${user-dir}/nanobox-cli"
+		"/cli": "${user-dir}/cli"
 	},
 	"modulesDirectory": [
-		"${user-dir}/boxlang_modules",
+		"${user-dir}/lib/modules",
 		"${boxlang-home}/modules"
 	],
 	"datasources": {
 		"nanobox": {
 			"driver": "sqlite",
-			"connectionString": "jdbc:sqlite:${user-dir}/data/nanobox.db"
+			"connectionString": "jdbc:sqlite:${user-home}/.nanobox/data/nanobox.db"
 		}
 	}
 }

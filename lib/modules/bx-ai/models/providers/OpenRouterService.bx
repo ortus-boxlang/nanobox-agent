@@ -1,0 +1,84 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ */
+import bxModules.bxai.models.providers.capabilities.IAiChatService;
+import bxModules.bxai.models.providers.capabilities.IAiEmbeddingsService;
+import bxModules.bxai.models.providers.capabilities.IAiImageService;
+import bxModules.bxai.models.responses.AiImageResponse;
+
+class extends="OpenAIService" implements="IAiChatService, IAiEmbeddingsService, IAiImageService" {
+
+	/**
+	 * Static defaults
+	 */
+	static {
+		CAPABILITIES = [ "chat", "stream", "embeddings", "image" ]
+		DEFAULT_CHAT_PARAMS = {
+			// https://openrouter.ai/docs/quickstart
+			// according to the docs, this is the default model
+			"model" : "openrouter/auto"
+		}
+		DEFAULT_IMAGE_PARAMS = {
+			// https://openrouter.ai/docs/image-generation
+			// FLUX Schnell is a fast, high-quality free-tier image model on OpenRouter
+			"model"           : "black-forest-labs/FLUX-1-schnell",
+			"response_format" : "url"
+		}
+	}
+
+	/**
+	 * Constructor
+	 * https://openrouter.ai/docs/quickstart
+	 */
+	function init(){
+		variables.chatURL       = "https://openrouter.ai/api/v1/chat/completions"
+		variables.embeddingsURL = "https://openrouter.ai/api/v1/embeddings"
+		variables.imageURL      = "https://openrouter.ai/api/v1/images/generations"
+		variables.name          = "OpenRouter"
+	}
+
+	@override
+	public array function getDeclaredCapabilities() {
+		return static.CAPABILITIES
+	}
+
+	@override
+	public function chat( required AiChatRequest chatRequest, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chat( arguments.chatRequest )
+	}
+
+	@override
+	public function chatStream( required AiChatRequest chatRequest, required function callback, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chatStream( arguments.chatRequest, arguments.callback )
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiImageService Implementation — OpenRouter image generation (OpenAI-compatible)
+	 * https://openrouter.ai/docs/image-generation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	@override
+	public AiImageResponse function generateImage( required AiImageRequest imageRequest ){
+		arguments.imageRequest.mergeServiceParams( static.DEFAULT_IMAGE_PARAMS )
+		return sendImageRequest( arguments.imageRequest, variables.imageURL )
+	}
+
+}

@@ -2,8 +2,8 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "GatewayRegistry", () => {
 			it( "registers and manages gateway connections", () => {
-				var registry = new "nanobox-cli.GatewayRegistry"()
-				var gateway = new "nanobox-cli.BaseGateway"( "generic", {} )
+				var registry = new "cli.GatewayRegistry"()
+				var gateway = new "cli.BaseGateway"( "generic", {} )
 				expect( registry.register( gateway ).success ).toBeTrue()
 				expect( registry.connect( "generic" ).connected ).toBeTrue()
 				expect( registry.list() ).toHaveLength( 1 )

@@ -1,0 +1,33 @@
+class {
+	property config;
+	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+	struct function execute( required string action, struct args = {} ) {
+		var manager = new "cli.ProcessManager"( variables.config.getNanoboxHome() & "/run/processes.json" )
+		var web = new "cli.commands.WebCommand"( manager, expandPath( "." ) )
+		var worker = new "cli.commands.WorkerCommand"( manager )
+		var webOnly = arguments.args.webOnly ?: arguments.args[ "web-only" ] ?: false
+		var workerOnly = arguments.args.workerOnly ?: arguments.args[ "worker-only" ] ?: false
+		if ( arguments.action == "status" ) { return { success: true, processes: manager.all() } }
+		if ( arguments.action == "doctor" ) { return doctor( manager ) }
+		if ( arguments.action == "stop" ) {
+			var stopResult = { success: true }
+			if ( !workerOnly ) { stopResult.web = web.execute( "stop", arguments.args ) }
+			if ( !webOnly ) { stopResult.worker = worker.execute( "stop", arguments.args ) }
+			return stopResult
+		}
+		if ( arguments.action == "restart" ) { execute( "stop", arguments.args ); return execute( "start", arguments.args ) }
+		if ( arguments.action == "start" ) {
+			var startResult = { success: true }
+			if ( !workerOnly ) { startResult.web = web.execute( "start", arguments.args ) }
+			if ( !webOnly ) { startResult.worker = worker.execute( "start", arguments.args ) }
+			startResult.success = ( startResult.web?.success ?: true ) && ( startResult.worker?.success ?: true )
+			return startResult
+		}
+		return { success: false, error: "Unknown lifecycle action: #arguments.action#" }
+	}
+	private struct function doctor( required any manager ) {
+		variables.config.load()
+		var status = manager.all()
+		return { success: true, checks: { config: fileExists( variables.config.getConfigPath() ), nanoboxHome: directoryExists( variables.config.getNanoboxHome() ), processState: fileExists( variables.config.getNanoboxHome() & "/run/processes.json" ), modules: [ "bx-ai", "bx-sqlite" ], processes: status } }
+	}
+}

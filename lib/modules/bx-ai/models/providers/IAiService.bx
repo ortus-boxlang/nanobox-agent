@@ -1,0 +1,62 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Base interface for all AI Service providers.
+ *
+ * Declares only the universal contract: identity, configuration, and runtime
+ * capability discovery. Specific capabilities (chat, embeddings, audio) are
+ * declared through dedicated interfaces in the `capabilities/` package:
+ *
+ * - IAiChatService       : chat() + chatStream()
+ * - IAiEmbeddingsService : embeddings()
+ * - IAudioService        : transcribe() + speak()  (separate team)
+ *
+ * @since 1.0.0
+ */
+interface {
+
+	/**
+	 * Get the name of the LLM Service Provider
+	 */
+	function getName();
+
+	/**
+	 * Configure the service with configuration options
+	 *
+	 * @options - A struct containing configuration options or a simple API key string, all depends on the provider
+	 *
+	 * @return The configured service instance
+	 */
+	IAiService function configure( required any options );
+
+	/**
+	 * Returns all capabilities this provider supports.
+	 * Derived from the interfaces the provider implements — always in sync,
+	 * nothing to maintain manually.
+	 * Possible values: "chat", "stream", "embeddings", "transcribe", "speak"
+	 *
+	 * @return Array of capability strings
+	 */
+	array function getCapabilities();
+
+	/**
+	 * Returns true if this provider supports the given capability.
+	 *
+	 * @capability  "chat" | "stream" | "embeddings" | "transcribe" | "speak"
+	 *
+	 * @return boolean
+	 */
+	boolean function hasCapability( required string capability );
+
+}

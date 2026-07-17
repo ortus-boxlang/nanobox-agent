@@ -1,0 +1,68 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Create an Empty AI Chat Request Object
+ */
+@BoxBIF
+class {
+
+	/**
+	 * Inject the following references into the class
+	 * - moduleRecord : The ModuleRecord instance
+	 * - boxRuntime : The BoxRuntime instance
+	 * - interceptorService : The BoxLang InterceptorService
+	 * - log : A logger for the module config itself
+	 */
+
+    /**
+     * Create an AI Chat Request object with the given messages, params and options.
+	 * You can use this later with any AI Service to process the request.
+	 * <p>
+	 * If you pass a message, it will be added to the chat. The mssage can be:
+	 * - A string : The message will be added with the default role of user
+	 * - A struct : The struct that represents the message
+	 * - An array : The array of messages to incorporate
+	 *
+	 * @message If passed, the initial message to add to the chat.
+	 * @params A struct of request params to pass to the provider for the model request: Ex	{ temperature: 0.5, max_tokens: 100, model: "gpt-3.5-turbo" }
+	 * @options A struct of request options to pass to the provider for the model request. Available options are: { provider:string, apiKey:string, returnFormat:string (single|all|raw|json|xml), timeout:numeric, logResponse:boolean, logRequest:boolean }
+	 * @headers A struct of headers to pass to the provider for the model request.
+	 * @methodDefaults Optional method-specific defaults (used by BIFs like aiChat) that layer between module settings and user options
+	 *
+	 * @return The AI Chat Request Object
+     */
+    function invoke(
+		any messages,
+		struct params = {},
+		struct options = {},
+		struct headers = {},
+		struct methodDefaults = {}
+	 ) {
+		if( !isNull( arguments.messages ) ){
+			arguments.messages = aiMessage( arguments.messages );
+		}
+
+		var chatRequest = new bxModules.bxai.models.requests.AiChatRequest(
+			arguments.messages,
+			arguments.params,
+			arguments.options,
+			arguments.methodDefaults
+		 ).setHeaders( arguments.headers )
+
+		 BoxAnnounce( "onAIChatRequestCreate", { chatRequest: chatRequest } );
+
+		 return chatRequest;
+	}
+
+}

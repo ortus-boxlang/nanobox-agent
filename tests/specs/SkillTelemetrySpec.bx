@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skill telemetry", () => {
 			it( "records create and view activity beside a skill", () => {
 				var root = getTempDirectory() & "/telemetry-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
 				manager.create( "telemetry-skill", "Telemetry", "Content" )
 				manager.show( "telemetry-skill" )
 				var usagePath = root & "/.agents/skills-custom/telemetry-skill/.usage.json"

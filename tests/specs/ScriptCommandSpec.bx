@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "ScriptCommand", () => {
 			it( "creates, lists, shows, and runs BoxLang scripts", () => {
 				var path = getTempDirectory() & "/scripts-#createUUID()#"
-				var manager = new "nanobox-cli.ScriptManager"( path )
-				var command = new "nanobox-cli.commands.ScriptCommand"( manager )
+				var manager = new "cli.ScriptManager"( path )
+				var command = new "cli.commands.ScriptCommand"( manager )
 				var created = command.execute( "create", { name: "hello", content: "println( 'script works' )" } )
 				expect( created.success ).toBeTrue()
 				expect( command.execute( "list" ).scripts ).toHaveLength( 1 )

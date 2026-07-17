@@ -1,0 +1,163 @@
+class {
+	property output;
+	property config;
+	property home;
+
+	function init( required any cliOutput, required any configManager ) {
+		variables.output = arguments.cliOutput
+		variables.config = arguments.configManager
+		variables.home = variables.config.getNanoboxHome()
+		return this
+	}
+
+	struct function execute( required struct parsed ) {
+		var command = arguments.parsed.positionals.first()
+		var action = arguments.parsed.positionals.len() >= 2 ? arguments.parsed.positionals[ 2 ] : ""
+		var args = positionalArguments( command, action, arguments.parsed.positionals, arguments.parsed.options ?: {} )
+		switch ( command ) {
+			case "config":
+				if ( action == "provider" ) { return new "cli.ProviderCommand"( variables.config ).execute( args.action ?: "list", args ) }
+				if ( action == "model" ) { return new "cli.ModelCommand"( variables.config ).execute( args.action ?: "current", args ) }
+				return new "cli.commands.ConfigCommand"( variables.config ).execute( action ?: "show", args )
+			case "session": return new "cli.commands.SessionCommand"( new "cli.SessionManager"() ).execute( action ?: "list", args )
+			case "tokens":
+			case "token": return new "cli.commands.TokenCommand"( new "cli.TokenTracker"() ).execute( action ?: "all", "", false, args )
+			case "agent": return new "cli.commands.AgentCommand"( new "cli.AgentManager"( variables.home & "/agents", variables.config ) ).execute( action ?: "list", args )
+			case "tool": return new "cli.commands.ToolCommand"( new "cli.ToolManager"( variables.home, variables.config ) ).execute( action ?: "list", args )
+			case "mcp": return new "cli.commands.MCPCommand"( new "cli.McpManager"() ).execute( action ?: "list", args )
+			case "script": return new "cli.commands.ScriptCommand"( new "cli.ScriptManager"() ).execute( action ?: "list", args )
+			case "cron": return new "cli.commands.CronCommand"( new "cli.CronManager"() ).execute( action ?: "list", args )
+			case "backup": return new "cli.commands.BackupCommand"( new "cli.BackupManager"() ).execute( action ?: "status", args )
+			case "update": return new "cli.commands.UpdateCommand"( new "cli.UpdateManager"() ).execute( action ?: "status", args )
+			case "vault": return new "cli.commands.VaultCommand"( new "cli.VaultManager"( variables.home & "/vault" ) ).execute( action ?: "list", args )
+			case "security": return security( action ?: "status", args )
+			case "web": return wrapProcessResult( new "cli.commands.WebCommand"( new "cli.ProcessManager"() ).execute( action ?: "status", args ) )
+			case "worker": return wrapProcessResult( new "cli.commands.WorkerCommand"( new "cli.ProcessManager"() ).execute( action ?: "status", args ) )
+			case "start":
+			case "stop":
+			case "restart":
+			case "status":
+			case "doctor": return new "cli.CoreLifecycleCommand"( variables.config ).execute( command, args )
+			case "gateway": return new "cli.commands.GatewayCommand"( new "cli.GatewayRegistry"( variables.config ), variables.config ).execute( action ?: "status", args )
+			case "model": return new "cli.ModelCommand"( variables.config ).execute( action ?: "current", args )
+			case "skill":
+				if ( action == "curator" ) { return new "cli.commands.SkillCuratorCommand"( new "cli.SkillCurator"( expandPath( "." ) ), new "cli.CuratorReportManager"( expandPath( "." ), new "cli.VaultManager"( expandPath( ".nanobox/vault" ) ), variables.config ), variables.config ).execute( args.action ?: "status", args ) }
+				if ( action == "activate" ) { return new "cli.commands.SkillActivationCommand"( new "cli.SkillCurator"( expandPath( "." ) ) ).execute( args.action ?: "status", args ) }
+				return new "cli.commands.SkillCommand"( new "cli.SkillManager"( expandPath( "." ) & "/.agents/skills" ) ).execute( action ?: "list", args )
+			case "chat":
+				if ( args.z ?: args[ "z" ] ?: false ) { return chat( args.query ?: args.q ?: arrayToList( parsed.positionals.slice( 2 ), " " ), args, true ) }
+				if ( !len( args.query ?: args.q ?: "" ) ) { return interactiveChat( parsed ) }
+				return chat( args.query ?: args.q ?: "", args, false )
+			default: return { success: false, error: "Unknown command: #command#" }
+		}
+	}
+
+	private struct function wrapProcessResult( required struct result ) { arguments.result.success = ( arguments.result.success ?: ( arguments.result.status ?: "stopped" ) == "stopped" ); return arguments.result }
+
+	private struct function positionalArguments( required string command, required string action, required array positionals, required struct options ) {
+		var result = duplicate( arguments.options )
+		var values = arguments.positionals
+		if ( arguments.command == "config" && arguments.action == "provider" && values.len() >= 3 && !result.keyExists( "action" ) ) { result.action = values[ 3 ] }
+		if ( arguments.command == "config" && arguments.action == "provider" && values.len() >= 4 && !result.keyExists( "name" ) ) { result.name = values[ 4 ] }
+		if ( arguments.command == "config" && arguments.action == "model" && values.len() >= 3 && !result.keyExists( "action" ) ) { result.action = values[ 3 ] }
+		if ( arguments.command == "config" && arguments.action == "model" && values.len() >= 4 && !result.keyExists( "model" ) ) { result.model = values[ 4 ] }
+		if ( arguments.command == "config" && ( arguments.action == "get" || arguments.action == "unset" ) && values.len() >= 3 && !result.keyExists( "key" ) ) { result.key = values[ 3 ] }
+		if ( arguments.command == "config" && arguments.action == "set" ) { if ( values.len() >= 3 && !result.keyExists( "key" ) ) { result.key = values[ 3 ] }; if ( values.len() >= 4 && !result.keyExists( "value" ) ) { result.value = values[ 4 ] } }
+		if ( arguments.command == "skill" && arguments.action == "activate" && values.len() >= 3 && !result.keyExists( "action" ) ) { result.action = values[ 3 ] }
+		if ( arguments.command == "skill" && arguments.action == "activate" && values.len() >= 4 && !result.keyExists( "name" ) ) { result.name = values[ 4 ] }
+		if ( arguments.command == "skill" && arguments.action == "curator" && values.len() >= 3 && !result.keyExists( "action" ) ) { result.action = values[ 3 ] }
+		if ( arguments.command == "skill" && arguments.action == "curator" && values.len() >= 4 && !result.keyExists( "name" ) ) { result.name = values[ 4 ] }
+		if ( arguments.command == "skill" && arguments.action == "curator" && values.len() >= 5 && !result.keyExists( "mode" ) ) { result.mode = values[ 5 ] }
+		if ( arguments.command == "skill" && arguments.action == "curator" && values.len() >= 4 && !result.keyExists( "id" ) ) { result.id = values[ 4 ] }
+		if ( arguments.command == "skill" && values.len() >= 3 && !result.keyExists( "name" ) && [ "show", "create", "remove" ].contains( arguments.action ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "skill" && values.len() >= 3 && !result.keyExists( "query" ) && arguments.action == "search" ) { result.query = arrayToList( values.slice( 3 ), " " ) }
+		if ( arguments.command == "skill" && arguments.action == "find" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }
+		if ( arguments.command == "skill" && arguments.action == "install" && values.len() >= 3 && !result.keyExists( "slug" ) ) { result.slug = values[ 3 ] }
+		if ( arguments.command == "vault" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "vault" && arguments.action == "import" && values.len() >= 3 && !result.keyExists( "source" ) ) { result.source = values[ 3 ] }
+		if ( arguments.command == "vault" && arguments.action == "search" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }
+		if ( arguments.command == "agent" && arguments.action == "run" && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "agent" && arguments.action == "run" && values.len() >= 4 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 4 ), " " ) }
+		if ( arguments.command == "agent" && ( arguments.action == "show" || arguments.action == "delete" || arguments.action == "update" ) && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "agent" && arguments.action == "create" && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "agent" && arguments.action == "create" && values.len() >= 4 && !result.keyExists( "instructions" ) ) { result.instructions = arrayToList( values.slice( 4 ), " " ) }
+		if ( arguments.command == "session" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "session" && arguments.action == "create" ) { if ( values.len() >= 3 && !result.keyExists( "title" ) ) { result.title = arrayToList( values.slice( 3 ), " " ) }; result.nonInteractive = true }
+		if ( arguments.command == "session" && arguments.action == "search" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }
+		if ( arguments.command == "session" && arguments.action == "rename" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "session" && arguments.action == "rename" && values.len() >= 4 && !result.keyExists( "title" ) ) { result.title = arrayToList( values.slice( 4 ), " " ) }
+		if ( arguments.command == "session" && arguments.action == "export" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "session" && arguments.action == "delete" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "chat" && arguments.action == "chat" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = values[ 3 ] }
+		if ( arguments.command == "chat" && values.len() >= 2 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 2 ), " " ) }
+		if ( arguments.command == "chat" && values.len() >= 2 && !result.keyExists( "z" ) && values[ 2 ] == "-z" ) { result.z = true; result.query = values.len() >= 3 ? arrayToList( values.slice( 3 ), " " ) : "" }
+		if ( arguments.command == "model" && arguments.action == "status" && values.len() >= 3 && !result.keyExists( "provider" ) ) { result.provider = values[ 3 ] }
+		if ( arguments.command == "model" && arguments.action == "curator" && values.len() >= 3 && !result.keyExists( "namedModel" ) ) { result.namedModel = values[ 3 ] }
+		if ( arguments.command == "model" && arguments.action == "remove" && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "model" && arguments.action == "add" && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "tool" && ( arguments.action == "show" || arguments.action == "remove" ) && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "tool" && arguments.action == "create" && values.len() >= 3 && !result.keyExists( "name" ) ) { result.name = values[ 3 ] }
+		if ( arguments.command == "tool" && ( arguments.action == "enable" || arguments.action == "disable" ) && values.len() >= 3 && !result.keyExists( "key" ) ) { result.key = values[ 3 ] }
+		if ( arguments.command == "tool" && arguments.action == "show" && values.len() >= 3 && !result.keyExists( "key" ) ) { result.key = values[ 3 ] }
+		if ( arguments.command == "model" && ( arguments.action == "set" || arguments.action == "setup" || arguments.action == "configure" ) && values.len() >= 3 && !result.keyExists( "model" ) ) { result.model = values[ 3 ] }
+		if ( arguments.command == "model" && ( arguments.action == "setup" || arguments.action == "configure" ) && values.len() >= 3 && !result.keyExists( "provider" ) ) { result.provider = values[ 3 ] }
+		if ( arguments.command == "model" && ( arguments.action == "setup" || arguments.action == "configure" ) && values.len() >= 4 && !result.keyExists( "model" ) ) { result.model = values[ 4 ] }
+		if ( arguments.command == "vault" && arguments.action == "import" && values.len() >= 3 && !result.keyExists( "path" ) ) { result.path = values[ 3 ] }
+		if ( arguments.command == "vault" && arguments.action == "import" && options.keyExists( "tags" ) ) { result.tags = options.tags }
+		if ( arguments.command == "vault" && arguments.action == "import" && options.keyExists( "category" ) ) { result.category = options.category }
+		if ( arguments.command == "gateway" && arguments.action == "send" ) { if ( values.len() >= 4 && !result.keyExists( "recipient" ) ) { result.recipient = values[ 4 ] }; if ( values.len() >= 5 && !result.keyExists( "message" ) ) { result.message = values[ 5 ] } }
+		if ( arguments.command == "gateway" && arguments.action == "broadcast" ) { if ( values.len() >= 3 && !result.keyExists( "recipient" ) ) { result.recipient = values[ 3 ] }; if ( values.len() >= 4 && !result.keyExists( "message" ) ) { result.message = values[ 4 ] } }
+		if ( result.keyExists( "token-env" ) ) { result.tokenEnv = result[ "token-env" ] }
+		return result
+	}
+
+	private struct function processAction( required string action, struct args = {} ) {
+		var manager = new "cli.ProcessManager"()
+		var web = new "cli.commands.WebCommand"( manager )
+		var worker = new "cli.commands.WorkerCommand"( manager )
+		if ( arguments.action == "stop" ) { return { success: true, web: web.execute( "stop", arguments.args ), worker: worker.execute( "stop", arguments.args ) } }
+		if ( arguments.action == "restart" ) { processAction( "stop", arguments.args ) }
+		return { success: true, web: web.execute( "start", arguments.args ), worker: worker.execute( "start", arguments.args ) }
+	}
+
+	private struct function doctor() { return { success: true, config: fileExists( variables.config.getConfigPath() ), home: variables.home, datasource: "nanobox", modules: [ "bx-ai", "bx-sqlite" ] } }
+	private struct function vault( required string action, struct args = {} ) {
+		var manager = new "cli.VaultManager"()
+		if ( arguments.action == "search" ) { return { success: true, documents: manager.search( arguments.args.query ?: "" ) } }
+		if ( arguments.action == "index" ) { return manager.index() }
+		return { success: true, documents: manager.list( arguments.args.category ?: "" ) }
+	}
+	private struct function security( required string action, struct args = {} ) {
+		var czar = new "cli.SecurityCzar"()
+		if ( arguments.action == "scan" ) { return { success: true, results: czar.scanFiles( arguments.args.type ?: "all", arguments.args.path ?: variables.home ) } }
+		return { success: true, report: czar.status() }
+	}
+	private struct function model( required string action, struct args = {} ) {
+		if ( arguments.action == "set" ) { variables.config.set( "bx-ai.defaultModel", arguments.args.model ?: arguments.args.name ?: "" ); return { success: true, model: variables.config.get( "bx-ai.defaultModel" ) } }
+		if ( arguments.action == "current" ) { return { success: true, provider: variables.config.get( "bx-ai.defaultProvider" ), model: variables.config.get( "bx-ai.defaultModel" ) } }
+		return { success: true, models: variables.config.get( "bx-ai.models", [] ) }
+	}
+	private struct function skills( required string action, struct args = {} ) { var path = variables.home & "/skills"; var items = directoryExists( path ) ? directoryList( path, false, "query" ) : []; return { success: true, skills: items } }
+	private struct function chat( required string query, struct args = {}, boolean textOnly = false ) {
+		var result = new "cli.commands.ChatCommand"( variables.config, new "cli.TokenTracker"() ).execute( arguments.query, arguments.args )
+		if ( arguments.textOnly ) { return { success: result.success, text: result.content ?: "", error: result.error ?: "" } }
+		return result
+	}
+	private struct function interactiveChat( struct parsed = {} ) {
+		var interactive = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( variables.config, new "cli.TokenTracker"() ), new "cli.SessionManager"(), variables.config )
+		var started = interactive.start( true )
+		var renderer = new "cli.InteractiveChatRenderer"( interactive, true )
+		println( renderer.renderHeader( { title: started.title, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } ) )
+		while ( true ) {
+			print( "\nYou › " )
+			var input = CLIRead()
+			var response = interactive.execute( input )
+			if ( response.exit ?: false ) { println( "Goodbye." ); break }
+			if ( response.action == "response" ) { println( renderer.renderAssistant( response.content ?: "" ) ) }
+			else if ( response.action == "help" ) { println( renderer.renderCommand( response ) ) }
+			else if ( response.action != "empty" ) { println( jsonSerialize( response ) ) }
+		}
+		return { success: true, interactive: true, sessionId: started.sessionId }
+	}
+
+}

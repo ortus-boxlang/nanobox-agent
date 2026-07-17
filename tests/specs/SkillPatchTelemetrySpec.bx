@@ -3,13 +3,13 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skill patch telemetry", () => {
 			it( "records registry installation as a patch/update event", () => {
 				var root = getTempDirectory() & "/patch-telemetry-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
 				var result = manager.install( "invalid" )
 				expect( result.success ).toBeFalse()
 			} )
 			it( "records an explicit patch event", () => {
 				var root = getTempDirectory() & "/patch-explicit-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
 				manager.create( "patched-skill", "Patched", "Content" )
 				manager.recordPatch( "patched-skill" )
 				var usage = jsonDeserialize( fileRead( root & "/.agents/skills-custom/patched-skill/.usage.json" ) )

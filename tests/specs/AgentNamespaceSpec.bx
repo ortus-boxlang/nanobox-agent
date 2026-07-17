@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Complete agents namespace", () => {
 			it( "creates, lists, shows, updates, and deletes agents", () => {
 				var path = getTempDirectory() & "/agents-complete-#createUUID()#"
-				var manager = new "nanobox-cli.AgentManager"( path )
-				var command = new "nanobox-cli.commands.AgentCommand"( manager )
+				var manager = new "cli.AgentManager"( path )
+				var command = new "cli.commands.AgentCommand"( manager )
 				expect( command.execute( "create", { name: "coder", description: "Coder", model: "local", instructions: "Write code." } ).success ).toBeTrue()
 				expect( command.execute( "list", {} ).agents ).toHaveLength( 1 )
 				expect( command.execute( "show", { name: "coder" } ).agent.metadata.name ).toBe( "coder" )
@@ -14,7 +14,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( command.execute( "show", { name: "coder" } ).success ).toBeFalse()
 			} )
 			it( "validates names, missing agents, queries, and actions", () => {
-				var command = new "nanobox-cli.commands.AgentCommand"( new "nanobox-cli.AgentManager"( getTempDirectory() & "/agents-errors-#createUUID()#" ) )
+				var command = new "cli.commands.AgentCommand"( new "cli.AgentManager"( getTempDirectory() & "/agents-errors-#createUUID()#" ) )
 				expect( command.execute( "create", { name: "bad name" } ).success ).toBeFalse()
 				expect( command.execute( "show", {} ).success ).toBeFalse()
 				expect( command.execute( "run", { name: "missing", query: "hello" } ).success ).toBeFalse()

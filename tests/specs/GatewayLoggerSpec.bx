@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "GatewayLogger", () => {
 			it( "writes and tails a dedicated gateway log", () => {
 				var path = getTempDirectory() & "/gateway-#createUUID()#.log"
-				var logger = new "nanobox-cli.GatewayLogger"( path )
+				var logger = new "cli.GatewayLogger"( path )
 				logger.info( "gateway test event" )
 				expect( logger.getPath() ).toBe( path )
 				expect( logger.tail( 10 ) ).toInclude( "gateway test event" )

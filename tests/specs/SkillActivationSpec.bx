@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skill activation", () => {
 			it( "persists enabled state and mode", () => {
 				var root = getTempDirectory() & "/activation-#createUUID()#"
-				new "nanobox-cli.SkillManager"( root & "/.agents/skills" ).create( "activation-skill", "Activation", "Content" )
-				var curator = new "nanobox-cli.SkillCurator"( root )
+				new "cli.SkillManager"( root & "/.agents/skills" ).create( "activation-skill", "Activation", "Content" )
+				var curator = new "cli.SkillCurator"( root )
 				expect( curator.setMode( "activation-skill", "always-on" ).success ).toBeTrue()
 				expect( curator.setEnabled( "activation-skill", false ).success ).toBeTrue()
 				var status = curator.status().skills[ 1 ]
@@ -12,7 +12,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( status.enabled ).toBeFalse()
 			} )
 			it( "routes enable and disable through the active runtime", () => {
-				var result = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( true ), new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/runtime-#createUUID()#" ) ).execute( { positionals: [ "skill", "activate", "enable", "runtime-skill" ], options: {} } )
+				var result = new "cli.CommandRuntime"( new "cli.PrettyCli"( true ), new "cli.util.ConfigManager"( getTempDirectory() & "/runtime-#createUUID()#" ) ).execute( { positionals: [ "skill", "activate", "enable", "runtime-skill" ], options: {} } )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "Skill not found" )
 			} )

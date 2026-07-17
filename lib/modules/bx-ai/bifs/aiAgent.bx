@@ -1,0 +1,99 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Create an AI Agent that can reason, use tools, maintain memory, and execute tasks autonomously
+ */
+@BoxBIF
+class {
+
+	/**
+	 * Create an AI Agent with optional configuration
+	 *
+	 * An AI Agent is an autonomous entity that can:
+	 * - Reason through complex problems
+	 * - Use tools to gather information or take actions
+	 * - Maintain conversation memory across interactions
+	 * - Execute multi-step tasks with planning
+	 * - Chain operations in pipelines
+	 * - Delegate tasks to sub-agents
+	 *
+	 * @name The agent's name (default: "BxAi")
+	 * @description The agent's role/purpose description
+	 * @instructions System instructions for the agent's behavior
+	 * @model The AI model provider to use. Defaults to configured default model
+	 * @memory Single IAiMemory instance or array of memory instances, defaults to WindowMemory
+	 * @tools Array of Tool objects the agent can use
+	 * @subAgents Array of sub-agents to register as internal tools for delegation
+	 * @skills Always-on skills: full content injected on every call. Pass AiSkill instances.
+	 * @availableSkills Lazy skill library: index-only until the LLM calls loadSkill(name). Defaults to auto-discovering all global skills from the skillsDirectory.
+	 * @params Additional provider parameters (model, temperature, max_tokens, etc.)
+	 * @options Additional options (timeout, logging, etc.)
+	 * @middleware IAiMiddleware instance, struct-of-closures, or array of either to attach to this agent
+	 * @checkpointer IAiMemory instance used to save/load checkpoint state for suspend-resume
+	 * @checkpointTTL Time-to-live for checkpoint state in minutes (0 = no expiry)
+	 * @mcpServers Array of MCP server URLs to seed into the agent for internal tool calls to sub-agents and tools
+	 * @register When true, registers the agent in the aiAgentRegistry() singleton for observability and analytics. Defaults to false to avoid memory leaks from throwaway or sub-agents.
+	 * @module Module namespace used as the registry key suffix when register is true (e.g. "my-module" → "AgentName@my-module")
+	 *
+	 * @return AiAgent instance for fluent chaining
+	 */
+	function invoke(
+		string name         = "BxAi",
+		string description  = "",
+		string instructions = "",
+		AiModel model       = aiModel(),
+		any memory          = aiMemory(),
+		array tools         = [],
+		array subAgents     = [],
+		any skills        = [],
+		any availableSkills = [],
+		struct params       = {},
+		struct options      = {},
+		any middleware      = [],
+		any checkpointer,
+		numeric checkpointTTL = 30,
+		array mcpServers    = [],
+		boolean register    = false,
+		string module       = ""
+	) {
+		if( isSimpleValue( arguments.skills ) ){
+			arguments.skills = [ arguments.skills ]
+		}
+
+		if( isSimpleValue( arguments.availableSkills ) ){
+			arguments.availableSkills = [ arguments.availableSkills ]
+		}
+
+		// Create the agent with the provided configuration options
+		var agent = new bxModules.bxai.models.runnables.AiAgent( argumentCollection: arguments )
+
+		// Prepend globally discovered skills (from skillsDirectory) so user-specified
+		// skills always take precedence when ordering matters in the system message.
+		var globalSkills = aiGlobalSkills()
+		if ( globalSkills.len() ) {
+			agent.withAvailableSkills( globalSkills )
+		}
+
+		// Announce agent creation for observability and extensibility (e.g. logging, analytics, etc.)
+		BoxAnnounce( "onAIAgentCreate", { agent: agent } )
+
+		// Opt-in registration in the agent registry for observability and analytics
+		if ( arguments.register ) {
+			aiAgentRegistry().register( agent, arguments.module )
+		}
+
+		return agent
+	}
+
+}

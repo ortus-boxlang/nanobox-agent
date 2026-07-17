@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.testRoot = getTempDirectory() & "/nanobox-install-" & createUUID()
 				directoryCreate( variables.testRoot, true, true )
-				variables.manager = new "nanobox-cli.SkillManager"( variables.testRoot & "/.agents/skills" )
+				variables.manager = new "cli.SkillManager"( variables.testRoot & "/.agents/skills" )
 			})
 
 			afterEach( function() {

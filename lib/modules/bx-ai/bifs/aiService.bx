@@ -1,0 +1,163 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Creates a reference to a registered AI Service Provider.
+ */
+@BoxBIF
+class {
+
+	static {
+		/**
+		 * Inject the following references into the class
+		 * - moduleRecord : The ModuleRecord instance
+		 * - boxRuntime : The BoxRuntime instance
+		 * - interceptorService : The BoxLang InterceptorService
+		 * - log : A logger for the module config itself
+		 */
+		final CORE_PROVIDERS = [
+			"bedrock",
+			"claude",
+			"cohere",
+			"deepseek",
+			"docker",
+			"elevenlabs",
+			"gemini",
+			"grok",
+			"groq",
+			"huggingface",
+			"minimax",
+			"mistral",
+			"ollama",
+			"openai",
+			"openai-compatible",
+			"openrouter",
+			"perplexity",
+			"voyage"
+		];
+	}
+
+    /**
+     * Creates a reference to a registered AI Service Provider this module supports
+	 * <p>
+	 * You can pass an optional API key to use with the AI Service Provider to override the default API key from the configuration.
+	 *
+	 * @provider The provider to use. If not provided, the provider will use the default provider from the configuration.
+	 * @options A struct of options to configure the provider instance, or a simple API key value.
+	 *
+	 * @throws ProviderNotSupported if the provider is not supported
+	 *
+	 * @return The AI Service Provider instance
+     */
+    function invoke( string provider, any options = {} ) {
+        // Choose the provider in the following order:
+		// 1. Argument provider
+		// 2. Module setting provider
+		arguments.provider = arguments.provider ?: moduleRecord.settings.provider
+
+		// In case an `arguments.apiKey` is passed as a simple value, convert to options struct
+		if( arguments.keyExists( "apiKey" ) ){
+			arguments.options.apiKey = arguments.apiKey
+		}
+
+        // By convention check if there is a <PROVIDER>_API_KEY setting override it
+		// Only apply convention key if options.apiKey is not already set (could be a struct for providers like Bedrock)
+        var conventionAPIKey = getSystemSetting( "#arguments.provider.ucase()#_API_KEY", "" )
+        if( !len( arguments.options.apiKey ?: "" ) && len( conventionAPIKey ) ){
+            arguments.options.apiKey = conventionAPIKey
+        }
+        // Else use the module setting (only if apiKey not already set)
+		arguments.options.apiKey = 	arguments.options.apiKey ?: moduleRecord.settings.apiKey
+
+        // Build the target service
+		var targetClass = ""
+		switch( arguments.provider ) {
+			case "bedrock":
+				targetClass = "bxModules.bxai.models.providers.BedrockService"
+				break
+			case "claude":
+				targetClass = "bxModules.bxai.models.providers.ClaudeService"
+				break
+            case "cohere":
+                targetClass = "bxModules.bxai.models.providers.CohereService"
+                break
+			case "deepseek":
+				targetClass = "bxModules.bxai.models.providers.DeepSeekService"
+				break
+			case "docker":
+				targetClass = "bxModules.bxai.models.providers.DockerModelRunnerService"
+				break
+			case "elevenlabs":
+				targetClass = "bxModules.bxai.models.providers.ElevenLabsService"
+				break
+			case "gemini":
+				targetClass = "bxModules.bxai.models.providers.GeminiService"
+				break
+			case "grok":
+				targetClass = "bxModules.bxai.models.providers.GrokService"
+				break
+			case "groq":
+				targetClass = "bxModules.bxai.models.providers.GroqService"
+				break
+			case "huggingface":
+				targetClass = "bxModules.bxai.models.providers.HuggingFaceService"
+				break
+			case "mistral":
+				targetClass = "bxModules.bxai.models.providers.MistralService"
+				break
+			case "minimax":
+				targetClass = "bxModules.bxai.models.providers.MiniMaxService"
+				break
+			case "ollama":
+				targetClass = "bxModules.bxai.models.providers.OllamaService"
+				break
+			case "openai" :
+				targetClass = "bxModules.bxai.models.providers.OpenAIService"
+				break
+			case "openai-compatible":
+				targetClass = "bxModules.bxai.models.providers.OpenAICompatibleService"
+				break
+			case "openrouter":
+				targetClass = "bxModules.bxai.models.providers.OpenRouterService"
+				break
+			case "perplexity":
+				targetClass = "bxModules.bxai.models.providers.PerplexityService"
+				break
+            case "voyage":
+                targetClass = "bxModules.bxai.models.providers.VoyageService"
+                break
+			default:
+				// Announce the provider request so contributors can listen and provide a service
+				// This is for our aiplus module
+				var iData = { provider: arguments.provider, options: arguments.options, service: null };
+				BoxAnnounce( "onMissingAiProvider", iData );
+
+				if( iData.service == null ){
+					throw(
+						type: "ProviderNotSupported",
+						message: "Provider [#arguments.provider#] is not supported.  Valid Providers are: [#static.CORE_PROVIDERS.toList()#]"
+					);
+				}
+				return iData.service;
+		}
+
+		// Create the service instance
+		var oTargetService = new "#targetClass#"().configure( arguments.options )
+
+		// Announce
+		BoxAnnounce( "onAIProviderCreate", { provider: oTargetService } );
+
+		return oTargetService;
+	}
+
+}

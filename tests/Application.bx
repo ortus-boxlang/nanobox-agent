@@ -2,6 +2,6 @@ class {
 	this.mappings = {
 		"/testbox": expandPath( "./testbox" ),
 		"/tests": expandPath( "./tests" ),
-		"/nanobox-cli": expandPath( "./nanobox-cli" )
+		"/cli": expandPath( "./cli" )
 	}
 }

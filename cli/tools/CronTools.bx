@@ -1,0 +1,11 @@
+class {
+	@AITool( "List all scheduled cron jobs with their schedule, status, and next run time." )
+	public array function cron_list() {
+		return new "/cli/CronManager"().list()
+	}
+
+	@AITool( "Get the status of the cron scheduler including running jobs, paused jobs, and scheduler health." )
+	public struct function cron_status() {
+		return new "/cli/CronManager"().status()
+	}
+}

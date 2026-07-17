@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skill use telemetry", () => {
 			it( "increments use telemetry through the public manager API", () => {
 				var root = getTempDirectory() & "/use-telemetry-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
 				manager.create( "used-skill", "Used", "Content" )
 				manager.recordUse( "used-skill" )
 				var usage = jsonDeserialize( fileRead( root & "/.agents/skills-custom/used-skill/.usage.json" ) )

@@ -4,7 +4,7 @@ class {
 	function main( array args = [] ) {
 		var home = getTempDirectory() & "/nanobox-config-test-#createUUID()#"
 		directoryCreate( home, true )
-		var manager = new "nanobox-cli.util.ConfigManager"( home )
+		var manager = new "cli.util.ConfigManager"( home )
 		var configData = manager.load()
 		if ( manager.get( "nanobox.web.port" ) != 8080 ) { throw( "defaults should load" ) }
 		manager.set( "bx-ai.defaultProvider", "lmstudio" )

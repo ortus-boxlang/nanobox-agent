@@ -2,13 +2,13 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "TelegramGateway", () => {
 			it( "normalizes Telegram updates and advertises HITL capabilities", () => {
-				var gateway = new "nanobox-cli.TelegramGateway"( { botToken: "" } )
+				var gateway = new "cli.TelegramGateway"( { botToken: "" } )
 				expect( gateway.getName() ).toBe( "telegram" )
 				expect( gateway.capabilities().hitlModes ).toInclude( "web" )
 				expect( gateway.capabilities().hitlDecision ).toBe( "suspend-resume" )
 			} )
 			it( "rejects connection without a token", () => {
-				var gateway = new "nanobox-cli.TelegramGateway"( { botToken: "" } )
+				var gateway = new "cli.TelegramGateway"( { botToken: "" } )
 				expect( gateway.connect().connected ).toBeFalse()
 				expect( gateway.status().lastError ).toInclude( "token" )
 			} )

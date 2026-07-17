@@ -3,10 +3,10 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Gateway management", () => {
 			it( "supports enable, disable, restart, health, log, and clear-log", () => {
 				var home = getTempDirectory() & "/gateway-mgmt-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
-				var registry = new "nanobox-cli.GatewayRegistry"( config )
+				var config = new "cli.util.ConfigManager"( home )
+				var registry = new "cli.GatewayRegistry"( config )
 				registry.create( "telegram", { botToken: "" } )
-				var command = new "nanobox-cli.commands.GatewayCommand"( registry, config )
+				var command = new "cli.commands.GatewayCommand"( registry, config )
 				expect( command.execute( "disable", { name: "telegram" } ).enabled ).toBeFalse()
 				expect( command.execute( "enable", { name: "telegram" } ).enabled ).toBeTrue()
 				expect( command.execute( "health", { name: "telegram" } ).success ).toBeFalse()

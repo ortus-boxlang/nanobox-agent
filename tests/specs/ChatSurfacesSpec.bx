@@ -3,19 +3,19 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Chat surfaces", () => {
 			it( "supports response-only execution through the active runtime", () => {
 				var home = getTempDirectory() & "/chat-z-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var config = new "cli.util.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
 				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), config )
 				var result = runtime.execute( { positionals: [ "chat", "Reply with exactly Z_RUNTIME_OK" ], options: { z: true } } )
 				expect( result.success ).toBeTrue()
 				expect( result.text ).toInclude( "Z_RUNTIME_OK" )
 			} )
 			it( "supports interactive slash commands without a provider call", () => {
 				var home = getTempDirectory() & "/chat-slash-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
-				var chat = new "nanobox-cli.InteractiveChat"( new "nanobox-cli.commands.ChatCommand"( config, new "nanobox-cli.TokenTracker"( home & "/tokens.json" ) ), new "nanobox-cli.SessionManager"(), config )
+				var config = new "cli.util.ConfigManager"( home )
+				var chat = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "cli.TokenTracker"( home & "/tokens.json" ) ), new "cli.SessionManager"(), config )
 				chat.start( false )
 				expect( chat.execute( "/help" ).success ).toBeTrue()
 				expect( chat.execute( "/model" ).success ).toBeTrue()

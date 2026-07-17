@@ -3,27 +3,27 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Chat model selection", () => {
 			it( "uses the configured default model", () => {
 				var home = getTempDirectory() & "/chat-default-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var config = new "cli.util.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
 				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var result = new "nanobox-cli.commands.ChatCommand"( config, new "nanobox-cli.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly DEFAULT_CHAT_OK" )
+				var result = new "cli.commands.ChatCommand"( config, new "cli.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly DEFAULT_CHAT_OK" )
 				expect( result.success ).toBeTrue()
 				expect( result.model ).toBe( "qwen/qwen3.6-35b-a3b" )
 			} )
 			it( "uses a named model", () => {
 				var home = getTempDirectory() & "/chat-named-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
+				var config = new "cli.util.ConfigManager"( home )
 				config.set( "bx-ai.namedModels.local-coder", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.1 } } )
 				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var result = new "nanobox-cli.commands.ChatCommand"( config, new "nanobox-cli.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly NAMED_CHAT_OK", { namedModel: "local-coder" } )
+				var result = new "cli.commands.ChatCommand"( config, new "cli.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly NAMED_CHAT_OK", { namedModel: "local-coder" } )
 				expect( result.success ).toBeTrue()
 				expect( result.namedModel ).toBe( "local-coder" )
 			} )
 			it( "returns setup-required when no model is configured", () => {
 				var home = getTempDirectory() & "/chat-none-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
-				var result = new "nanobox-cli.commands.ChatCommand"( config, new "nanobox-cli.TokenTracker"( home & "/tokens.json" ) ).execute( "hello" )
+				var config = new "cli.util.ConfigManager"( home )
+				var result = new "cli.commands.ChatCommand"( config, new "cli.TokenTracker"( home & "/tokens.json" ) ).execute( "hello" )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "model" )
 			} )

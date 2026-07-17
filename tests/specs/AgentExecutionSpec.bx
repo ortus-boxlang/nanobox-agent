@@ -3,11 +3,11 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Agent execution", () => {
 			it( "runs a real configured OpenAI-compatible agent", () => {
 				var path = getTempDirectory() & "/agent-run-#createUUID()#"
-				var managerConfig = new "nanobox-cli.util.ConfigManager"( path & "/config" )
+				var managerConfig = new "cli.util.ConfigManager"( path & "/config" )
 				managerConfig.set( "bx-ai.defaultProvider", "lmstudio" )
 				managerConfig.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
 				managerConfig.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var manager = new "nanobox-cli.AgentManager"( path & "/agents", managerConfig )
+				var manager = new "cli.AgentManager"( path & "/agents", managerConfig )
 				manager.create( "local", "Local agent", "qwen/qwen3.6-35b-a3b", "Reply exactly with AGENT_RUN_OK" )
 				var result = manager.run( "local", "Reply exactly with AGENT_RUN_OK" )
 				expect( result.success ).toBeTrue()

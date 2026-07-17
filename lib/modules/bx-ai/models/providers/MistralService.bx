@@ -1,0 +1,124 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Mistral AI Service Provider
+ * https://docs.mistral.ai/
+ */
+import bxModules.bxai.models.providers.capabilities.IAiChatService;
+import bxModules.bxai.models.providers.capabilities.IAiEmbeddingsService;
+import bxModules.bxai.models.providers.capabilities.IAiSpeechService;
+import bxModules.bxai.models.providers.capabilities.IAiTranscriptionService;
+import bxModules.bxai.models.responses.AiSpeechResponse;
+import bxModules.bxai.models.responses.AiTranscriptionResponse;
+
+class extends="OpenAIService" implements="IAiChatService, IAiEmbeddingsService, IAiSpeechService, IAiTranscriptionService" {
+
+	/**
+	 * Static defaults
+	 */
+	static {
+		CAPABILITIES = [ "chat", "stream", "embeddings", "speech", "transcription" ]
+		DEFAULT_CHAT_PARAMS = {
+			// https://docs.mistral.ai/getting-started/models/models_overview/
+			// mistral-small-latest is the default model for cost-effective tasks
+			"model" : "mistral-small-latest"
+		}
+		DEFAULT_EMBED_PARAMS = {
+			// https://docs.mistral.ai/capabilities/embeddings/
+			"model" : "mistral-embed"
+		}
+		DEFAULT_SPEECH_PARAMS = {
+			// https://docs.mistral.ai/capabilities/audio/text_to_speech/speech/
+			"model" : "voxtral-mini-tts-2603",
+			"voice" : "Charlotte"
+		}
+		DEFAULT_TRANSCRIPTION_PARAMS = {
+			// https://docs.mistral.ai/capabilities/audio/offline_transcription/
+			"model" : "voxtral-mini-latest"
+		}
+	}
+
+	/**
+	 * Constructor
+	 * https://docs.mistral.ai/api/
+	 */
+	function init(){
+		variables.chatURL       = "https://api.mistral.ai/v1/chat/completions"
+		variables.embeddingsURL = "https://api.mistral.ai/v1/embeddings"
+		variables.speechURL     = "https://api.mistral.ai/v1/audio/speech"
+		variables.transcribeURL = "https://api.mistral.ai/v1/audio/transcriptions"
+		variables.translateURL  = "https://api.mistral.ai/v1/audio/transcriptions"
+		variables.name          = "Mistral"
+	}
+
+	@override
+	public array function getDeclaredCapabilities() {
+		return static.CAPABILITIES
+	}
+
+	@override
+	public function chat( required AiChatRequest chatRequest, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chat( arguments.chatRequest )
+	}
+
+	@override
+	public function chatStream( required AiChatRequest chatRequest, required function callback, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		return super.chatStream( arguments.chatRequest, arguments.callback )
+	}
+
+	@override
+	public function embeddings( required AiEmbeddingRequest embeddingRequest ){
+		// Set default embedding model if not specified
+		arguments.embeddingRequest.mergeServiceParams( static.DEFAULT_EMBED_PARAMS )
+		return super.embeddings( embeddingRequest )
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiSpeechService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	@override
+	public AiSpeechResponse function speak( required AiSpeechRequest speechRequest ){
+		arguments.speechRequest.mergeServiceParams( static.DEFAULT_SPEECH_PARAMS )
+		return super.speak( arguments.speechRequest )
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiTranscriptionService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	@override
+	public AiTranscriptionResponse function transcribe( required AiTranscriptionRequest transcriptionRequest ){
+		arguments.transcriptionRequest.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+		return super.transcribe( arguments.transcriptionRequest )
+	}
+
+	/**
+	 * Mistral does not have a separate translations endpoint — forward to transcribe.
+	 */
+	@override
+	public AiTranscriptionResponse function translate( required AiTranscriptionRequest transcriptionRequest ){
+		arguments.transcriptionRequest.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+		return super.transcribe( arguments.transcriptionRequest )
+	}
+
+}

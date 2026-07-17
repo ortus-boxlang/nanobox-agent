@@ -1,25 +1,25 @@
 class {
 	function main() {
-		var manager = new "nanobox-cli.SkillManager"()
+		var manager = new "cli.SkillManager"()
 		var tempDir = getTempDirectory() & "test-skill-" & createUUID()
 		directoryCreate(tempDir, true)
-		
+
 		fileWrite(tempDir & "/SKILL.md", "---\nname: test-local\ndescription: Local test\n---\n\nTest content")
-		
+
 		println("Installing from local directory")
 		var result = manager.install(tempDir)
-		
+
 		println("Success: " & result.success)
 		println("Source: " & (result.source ?: "unknown"))
-		
+
 		if (result.success) {
 			println("Skill name: " & (result.skill.name ?: "(empty)"))
 			println("Skill path: " & (result.skill.path ?: "(empty)"))
-			
+
 			// List installed skills
 			var allSkills = manager.list()
 			println("Total skills installed: " & arrayLen(allSkills))
-			
+
 			// Find the skill we just installed
 			var found = false
 			for (var skill in allSkills) {
@@ -29,11 +29,11 @@ class {
 					break
 				}
 			}
-			
+
 			if (!found) {
 				println("ERROR: Installed skill not found in list")
 			}
-			
+
 			// Cleanup - remove the skill we installed
 			if (found) {
 				manager.remove("test-local")
@@ -42,11 +42,11 @@ class {
 		} else {
 			println("Error: " & (result.error ?: "unknown"))
 		}
-		
+
 		if (directoryExists(tempDir)) {
 			directoryDelete(tempDir, true)
 		}
-		
+
 		println("Test completed")
 	}
 }

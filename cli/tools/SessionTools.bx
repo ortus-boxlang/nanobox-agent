@@ -1,0 +1,11 @@
+class {
+	@AITool( "Search past conversation sessions using full-text search. Returns matching sessions with excerpts and timestamps." )
+	public array function session_search( required string query, numeric limit = 5 ) {
+		return new "/cli/SessionManager"( new "/cli/util/ConfigManager"() ).search( arguments.query, arguments.limit )
+	}
+
+	@AITool( "Get session usage statistics including total sessions, messages, and token usage." )
+	public struct function session_stats() {
+		return new "/cli/SessionManager"( new "/cli/util/ConfigManager"() ).stats()
+	}
+}

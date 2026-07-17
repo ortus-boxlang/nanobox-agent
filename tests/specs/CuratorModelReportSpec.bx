@@ -2,8 +2,8 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "Curator model and reports", () => {
 			it( "selects a named curator model", () => {
-				var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/model-curator-#createUUID()#" )
-				var command = new "nanobox-cli.ModelCommand"( config )
+				var config = new "cli.util.ConfigManager"( getTempDirectory() & "/model-curator-#createUUID()#" )
+				var command = new "cli.ModelCommand"( config )
 				command.execute( "add", { name: "cheap", provider: "lmstudio", model: "qwen/test" } )
 				var result = command.execute( "curator", { namedModel: "cheap" } )
 				expect( result.success ).toBeTrue()
@@ -11,7 +11,7 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "writes a curator report", () => {
 				var root = getTempDirectory() & "/curator-report-#createUUID()#"
-				var manager = new "nanobox-cli.CuratorReportManager"( root )
+				var manager = new "cli.CuratorReportManager"( root )
 				var result = manager.write( { success: true, dryRun: true, checked: 1, changes: [] }, "cheap" )
 				expect( result.success ).toBeTrue()
 				expect( fileExists( result.path & "/REPORT.md" ) ).toBeTrue()

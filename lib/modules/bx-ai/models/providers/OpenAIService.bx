@@ -1,0 +1,1283 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * OpenAI Service Provider
+ *
+ * Concrete implementation of the OpenAI chat, streaming, and embeddings APIs.
+ * Providers that follow the OpenAI API standard (Groq, DeepSeek, Mistral, etc.)
+ * should extend this class instead of BaseService.
+ */
+import bxModules.bxai.models.util.SchemaBuilder;
+import bxModules.bxai.models.providers.capabilities.IAiChatService;
+import bxModules.bxai.models.providers.capabilities.IAiEmbeddingsService;
+import bxModules.bxai.models.providers.capabilities.IAiImageService;
+import bxModules.bxai.models.providers.capabilities.IAiSpeechService;
+import bxModules.bxai.models.providers.capabilities.IAiTranscriptionService;
+import bxModules.bxai.models.responses.AiImageResponse;
+import bxModules.bxai.models.responses.AiSpeechResponse;
+import bxModules.bxai.models.responses.AiTranscriptionResponse;
+
+class extends="BaseService" implements="IAiChatService, IAiEmbeddingsService, IAiImageService, IAiSpeechService, IAiTranscriptionService" {
+
+	/**
+	 * Static defaults
+	 */
+	static {
+		CAPABILITIES = [ "chat", "stream", "embeddings", "image", "speech", "transcription", "translation" ]
+		DEFAULT_CHAT_PARAMS = {
+			// https://platform.openai.com/docs/models
+			// according to the docs, this is the default model
+			// https://platform.openai.com/docs/models/gpt-5-nano
+			"model" : "gpt-5-nano"
+		}
+		DEFAULT_EMBED_PARAMS = {
+			"model" : "text-embedding-3-small"
+		}
+		DEFAULT_IMAGE_PARAMS = {
+			// https://platform.openai.com/docs/guides/images
+			"model"           : "gpt-image-1"
+		}
+		DEFAULT_SPEECH_PARAMS = {
+			// https://platform.openai.com/docs/speech-to-text/overview
+			"model" : "tts-1",
+			// Voice Options: https://developers.openai.com/api/docs/guides/text-to-speech
+			"voice" : "ash"
+		}
+		DEFAULT_TRANSCRIPTION_PARAMS = {
+			// https://platform.openai.com/docs/speech-to-text/overview
+			"model" : "whisper-1"
+		}
+	}
+
+	/**
+	 * Constructor
+	 */
+	function init(){
+		variables.chatURL        = "https://api.openai.com/v1/chat/completions"
+		variables.embeddingsURL  = "https://api.openai.com/v1/embeddings"
+		variables.imageURL       = "https://api.openai.com/v1/images/generations"
+		variables.speechURL      = "https://api.openai.com/v1/audio/speech"
+		variables.transcribeURL  = "https://api.openai.com/v1/audio/transcriptions"
+		variables.translateURL   = "https://api.openai.com/v1/audio/translations"
+		variables.name           = "OpenAI"
+	}
+
+	@override
+	public array function getDeclaredCapabilities() {
+		return static.CAPABILITIES
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiChatService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Process a synchronous chat request using the OpenAI chat completions API format.
+	 * Handles tool calling, structured output, and all middleware hooks.
+	 *
+	 * @chatRequest The AiChatRequest object to send to the provider
+	 * @interactionCount Current tool call interaction count (used internally), default is 0
+	 *
+	 * @throws ProviderError if the provider returns an error from the request
+	 * @throws MaxInteractionsExceeded if tool calls exceed the maximum allowed interactions
+	 *
+	 * @return The response from the provider according to the return format in the AI request
+	 */
+	@override
+	public function chat( required AiChatRequest chatRequest, numeric interactionCount = 0 ){
+		// Apply service-level params and headers, allowing the chatRequest to override them if set
+		arguments.chatRequest
+			// Seed the chat request with defaults
+			.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+			// Model Selection if not set, use the default in the service, which should always be set
+			.setModelIfEmpty( variables.params.model ?: "" )
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceParams( variables.params )
+			.mergeServiceHeaders( variables.headers )
+
+		// Build the packet according to the OpenAI standard
+		var dataPacket = {
+			"model"   : arguments.chatRequest.getModel(),
+			"messages": arguments.chatRequest.getMessages()
+		}.append( arguments.chatRequest.getParams() )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Tooling Detection ---
+		// -------------------------------------------------------------------------------------------
+		if( dataPacket.keyExists( "tools" ) ){
+			// Convert tool definitions to schema format expected by the provider
+			dataPacket.tools = dataPacket.tools.map( .getSchema )
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Structured output support (OpenAI format) ---
+		// -------------------------------------------------------------------------------------------
+		if( arguments.chatRequest.isStructuredOutput() ){
+			// Clean internal metadata before sending to provider
+			var cleanSchema = SchemaBuilder::cleanSchema( arguments.chatRequest.getStructuredOutput() )
+			dataPacket.response_format = {
+				"type": "json_schema",
+				"json_schema": {
+					"name"  : "response",
+					"strict": true,
+					"schema": cleanSchema
+				}
+			}
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Callback ---
+		// -------------------------------------------------------------------------------------------
+		// Allow concrete providers to normalize the request packet before sending
+		dataPacket = preRequest( arguments.chatRequest, dataPacket, "chat" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire beforeLLMCall middleware ---
+		// -------------------------------------------------------------------------------------------
+		var llmContext = { chatRequest: arguments.chatRequest, dataPacket: dataPacket }
+		var llmBeforeResult = arguments.chatRequest.fireMiddleware( hook: "beforeLLMCall", context: llmContext )
+		// If any beforeLLMCall middleware returned a terminal result (suspend, cancel, reject),
+		// return it immediately to allow the agent to handle it (e.g. pause for human input, skip)
+		if ( llmBeforeResult.isTerminal() ) {
+			return llmBeforeResult
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire WrapLLM -> HTTP Call ---
+		// -------------------------------------------------------------------------------------------
+		// Send HTTP request to the provider — wrapped in wrapLLMCall middleware chain
+		// The result is a struct with normalized keys
+		var capturedDataPacket  = dataPacket;
+		var capturedChatRequest = arguments.chatRequest;
+		var result = arguments.chatRequest.fireWrapMiddleware(
+			hook         : "wrapLLMCall",
+			context      : llmContext,
+			innerFunction: () => sendChatRequest( capturedChatRequest, capturedDataPacket )
+		)
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire local callback for post mods ---
+		// -------------------------------------------------------------------------------------------
+		result = postResponse( arguments.chatRequest, dataPacket, result, "chat" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire afterLLMCall middleware, in reverse order ---
+		// -------------------------------------------------------------------------------------------
+		arguments.chatRequest.fireMiddleware(
+			hook   : "afterLLMCall",
+			context: { chatRequest: arguments.chatRequest, result: result },
+			reverse: true
+		)
+
+		// -------------------------------------------------------------------------------------------
+		// --- Direct Error Detection ---
+		// -------------------------------------------------------------------------------------------
+		if( result.keyExists( "error" ) ){
+			writeLog(
+				text: result.error.toString(),
+				type: "error",
+				log : "ai"
+			)
+
+			// Announce the error
+			BoxAnnounce( "onAIError", {
+				error       : result.error,
+				errorMessage: result.error.toString(),
+				provider    : this,
+				operation   : "chat",
+				aiRequest   : arguments.chatRequest,
+				canRetry    : true
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: result.error.toString()
+			)
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Usage Event Announcement ---
+		// -------------------------------------------------------------------------------------------
+		if( result.keyExists( "usage" ) ){
+			BoxAnnounce( "onAITokenCount", {
+				provider         : this,
+				operation        : "chat",
+				model            : arguments.chatRequest.getModel(),
+				promptTokens     : result.usage.keyExists( "prompt_tokens" )     ? result.usage.prompt_tokens     : 0,
+				completionTokens : result.usage.keyExists( "completion_tokens" ) ? result.usage.completion_tokens : 0,
+				totalTokens      : result.usage.keyExists( "total_tokens" )      ? result.usage.total_tokens      : 0,
+				aiRequest        : arguments.chatRequest,
+				usage            : result.usage,
+				timestamp        : now()
+			} )
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Results Determination or Tool Calling ---
+		// -------------------------------------------------------------------------------------------
+		var toolCalls = result.choices.first().message?.tool_calls ?: arrayNew()
+		if( !toolCalls.len() ){
+			var content = result.choices.first().message.content;
+			// Determine return formats
+			switch( arguments.chatRequest.getReturnFormat() ){
+				case "all":
+					return result.choices
+				case "raw":
+					return result
+				case "json":
+					return jsonDeserialize( extractFromCodeBlock( content, "json" ) )
+				case "xml":
+					return xmlParse( extractFromCodeBlock( content, "xml" ) )
+				case "structuredOutput":
+					return populateStructuredOutput( content, arguments.chatRequest )
+				case "single": default:
+					return content
+			}
+		}
+
+		/**
+		 * ---------------------------------------------------------------------------------------------------------
+		 * Max Interactions Check
+		 * ---------------------------------------------------------------------------------------------------------
+		 */
+		var maxAllowed = arguments.chatRequest.getMaxInteractions() > 0 ? arguments.chatRequest.getMaxInteractions() : variables.maxInteractions;
+		if( arguments.interactionCount >= maxAllowed ){
+			writeLog(
+				text: "Max tool call interactions (#maxAllowed#) exceeded",
+				type: "error",
+				log : "ai"
+			)
+			throw(
+				type   : "MaxInteractionsExceeded",
+				message: "Tool calls exceeded maximum allowed interactions (#maxAllowed#). This may indicate an infinite loop."
+			)
+		}
+
+		/**
+		 * ---------------------------------------------------------------------------------------------------------
+		 * Tool Chains
+		 * ---------------------------------------------------------------------------------------------------------
+		 */
+
+		// Capture chatRequest in local scope for use in nested closures
+		var thisChatRequest = arguments.chatRequest
+		var newMessages = arguments.chatRequest.getMessages().map( message -> message )
+		result.choices.each( ( choice, index ) => {
+			var targetChatRequest = thisChatRequest
+			// add the tool call into our message history
+			newMessages.append( choice.message )
+			// find the tool, invoke it, append the result to the chat history
+			choice.message.tool_calls.each( ( toolCall, i ) => {
+				var toolAttempt = thisChatRequest.getTool( toolCall.function.name )
+				if( toolAttempt.isPresent() ){
+					var tool = toolAttempt.get();
+
+					// -------------------------------------------------------------------------------------------
+					// --- Fire Tool MiddleWare ---
+					// -------------------------------------------------------------------------------------------
+					var toolContext     = { tool: tool, toolCall: toolCall, chatRequest: targetChatRequest }
+					var toolBeforeResult = targetChatRequest.fireMiddleware( "beforeToolCall", toolContext )
+
+					// Suspend: return so the agent can checkpoint and pause
+					if ( toolBeforeResult.isSuspended() ) {
+						newMessages.append( {
+							"role"        : "tool",
+							"tool_call_id": toolCall.id,
+							"content"     : "[Suspended: awaiting human approval]"
+						} )
+						targetChatRequest.setMessages( newMessages )
+						return toolBeforeResult
+					}
+
+					// Cancel/Reject: skip the tool call but continue the chain, appending the reason to the chat history
+					if ( toolBeforeResult.isCancelled() || toolBeforeResult.isRejected() ) {
+						newMessages.append( {
+							"role"        : "tool",
+							"tool_call_id": toolCall.id,
+							"content"     : "[Tool call blocked: #toolBeforeResult.getReason()#]"
+						} )
+						return toolBeforeResult
+					}
+
+					// -------------------------------------------------------------------------------------------
+					// --- Invoke the Tool Middleware + Tooling ---
+					// -------------------------------------------------------------------------------------------
+					var capturedTool         = tool
+					var capturedToolCallArgs = toolCall.function.arguments
+					var toolResult = targetChatRequest.fireWrapMiddleware(
+						"wrapToolCall",
+						toolContext,
+						() => capturedTool.invoke( JSONDeserialize( capturedToolCallArgs ), targetChatRequest )
+					)
+
+					// -------------------------------------------------------------------------------------------
+					// --- Fire afterToolCall Middleware ---
+					// -------------------------------------------------------------------------------------------
+					targetChatRequest.fireMiddleware(
+						hook   : "afterToolCall",
+						context: { tool: tool, toolCall: toolCall, chatRequest: targetChatRequest, result: toolResult },
+						reverse: true
+					)
+
+					// Append the tool result to the messages for the next iteration of the chat loop
+					newMessages.append({
+						"role"        : "tool",
+						"tool_call_id": toolCall.id,
+						"content"     : toolResult
+					})
+				}
+				// -------------------------------------------------------------------------------------------
+				// --- Tool Not Found ---
+				// -------------------------------------------------------------------------------------------
+				else {
+					writeLog(
+						text: "Unable to find tool named: #toolCall.function.name#",
+						type: "warning",
+						log : "ai"
+					)
+					newMessages.append({
+						"role"        : "tool",
+						"tool_call_id": toolCall.id,
+						"content"     : "Tool ['#toolCall.function.name#'] not found in chat request"
+					})
+				}
+			});
+		});
+
+		arguments.chatRequest.setMessages( newMessages )
+		return chat( arguments.chatRequest, arguments.interactionCount + 1 )
+	}
+
+	/**
+	 * Stream a chat request using the OpenAI SSE streaming format.
+	 * Handles tool calling in streams and all middleware hooks.
+	 *
+	 * @chatRequest The chatRequest object to send to the provider
+	 * @callback A callback function to be called with each chunk of the stream: function( chunk )
+	 * @interactionCount Current tool call interaction count (used internally), default is 0
+	 *
+	 * @throws ProviderError if the provider returns an error from the request
+	 *
+	 * @return void
+	 */
+	@override
+	public function chatStream( required AiChatRequest chatRequest, required function callback, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest
+			.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+			// Model Selection if not set, use the default in the service, which should always be set
+			.setModelIfEmpty( variables.params.model ?: "" )
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceParams( variables.params )
+			.mergeServiceHeaders( variables.headers )
+			.setStream( true )
+
+		// Build the packet according to the OpenAI standard
+		var dataPacket = {
+			"model"   : arguments.chatRequest.getModel(),
+			"messages": arguments.chatRequest.getMessages(),
+			"stream"  : true
+		}.append( arguments.chatRequest.getParams() )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Request usage data in stream response ---
+		// -------------------------------------------------------------------------------------------
+		if( !dataPacket.keyExists( "stream_options" ) ){
+			dataPacket[ "stream_options" ] = { "include_usage": true };
+		} else if( isStruct( dataPacket.stream_options ) && !dataPacket.stream_options.keyExists( "include_usage" ) ){
+			dataPacket.stream_options[ "include_usage" ] = true;
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Tooling Detection ---
+		// -------------------------------------------------------------------------------------------
+		if( dataPacket.keyExists( "tools" ) ){
+			dataPacket.tools = dataPacket.tools.map( .getSchema )
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire local callback for pre mods ---
+		// -------------------------------------------------------------------------------------------
+		dataPacket = preRequest( arguments.chatRequest, dataPacket, "stream" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire beforeLLMCall middleware ---
+		// -------------------------------------------------------------------------------------------
+		var streamLlmCtx   = { chatRequest: arguments.chatRequest, dataPacket: dataPacket };
+		var streamLlmBefore = arguments.chatRequest.fireMiddleware( "beforeLLMCall", streamLlmCtx );
+		if ( streamLlmBefore.isTerminal() ) {
+			// Emit a single sentinel chunk so callers know the stream was stopped
+			arguments.callback( { type: "middleware_stop", result: streamLlmBefore } )
+			return
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Stream the chat response, with streaming tool call support ---
+		// -------------------------------------------------------------------------------------------
+		var streamState = sendStreamRequest( arguments.chatRequest, dataPacket, arguments.callback )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire local callback for post mods ---
+		// -------------------------------------------------------------------------------------------
+		streamState = postResponse( arguments.chatRequest, dataPacket, streamState, "stream" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Usage Event Announcement (Streaming) ---
+		// -------------------------------------------------------------------------------------------
+		if( !structIsEmpty( streamState.usage ) ){
+			var streamTotalTokens = streamState.usage.keyExists( "total_tokens" ) ? streamState.usage.total_tokens : 0;
+			if( streamTotalTokens > 0 ){
+				BoxAnnounce( "onAITokenCount", {
+					provider         : this,
+					operation        : "stream",
+					model            : arguments.chatRequest.getModel(),
+					promptTokens     : streamState.usage.keyExists( "prompt_tokens" )     ? streamState.usage.prompt_tokens     : 0,
+					completionTokens : streamState.usage.keyExists( "completion_tokens" ) ? streamState.usage.completion_tokens : 0,
+					totalTokens      : streamTotalTokens,
+					aiRequest        : arguments.chatRequest,
+					usage            : streamState.usage,
+					timestamp        : now()
+				} )
+			}
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire afterLLMCall middleware, in reverse order ---
+		// -------------------------------------------------------------------------------------------
+		arguments.chatRequest.fireMiddleware(
+			hook   : "afterLLMCall",
+			context: { chatRequest: arguments.chatRequest, streamState: streamState },
+			reverse: true
+		)
+
+		// If no tool calls were requested, we are done
+		if( !streamState.toolCalls.len() ){
+			return;
+		}
+
+		/**
+		 * ---------------------------------------------------------------------------------------------------------
+		 * Max Interactions Check
+		 * ---------------------------------------------------------------------------------------------------------
+		 */
+		var maxAllowed = arguments.chatRequest.getMaxInteractions() > 0 ? arguments.chatRequest.getMaxInteractions() : variables.maxInteractions;
+		if( arguments.interactionCount >= maxAllowed ){
+			writeLog(
+				text: "Max tool call interactions (#maxAllowed#) exceeded during streaming",
+				type: "error",
+				log : "ai"
+			)
+			throw(
+				type   : "MaxInteractionsExceeded",
+				message: "Tool calls exceeded maximum allowed interactions (#maxAllowed#) during streaming. This may indicate an infinite loop."
+			)
+		}
+
+		/**
+		 * ---------------------------------------------------------------------------------------------------------
+		 * Tool Chains (Streaming)
+		 * ---------------------------------------------------------------------------------------------------------
+		 */
+		var newMessages      = arguments.chatRequest.getMessages().map( message -> message )
+		var assistantMessage = {
+			"role"   : "assistant",
+			"content": streamState.content
+		};
+		assistantMessage.tool_calls = streamState.toolCalls
+		newMessages.append( assistantMessage )
+
+		var thisChatRequest = arguments.chatRequest
+		var thisCallback    = arguments.callback
+		streamState.toolCalls.each( toolCall => {
+			var targetChatRequest = thisChatRequest
+			var toolAttempt       = thisChatRequest.getTool( toolCall.function.name ?: "" )
+			var toolArguments     = {}
+
+			try {
+				toolArguments = JSONDeserialize( toolCall.function.arguments ?: "{}" )
+			} catch( any e ){
+				writeLog(
+					text: "Unable to deserialize tool call arguments for '#toolCall.function.name ?: "unknown"#': #e.message#",
+					type: "warning",
+					log : "ai"
+				)
+			}
+
+			if( toolAttempt.isPresent() ){
+				var tool = toolAttempt.get();
+
+				// -------------------------------------------------------------------------------------------
+				// --- Fire Before Tool MiddleWare ---
+				// -------------------------------------------------------------------------------------------
+				var streamToolCtx         = { tool: tool, toolCall: toolCall, chatRequest: targetChatRequest };
+				var streamToolBeforeResult = targetChatRequest.fireMiddleware( "beforeToolCall", streamToolCtx );
+				if ( streamToolBeforeResult.isSuspended() ) {
+					newMessages.append( {
+						"role"        : "tool",
+						"tool_call_id": toolCall.id ?: "",
+						"content"     : "[Suspended: awaiting human approval]"
+					} );
+					targetChatRequest.setMessages( newMessages );
+					return;
+				}
+
+				// If the tool call was cancelled or rejected by middleware, skip invoking the tool
+				if ( streamToolBeforeResult.isCancelled() || streamToolBeforeResult.isRejected() ) {
+					newMessages.append( {
+						"role"        : "tool",
+						"tool_call_id": toolCall.id ?: "",
+						"content"     : "[Tool call blocked: #streamToolBeforeResult.getReason()#]"
+					} );
+					return;
+				}
+
+				// -------------------------------------------------------------------------------------------
+				// --- Invoke the Tool, wrapped in wrapToolCall middleware ---
+				// -------------------------------------------------------------------------------------------
+				var capturedStreamTool        = tool;
+				var capturedStreamToolArgs    = toolArguments;
+				var capturedStreamChatRequest = targetChatRequest;
+				var streamToolResult = targetChatRequest.fireWrapMiddleware(
+					"wrapToolCall",
+					streamToolCtx,
+					() => capturedStreamTool.invoke( capturedStreamToolArgs, capturedStreamChatRequest )
+				);
+
+				// -------------------------------------------------------------------------------------------
+				// --- Fire afterToolCall Middleware ---
+				// -------------------------------------------------------------------------------------------
+				targetChatRequest.fireMiddleware(
+					hook   : "afterToolCall",
+					context: { tool: tool, toolCall: toolCall, chatRequest: targetChatRequest, result: streamToolResult },
+					reverse: true
+				);
+
+				newMessages.append({
+					"role"        : "tool",
+					"tool_call_id": toolCall.id ?: "",
+					"content"     : streamToolResult
+				});
+			}
+			// -------------------------------------------------------------------------------------------
+			// --- Tool Not Found ---
+			// -------------------------------------------------------------------------------------------
+			else {
+				writeLog(
+					text: "Unable to find tool named during streaming: #toolCall.function.name ?: "unknown"#",
+					type: "warning",
+					log : "ai"
+				)
+				newMessages.append({
+					"role"        : "tool",
+					"tool_call_id": toolCall.id ?: "",
+					"content"     : "Tool ['#toolCall.function.name ?: "unknown"#'] not found in chat request"
+				})
+			}
+		} );
+
+		// Continue streaming the final answer after tool execution
+		thisChatRequest.setMessages( newMessages );
+		chatStream( thisChatRequest, thisCallback, arguments.interactionCount + 1 );
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiEmbeddingsService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Generate embeddings for the given input text(s) using the OpenAI embeddings API.
+	 *
+	 * @embeddingRequest The embedding request object
+	 *
+	 * @throws ProviderError if the provider returns an error from the request
+	 *
+	 * @return The embeddings response from the provider
+	 */
+	@override
+	public function embeddings( required AiEmbeddingRequest embeddingRequest ){
+		// Seed OpenAI defaults first, then service-level params may override
+		arguments.embeddingRequest.mergeServiceParams( static.DEFAULT_EMBED_PARAMS )
+
+		// Model selection: apply service params and headers
+		arguments.embeddingRequest
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceParams( variables.params )
+			.mergeServiceHeaders( variables.headers )
+
+		// Build the packet according to the OpenAI embeddings API standard
+		var dataPacket = {
+			"input": arguments.embeddingRequest.getInput(),
+			"model": arguments.embeddingRequest.getModel()
+		}.append( arguments.embeddingRequest.getParams() )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire local callback for pre mods ---
+		// -------------------------------------------------------------------------------------------
+		dataPacket = preRequest( arguments.embeddingRequest, dataPacket, "embeddings" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Embedding Request ---
+		// -------------------------------------------------------------------------------------------
+		var result = sendEmbeddingRequest( embeddingRequest, dataPacket )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire local callback for post mods ---
+		// -------------------------------------------------------------------------------------------
+		result = postResponse( arguments.embeddingRequest, dataPacket, result, "embeddings" )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Error Detection ---
+		// -------------------------------------------------------------------------------------------
+		if( result.keyExists( "error" ) ){
+			writeLog(
+				text: result.error.toString(),
+				type: "error",
+				log : "ai"
+			)
+
+			// Announce the error
+			BoxAnnounce( "onAIError", {
+				error            : result.error,
+				errorMessage     : result.error.toString(),
+				provider         : this,
+				operation        : "embeddings",
+				embeddingRequest : arguments.embeddingRequest,
+				canRetry         : true
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: result.error.toString()
+			)
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Error Detection: Invalid Response Shape ---
+		// -------------------------------------------------------------------------------------------
+		if( !result.keyExists( "data" ) ){
+			writeLog(
+				text: "Invalid embedding response: #result.toString()#",
+				type: "error",
+				log : "ai"
+			)
+
+			// Announce the error
+			BoxAnnounce( "onAIError", {
+				error            : "Invalid embedding response",
+				errorMessage     : "Invalid embedding response from provider. Response: #result.toString()#",
+				provider         : this,
+				operation        : "embeddings",
+				embeddingRequest : arguments.embeddingRequest,
+				canRetry         : false
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: "Invalid embedding response from provider. Response: #result.toString()#"
+			)
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Return Format Handling ---
+		// -------------------------------------------------------------------------------------------
+		switch( embeddingRequest.getReturnFormat() ){
+			case "embeddings":
+				return result.data.map( item => item.embedding )
+			case "raw":
+				return result
+			case "first": default:
+				return result.data.first().embedding
+		}
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiSpeechService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Convert text to speech using the OpenAI TTS API.
+	 * Returns an AiSpeechResponse containing the binary audio data.
+	 *
+	 * @speechRequest The AiSpeechRequest object
+	 *
+	 * @throws ProviderError if the provider returns an error
+	 *
+	 * @return AiSpeechResponse
+	 */
+	@override
+	public AiSpeechResponse function speak( required AiSpeechRequest speechRequest ){
+		return sendSpeechRequest( arguments.speechRequest, variables.speechURL );
+	}
+
+	/**
+	 * Internal helper — executes a TTS request against the given target URL.
+	 * Subclasses can override the URL (e.g. a custom speech endpoint) by calling
+	 * this method directly with a different targetURL.
+	 *
+	 * @speechRequest The AiSpeechRequest to send
+	 * @targetURL     The full URL to POST the TTS request to
+	 *
+	 * @return AiSpeechResponse
+	 */
+	private AiSpeechResponse function sendSpeechRequest(
+		required AiSpeechRequest speechRequest,
+		required string targetURL
+	){
+		// Seed defaults — use only speech-specific defaults; do NOT merge variables.params
+		// (those are chat-tier params and must not bleed across modalities).
+		arguments.speechRequest
+			.mergeServiceParams( static.DEFAULT_SPEECH_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceHeaders( variables.headers )
+
+		// Build data packet
+		var dataPacket = {
+			"model" : arguments.speechRequest.getModel(),
+			"input" : arguments.speechRequest.getText(),
+			"voice" : arguments.speechRequest.hasVoice() ? arguments.speechRequest.getVoice() : static.DEFAULT_SPEECH_PARAMS.voice
+		}
+
+		// Optional params
+		if ( arguments.speechRequest.getSpeed() != 1.0 ) {
+			dataPacket.speed = arguments.speechRequest.getSpeed()
+		}
+		if ( arguments.speechRequest.getOutputFormat().len() && arguments.speechRequest.getOutputFormat() != "mp3" ) {
+			dataPacket.response_format = arguments.speechRequest.getOutputFormat()
+		}
+		// Style/tone instructions — e.g. "Speak like a pirate". Requires gpt-4o-mini-tts or a compatible model.
+		if ( arguments.speechRequest.getInstructions().len() ) {
+			dataPacket.instructions = arguments.speechRequest.getInstructions()
+		}
+
+		// Merge remaining provider params
+		dataPacket.append( arguments.speechRequest.getParams() )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Pre Callback ---
+		// -------------------------------------------------------------------------------------------
+		// Allow concrete providers to normalize the request packet before sending
+		dataPacket = preRequest( arguments.speechRequest, dataPacket, "speech" )
+
+		// Fire onAISpeakRequest announcement
+		BoxAnnounce( "onAISpeakRequest", {
+			provider   : this,
+			operation  : "speech",
+			aiRequest  : arguments.speechRequest,
+			dataPacket : dataPacket
+		} )
+
+		// Logging
+		if ( arguments.speechRequest.getLogRequest() ) {
+			writeLog( text: "aiSpeak request to #arguments.targetURL#: #jsonSerialize( dataPacket )#", type: "info", log: "ai" )
+		}
+		if ( arguments.speechRequest.getLogRequestToConsole() ) {
+			println( "aiSpeak request to #arguments.targetURL#: #jsonSerialize( dataPacket )#" )
+		}
+
+		// HTTP call — response is binary audio
+		bx: http
+			url     = arguments.targetURL
+			method  = "post"
+			result  = "speechResult"
+			charset = "utf-8"
+			timeout = arguments.speechRequest.getTimeout()
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+
+			if( arguments.speechRequest.getSendAuthHeader() ){
+				bx:httpParam type="header" name="Authorization" value="Bearer #arguments.speechRequest.getApiKey()#";
+			}
+
+			// Custom headers from the request
+			for ( var thisHeader in arguments.speechRequest.getHeaders() ) {
+				bx:httpParam
+					type  = "header"
+					name  = "#thisHeader#"
+					value = "#arguments.speechRequest.getHeaders()[ thisHeader ]#";
+			}
+
+			bx:httpParam type="body" value=jsonSerialize( dataPacket );
+		}
+
+		// Error detection
+		if ( speechResult.statusCode != "200" ) {
+			var errorMessage = speechResult.fileContent
+			try {
+				var errorData = jsonDeserialize( speechResult.fileContent )
+				errorMessage  = errorData.error?.message ?: errorData.toString()
+			} catch ( any parseEx ) {
+				writeLog(
+					text: "Unable to parse speech error response: #speechResult.toString()#",
+					type: "warning",
+					log : "ai"
+				)
+			}
+
+			BoxAnnounce( "onAIError", {
+				error       : errorMessage,
+				errorMessage: errorMessage,
+				provider    : this,
+				operation   : "speech",
+				aiRequest   : arguments.speechRequest,
+				canRetry    : false
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: "HTTP Provider (#arguments.targetURL#) Error: #errorMessage#",
+				detail : CallStackGet().toString()
+			)
+		}
+
+		// Logging
+		if ( arguments.speechRequest.getLogResponse() ) {
+			writeLog( text: "aiSpeak response status=#speechResult.statusCode# size=#speechResult.fileContent.len()# bytes", type: "info", log: "ai" )
+		}
+		if ( arguments.speechRequest.getLogResponseToConsole() ) {
+			println( "aiSpeak response status=#speechResult.statusCode# size=#speechResult.fileContent.len()# bytes" )
+		}
+
+		// Construct response
+		var results = new AiSpeechResponse(
+			audioData   : speechResult.fileContent,
+			audioFormat : arguments.speechRequest.getOutputFormat(),
+			model       : arguments.speechRequest.getModel(),
+			provider    : variables.name
+		)
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Post Callback ---
+		// -------------------------------------------------------------------------------------------
+		results = postResponse( arguments.speechRequest, dataPacket, results, "speech" )
+
+		BoxAnnounce( "onAISpeakResponse", {
+			provider   : this,
+			operation  : "speech",
+			aiRequest  : arguments.speechRequest,
+			aiResponse : results
+		} )
+
+		return results
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiTranscriptionService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Transcribe audio to text using the OpenAI Whisper API.
+	 *
+	 * @transcriptionRequest The AiTranscriptionRequest object
+	 *
+	 * @throws ProviderError if the provider returns an error
+	 *
+	 * @return AiTranscriptionResponse
+	 */
+	@override
+	public AiTranscriptionResponse function transcribe( required AiTranscriptionRequest transcriptionRequest ){
+		return sendTranscriptionRequest( arguments.transcriptionRequest, variables.transcribeURL );
+	}
+
+	/**
+	 * Translate audio from any language to English text using the OpenAI Whisper translations API.
+	 *
+	 * @transcriptionRequest The AiTranscriptionRequest object
+	 *
+	 * @throws ProviderError if the provider returns an error
+	 *
+	 * @return AiTranscriptionResponse
+	 */
+	@override
+	public AiTranscriptionResponse function translate( required AiTranscriptionRequest transcriptionRequest ){
+		return sendTranscriptionRequest( arguments.transcriptionRequest, variables.translateURL );
+	}
+
+	/**
+	 * Shared helper for transcribe() and translate().
+	 * Sends a multipart/form-data request to the Whisper API endpoint.
+	 *
+	 * @transcriptionRequest The AiTranscriptionRequest
+	 * @targetURL            The endpoint URL (transcriptions or translations)
+	 *
+	 * @return AiTranscriptionResponse
+	 */
+	private AiTranscriptionResponse function sendTranscriptionRequest(
+		required AiTranscriptionRequest transcriptionRequest,
+		required string targetURL
+	){
+		// Seed defaults — use only transcription-specific defaults; do NOT merge variables.params
+		// (those are chat-tier params and must not bleed across modalities).
+		arguments.transcriptionRequest
+			.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceHeaders( variables.headers )
+
+		// Build a virtual data packet for the pre/post hooks (multipart fields represented as a struct)
+		var dataPacket = {
+			"model"          : arguments.transcriptionRequest.getModel(),
+			"response_format": arguments.transcriptionRequest.getResponseFormat(),
+			"language"       : arguments.transcriptionRequest.getLanguage()
+		}
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Pre Callback ---
+		// -------------------------------------------------------------------------------------------
+		// Allow concrete providers to normalize the request before sending
+		dataPacket = preRequest( arguments.transcriptionRequest, dataPacket, "transcription" )
+
+		// Logging
+		if ( arguments.transcriptionRequest.getLogRequest() ) {
+			writeLog(
+				text: "aiTranscribe request to #arguments.targetURL# model=#arguments.transcriptionRequest.getModel()#",
+				type: "info",
+				log: "ai"
+			)
+		}
+		if ( arguments.transcriptionRequest.getLogRequestToConsole() ) {
+			println( "aiTranscribe request to #arguments.targetURL# model=#arguments.transcriptionRequest.getModel()#" )
+		}
+
+		// HTTP multipart/form-data request
+		bx: http
+			url     = arguments.targetURL
+			method  = "post"
+			result  = "transcribeResult"
+			charset = "utf-8"
+			timeout = arguments.transcriptionRequest.getTimeout()
+		{
+
+			// Auth Header ONLY if the provider requires it
+			// This is the default for OpenAI
+			// If the provider does not require it, set it to false
+			if( arguments.transcriptionRequest.getSendAuthHeader() ){
+				bx:httpParam type="header" name="Authorization" value="Bearer #arguments.transcriptionRequest.getApiKey()#";
+			}
+
+			// Custom Headers from the request
+			for ( var thisHeader in arguments.transcriptionRequest.getHeaders() ) {
+				bx:httpParam
+					type  = "header"
+					name  = "#thisHeader#"
+					value = "#arguments.transcriptionRequest.getHeaders()[ thisHeader ]#";
+			}
+
+			// Model (required form field)
+			bx:httpParam type="formfield" name="model" value="#arguments.transcriptionRequest.getModel()#";
+
+			// Optional language
+			if ( arguments.transcriptionRequest.getLanguage().len() ) {
+				bx:httpParam type="formfield" name="language" value="#arguments.transcriptionRequest.getLanguage()#";
+			}
+
+			// Response format
+			bx:httpParam type="formfield" name="response_format" value="#arguments.transcriptionRequest.getResponseFormat()#";
+
+			// Timestamp granularities
+			if ( arguments.transcriptionRequest.getTimestamps().len() ) {
+				bx:httpParam type="formfield" name="timestamp_granularities[]" value="#arguments.transcriptionRequest.getTimestamps().toList()#";
+			}
+
+			// Audio file upload
+			if ( arguments.transcriptionRequest.getAudioFile().len() ) {
+				bx:httpParam
+					type     = "file"
+					name     = "file"
+					file     = "#arguments.transcriptionRequest.getAudioFile()#";
+			} else if ( !isSimpleValue( arguments.transcriptionRequest.getAudioData() ) || arguments.transcriptionRequest.getAudioData().len() ) {
+				// Binary data — write to a temp file with the correct extension so the provider
+				// can identify the codec. Use options.format / params.inputFormat if supplied
+				// (seeded by the BIF from audio.defaultOutputFormat), otherwise fall back to "mp3".
+				var audioExtension = len( arguments.transcriptionRequest.getInputFormat() ) ? arguments.transcriptionRequest.getInputFormat() : "mp3"
+				var tempFile = getTempDirectory() & "bxai_audio_" & createUUID() & "." & audioExtension
+				fileWrite( tempFile, arguments.transcriptionRequest.getAudioData() )
+				bx:httpParam
+					type = "file"
+					name = "file"
+					file = "#tempFile#";
+			}
+		}
+
+		// Error detection
+		if ( transcribeResult.statusCode != "200" ) {
+			var errorDetail = transcribeResult.errorDetail
+			var errorMessage = transcribeResult?.fileContent ?: "Unknown error";
+			try {
+				var errorData  = jsonDeserialize( transcribeResult.fileContent );
+				errorMessage   = errorData.error?.message ?: errorData.toString();
+			} catch ( any parseEx ) {
+				writeLog(
+					text: "Unable to parse transcription error response: #transcribeResult.toString()#",
+					type: "warning",
+					log : "ai"
+				)
+			}
+
+			BoxAnnounce( "onAIError", {
+				error       : errorMessage,
+				errorMessage: errorMessage,
+				errorDetail : errorDetail,
+				provider    : this,
+				operation   : "transcription",
+				aiRequest   : arguments.transcriptionRequest,
+				canRetry    : false
+			} );
+
+			throw(
+				type: "ProviderError",
+				message: "HTTP Target Url (#arguments.targetUrl#) Error: #errorMessage# #errorDetail#",
+				detail: CallStackGet().toString()
+			)
+		}
+
+		// Parse response
+		var responseFormat = arguments.transcriptionRequest.getResponseFormat();
+		if ( responseFormat == "text" || responseFormat == "srt" || responseFormat == "vtt" ) {
+			// Plain text / subtitle format
+			var transcriptionResponse = new AiTranscriptionResponse(
+				text     : transcribeResult.fileContent,
+				model    : arguments.transcriptionRequest.getModel(),
+				provider : variables.name
+			)
+			return postResponse( arguments.transcriptionRequest, dataPacket, transcriptionResponse, "transcription" )
+		}
+
+		// JSON / verbose_json
+		try {
+			var parsedResponse = jsonDeserialize( transcribeResult.fileContent )
+		} catch ( any parseEx ) {
+			throw( type: "ProviderError", message: "Failed to parse transcription response: #transcribeResult.fileContent#" )
+		}
+
+		// Logging
+		if ( arguments.transcriptionRequest.getLogResponse() ) {
+			writeLog( text: "aiTranscribe response: #transcribeResult.fileContent#", type: "info", log: "ai" )
+		}
+		if ( arguments.transcriptionRequest.getLogResponseToConsole() ) {
+			println( "aiTranscribe response: #transcribeResult.fileContent#" )
+		}
+
+		var transcriptionResponse = new AiTranscriptionResponse(
+			text     : parsedResponse.text ?: "",
+			segments : parsedResponse.segments ?: [],
+			words    : parsedResponse.words ?: [],
+			language : parsedResponse.language ?: "",
+			duration : parsedResponse.duration ?: 0,
+			model    : arguments.transcriptionRequest.getModel(),
+			provider : variables.name
+		)
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Post Callback ---
+		// -------------------------------------------------------------------------------------------
+		// Allow concrete providers to normalize the response before returning
+		return postResponse( arguments.transcriptionRequest, dataPacket, transcriptionResponse, "transcription" )
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiImageService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Generate one or more images from a text prompt using the OpenAI Images API.
+	 * Supports DALL-E 2 and DALL-E 3 models.
+	 *
+	 * @imageRequest The AiImageRequest object
+	 *
+	 * @throws ProviderError if the provider returns an error
+	 *
+	 * @return AiImageResponse
+	 */
+	@override
+	public AiImageResponse function generateImage( required AiImageRequest imageRequest ){
+		return sendImageRequest( arguments.imageRequest, variables.imageURL );
+	}
+
+	/**
+	 * Internal helper — executes an image generation request against the given target URL.
+	 * Subclasses can call this directly with a different imageURL (e.g. Grok, OpenRouter).
+	 *
+	 * @imageRequest The AiImageRequest to send
+	 * @targetURL    The full URL to POST the image generation request to
+	 *
+	 * @return AiImageResponse
+	 */
+	public AiImageResponse function sendImageRequest(
+		required AiImageRequest imageRequest,
+		required string targetURL
+	){
+		// Seed defaults — use only image-specific defaults; do NOT merge variables.params
+		// (those are chat-tier params and must not bleed across modalities).
+		arguments.imageRequest
+			.mergeServiceParams( static.DEFAULT_IMAGE_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() )
+			.mergeServiceHeaders( variables.headers )
+
+		// Build data packet — append instructions to the prompt when set
+		// (OpenAI Images API has no separate instructions field; the prompt carries everything)
+		var effectivePrompt = arguments.imageRequest.getPrompt()
+		if ( arguments.imageRequest.getInstructions().len() ) {
+			effectivePrompt &= " " & arguments.imageRequest.getInstructions()
+		}
+
+		var dataPacket = {
+			"model"  : arguments.imageRequest.getModel(),
+			"prompt" : effectivePrompt,
+			"n"      : arguments.imageRequest.getN(),
+			"size"   : arguments.imageRequest.getSize()
+		}
+
+		// Optional params
+		if ( arguments.imageRequest.getQuality().len() && arguments.imageRequest.getQuality() != "auto" ) {
+			dataPacket.quality = arguments.imageRequest.getQuality()
+		}
+		if ( arguments.imageRequest.getFormat().len() && arguments.imageRequest.getFormat() != "png" ) {
+			dataPacket.output_format = arguments.imageRequest.getFormat()
+		}
+
+		// Merge remaining provider params
+		dataPacket.append( arguments.imageRequest.getParams(), false )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Pre Callback ---
+		// -------------------------------------------------------------------------------------------
+		dataPacket = preRequest( arguments.imageRequest, dataPacket, "image" )
+
+		// Fire onAIImageRequest announcement
+		BoxAnnounce( "onAIImageRequest", {
+			provider   : this,
+			operation  : "image",
+			aiRequest  : arguments.imageRequest,
+			dataPacket : dataPacket
+		} )
+
+		// Logging
+		if ( arguments.imageRequest.getLogRequest() ) {
+			writeLog( text: "aiImage request to #arguments.targetURL#: #jsonSerialize( dataPacket )#", type: "info", log: "ai" )
+		}
+		if ( arguments.imageRequest.getLogRequestToConsole() ) {
+			println( "aiImage request to #arguments.targetURL#: #jsonSerialize( dataPacket )#" )
+		}
+
+		// HTTP call
+		bx: http
+			url     = arguments.targetURL
+			method  = "post"
+			result  = "imageResult"
+			charset = "utf-8"
+			timeout = arguments.imageRequest.getTimeout()
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+
+			if ( arguments.imageRequest.getSendAuthHeader() ) {
+				bx:httpParam type="header" name="Authorization" value="Bearer #arguments.imageRequest.getApiKey()#";
+			}
+
+			// Custom headers from the request
+			for ( var thisHeader in arguments.imageRequest.getHeaders() ) {
+				bx:httpParam
+					type  = "header"
+					name  = "#thisHeader#"
+					value = "#arguments.imageRequest.getHeaders()[ thisHeader ]#";
+			}
+
+			bx:httpParam type="body" value=jsonSerialize( dataPacket );
+		}
+
+		// Error detection
+		if ( imageResult.statusCode != "200" ) {
+			var errorMessage = imageResult.fileContent
+			try {
+				var errorData = jsonDeserialize( imageResult.fileContent )
+				errorMessage  = errorData.error?.message ?: errorData.toString()
+			} catch ( any parseEx ) {
+				writeLog(
+					text: "Unable to parse image generation error response: #imageResult.errorDetail#",
+					type: "warning",
+					log : "ai"
+				)
+			}
+
+			BoxAnnounce( "onAIError", {
+				error        : errorMessage,
+				errorMessage : errorMessage,
+				provider     : this,
+				operation    : "image",
+				aiRequest    : arguments.imageRequest,
+				canRetry     : false
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: "HTTP Provider (#arguments.targetURL#) Error: #errorMessage#",
+				detail : CallStackGet().toString()
+			)
+		}
+
+		// Parse response
+		var parsedResponse = jsonDeserialize( imageResult.fileContent )
+		var rawImages      = parsedResponse.data ?: []
+		var requestedFormat = arguments.imageRequest.getFormat().lCase()
+		var requestedMimeType = requestedFormat == "jpeg" || requestedFormat == "jpg"
+			? "image/jpeg"
+			: ( requestedFormat == "webp" ? "image/webp" : "image/png" )
+		var images         = rawImages.map( img => {
+			var entry = {
+				url           : img.url ?: "",
+				data          : img.keyExists( "b64_json" ) && len( img.b64_json ) ? toBinary( img.b64_json ) : javaCast( "null", "" ),
+				mimeType      : requestedMimeType,
+				revisedPrompt : img.revised_prompt ?: ""
+			}
+			return entry
+		} )
+
+		// Logging
+		if ( arguments.imageRequest.getLogResponse() ) {
+			writeLog( text: "aiImage response status=#imageResult.statusCode# images=#images.len()#", type: "info", log: "ai" )
+		}
+		if ( arguments.imageRequest.getLogResponseToConsole() ) {
+			println( "aiImage response status=#imageResult.statusCode# images=#images.len()#" )
+		}
+
+		// Construct response
+		var results = new AiImageResponse(
+			images      : images,
+			imageFormat : arguments.imageRequest.getFormat(),
+			model       : arguments.imageRequest.getModel(),
+			provider    : variables.name
+		)
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire Localized Post Callback ---
+		// -------------------------------------------------------------------------------------------
+		results = postResponse( arguments.imageRequest, dataPacket, results, "image" )
+
+		BoxAnnounce( "onAIImageResponse", {
+			provider   : this,
+			operation  : "image",
+			aiRequest  : arguments.imageRequest,
+			aiResponse : results
+		} )
+
+		return results
+	}
+
+}

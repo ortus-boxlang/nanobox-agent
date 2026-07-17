@@ -4,9 +4,9 @@ import nanobox_cli.CommandDispatcher
 
 class {
 	function main( array args = [] ) {
-		var cli = new "nanobox-cli.PrettyCli"( false )
-		var config = new "nanobox-cli.util.ConfigManager"( getTempDirectory() & "/nanobox-dispatch-test-#createUUID()#" )
-		var dispatcher = new "nanobox-cli.CommandDispatcher"( cli, config, true )
+		var cli = new "cli.PrettyCli"( false )
+		var config = new "cli.util.ConfigManager"( getTempDirectory() & "/nanobox-dispatch-test-#createUUID()#" )
+		var dispatcher = new "cli.CommandDispatcher"( cli, config, true )
 		var result = dispatcher.dispatch( { positionals: [ "model" ], options: {} } )
 		if ( result != "ModelCommand" ) { throw( "model should dispatch to ModelCommand" ) }
 		if ( !dispatcher.isDebug() ) { throw( "debug should be propagated" ) }

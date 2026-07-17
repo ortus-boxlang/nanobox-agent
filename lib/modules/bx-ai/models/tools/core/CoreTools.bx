@@ -1,0 +1,134 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Core built-in tools for bxai.
+ *
+ * Auto-registered tools (registered in ModuleConfig.onLoad):
+ *   now@bxai  — Returns current date/time in ISO 8601 format.
+ *
+ * Opt-in tools (NOT auto-registered — security risk, can reach internal network):
+ *   httpGet    — Fetches the body of a URL via HTTP GET.
+ *                Register manually if needed:
+ *                  aiToolRegistry().register( name: "httpGet", description: "...", callback: new CoreTools().httpGet )
+ */
+class {
+
+	/**
+	 * Print a message to the console. Useful for debugging.
+	 * Auto-registered as print@bxai on module load.
+	 */
+	@AITool( "Prints a message to the console. Use this for debugging or to output information you want the user to see." )
+	public void function print( string message ) {
+		println( arguments.message );
+	}
+
+	/**
+	 * Send a message to the AI log file. Useful for debugging or keeping a record of interactions.
+	 * Auto-registered as log@bxai on module load.
+	 * Note: log files can be found in the "logs" directory of your Box installation, typically named "ai.log".
+	 *
+	 * @message The message to log
+	 * @type    The log level/type (e.g., "info", "warning", "error"). Default is "info".
+	 */
+	@AITool( "Sends a message to the AI log file. Use this to keep a record of interactions or for debugging purposes." )
+	public void function log( string message, string type = "info" ) {
+		writeLog(
+			text: arguments.message,
+			type: arguments.type,
+			log: "ai"
+		)
+	}
+
+	/**
+	 * Send an email using the server's mail configuration. Useful for notifications or alerts.
+	 * Auto-registered as sendEmail@bxai on module load.
+	 * Note: This function relies on the server's mail configuration being properly set up.
+	 * Ensure that your Box server can send emails before using this tool.
+	 *
+	 * https://boxlang.ortusbooks.com/boxlang-framework/modularity/mail
+	 *
+	 * @to      Recipient email address
+	 * @subject The subject of the email
+	 * @body    The body content of the email
+	 * @from    The sender's email address
+	 */
+	@AITool( "Sends an email using the server's mail configuration. Use this to send notifications or alerts." )
+	public void function sendEmail(
+		required string to,
+		required string subject,
+		required string body,
+		required string from
+	) {
+		bx:mail
+			from=arguments.from
+			to=arguments.to
+			subject=arguments.subject
+		{
+			writeoutput( arguments.body )
+		};
+	}
+
+	/**
+	 * Returns the current date and time in ISO 8601 format.
+	 * Auto-registered as now@bxai on module load.
+	 */
+	@AITool( "Returns the current date and time in ISO 8601 format. Use this whenever you need to know the current date or time." )
+	public string function now() {
+		return now().dateTimeFormat( "iso" )
+	}
+
+	/**
+	 * Fetches the body of a URL via HTTP GET.
+	 * NOT auto-registered. Opt in explicitly if your application requires it.
+	 *
+	 * @url     The URL to fetch
+	 * @timeout Timeout in seconds (default: 30)
+	 * @headers Optional JSON string of request headers, e.g. '{"Authorization":"Bearer token"}'
+	 */
+	@AITool( "Fetches the contents of a URL via HTTP GET. Use this to retrieve data from websites or REST APIs." )
+	public string function httpGet(
+		required string url,
+		numeric timeout = 30,
+		string headers  = "{}"
+	) {
+		// Security: only allow http/https schemes
+		var scheme = listFirst( arguments.url, ":" ).lcase();
+		if ( scheme != "http" && scheme != "https" ) {
+			return "httpGet only supports http and https URLs. Got: #scheme#"
+		}
+
+		// Build the request
+		var httpRequest = http( url: arguments.url )
+			.method( "GET" )
+			.timeout( arguments.timeout );
+
+		// Attach any caller-supplied headers
+		var parsedHeaders = jsonDeserialize( arguments.headers );
+		for ( var headerName in parsedHeaders ) {
+			httpRequest.header( headerName, parsedHeaders[ headerName ] );
+		}
+
+		var response = httpRequest.send();
+
+		// Return an error message on HTTP errors instead of throwing,
+		// so the LLM can reason about what went wrong
+		var statusCode = val( listFirst( response.statusCode, " " ) );
+		if ( statusCode >= 400 ) {
+			return "HTTP #statusCode# error for #arguments.url#: #response.fileContent#";
+		}
+
+		return response.fileContent;
+	}
+
+}

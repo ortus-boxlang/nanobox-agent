@@ -1,4 +1,0 @@
-class extends="nanobox-cli.BaseGateway" {
-	function init( struct config = {} ) { super.init( "signal", arguments.config ); return this }
-	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: false, buttons: false, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
-}

@@ -2,7 +2,7 @@ import nanobox_cli.PrettyCli
 
 class {
 	function main( array args = [] ) {
-		var cli = new "nanobox-cli.PrettyCli"( false )
+		var cli = new "cli.PrettyCli"( false )
 		var table = cli.table( [ "Name", "State" ], [ [ "LM Studio", "Ready" ] ] )
 		if ( find( "LM Studio", table ) == 0 ) { throw( "table should contain row" ) }
 		if ( find( "State", table ) == 0 ) { throw( "table should contain header" ) }

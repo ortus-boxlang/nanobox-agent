@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Active agent CLI", () => {
 			it( "routes agent lifecycle through CommandRuntime", () => {
 				var home = getTempDirectory() & "/active-agents-#createUUID()#"
-				var config = new "nanobox-cli.util.ConfigManager"( home )
-				var runtime = new "nanobox-cli.CommandRuntime"( new "nanobox-cli.PrettyCli"( false ), config )
+				var config = new "cli.util.ConfigManager"( home )
+				var runtime = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "agent", "create", "runtime-agent" ], options: { description: "Runtime", instructions: "Be concise.", model: "local" } } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "agent", "show", "runtime-agent" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "agent", "list" ], options: {} } ).agents ).toHaveLength( 1 )

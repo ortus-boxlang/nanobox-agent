@@ -3,13 +3,13 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Curator lifecycle protection", () => {
 			it( "protects cron and agent referenced skills", () => {
 				var root = getTempDirectory() & "/lifecycle-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
 				manager.create( "protected-skill", "Protected", "Content" )
-				var cron = new "nanobox-cli.CronManager"( root & "/cron.json" )
+				var cron = new "cli.CronManager"( root & "/cron.json" )
 				cron.create( "job", "daily", "prompt", "default", [ "protected-skill" ] )
-				var config = new "nanobox-cli.util.ConfigManager"( root & "/config" )
-				var reports = new "nanobox-cli.CuratorReportManager"( root )
-				var lifecycle = new "nanobox-cli.CuratorLifecycle"( config, new "nanobox-cli.SkillCurator"( root ), reports, cron )
+				var config = new "cli.util.ConfigManager"( root & "/config" )
+				var reports = new "cli.CuratorReportManager"( root )
+				var lifecycle = new "cli.CuratorLifecycle"( config, new "cli.SkillCurator"( root ), reports, cron )
 				var result = lifecycle.tick( true, true )
 				expect( result.protectedSkills ).toInclude( "protected-skill" )
 			} )

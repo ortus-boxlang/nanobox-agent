@@ -1,0 +1,54 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * Create an AI Message fluent holder
+ */
+@BoxBIF
+class {
+
+	/**
+	 * Inject the following references into the class
+	 * - moduleRecord : The ModuleRecord instance
+	 * - boxRuntime : The BoxRuntime instance
+	 * - interceptorService : The BoxLang InterceptorService
+	 * - log : A logger for the module config itself
+	 */
+
+    /**
+     * Create an AI Message fluent holder that you can use to represent one or more messages in a chat conversation.
+	 * <p>
+	 * If you pass a message, it will be added to the chat. The mssage can be:
+	 * - A string : The message will be added with the default role of user
+	 * - A struct : The struct that represents the message
+	 * - An array : The array of messages to incorporate
+	 *
+	 * @message If passed, the initial message to add to the chat.
+	 *
+	 * @return The AI Message object
+     */
+    function invoke( any message = null ) {
+		// If you are already a chat message object, just return it
+		if( arguments.message instanceof "AiMessage" ){
+			return arguments.message;
+		}
+
+		var oMessage = new bxModules.bxai.models.runnables.AiMessage( argumentCollection: arguments )
+
+		BoxAnnounce( "onAIMessageCreate", { message: oMessage } );
+
+		return oMessage;
+
+	}
+
+}

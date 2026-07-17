@@ -1,0 +1,4 @@
+class extends="cli.BaseGateway" {
+	function init( struct config = {} ) { super.init( "email", arguments.config ); return this }
+	struct function capabilities() { return { text: true, attachments: true, images: false, audio: false, video: false, reactions: false, threads: false, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
+}

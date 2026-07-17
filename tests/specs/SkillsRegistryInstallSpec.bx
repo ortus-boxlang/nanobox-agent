@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skills registry installation", () => {
 			it( "finds a live skill and installs its SKILL.md", () => {
 				var root = getTempDirectory() & "/skill-install-#createUUID()#"
-				var manager = new "nanobox-cli.SkillManager"( root & "/skills" )
+				var manager = new "cli.SkillManager"( root & "/skills" )
 				var found = manager.findRemote( "async-tasks" )
 				expect( found ).notToBeEmpty()
 				var slug = found.first().owner & "/" & found.first().repo & "/" & found.first().slug
@@ -13,7 +13,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( installed.skill.content ).notToBeEmpty()
 			} )
 			it( "rejects an install when the registry returns no content", () => {
-				var manager = new "nanobox-cli.SkillManager"( getTempDirectory() & "/skill-empty-#createUUID()#/skills", "https://skills.boxlang.io.invalid" )
+				var manager = new "cli.SkillManager"( getTempDirectory() & "/skill-empty-#createUUID()#/skills", "https://skills.boxlang.io.invalid" )
 				var result = manager.install( "ortus-boxlang/skills/no-such-skill" )
 				expect( result.success ).toBeFalse()
 			} )

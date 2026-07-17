@@ -1,0 +1,646 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ *
+ */
+import bxModules.bxai.models.providers.capabilities.IAiChatService;
+import bxModules.bxai.models.providers.capabilities.IAiEmbeddingsService;
+import bxModules.bxai.models.providers.capabilities.IAiImageService;
+import bxModules.bxai.models.providers.capabilities.IAiSpeechService;
+import bxModules.bxai.models.providers.capabilities.IAiTranscriptionService;
+import bxModules.bxai.models.responses.AiImageResponse;
+import bxModules.bxai.models.responses.AiSpeechResponse;
+import bxModules.bxai.models.responses.AiTranscriptionResponse;
+
+class extends="OpenAIService" implements="IAiChatService, IAiEmbeddingsService, IAiImageService, IAiSpeechService, IAiTranscriptionService" {
+
+	/**
+	 * Static defaults
+	 */
+	static {
+		CAPABILITIES = [ "chat", "stream", "embeddings", "image", "speech", "transcription" ]
+		DEFAULT_CHAT_PARAMS = {
+			// https://ai.google.dev/gemini-api/docs/quickstart
+			// according to the docs, this is the default model
+			"model" : "gemini-2.5-flash"
+		};
+		DEFAULT_EMBED_PARAMS = {
+			"model" : "gemini-embedding-001"
+		};
+		DEFAULT_SPEECH_PARAMS = {
+			"model" : "gemini-2.5-flash-preview-tts",
+			"voice" : "Kore"
+		};
+		DEFAULT_IMAGE_PARAMS = {
+			// https://ai.google.dev/gemini-api/docs/imagen
+			"model" : "gemini-3.1-flash-image-preview"
+		}
+		DEFAULT_TRANSCRIPTION_PARAMS = {
+			"model" : "gemini-2.5-flash"
+		};
+	}
+
+	/**
+	 * Constructor
+	 */
+	function init(){
+		variables.chatURL       = "https://generativelanguage.googleapis.com/v1beta/models/%MODEL%:generateContent"
+		variables.embeddingsURL = "https://generativelanguage.googleapis.com/v1beta/models/%MODEL%:embedContent"
+		variables.imageURL      = "https://generativelanguage.googleapis.com/v1beta/models/%MODEL%:generateContent"
+		variables.ttsURL        = "https://generativelanguage.googleapis.com/v1beta/models/%MODEL%:generateContent"
+		variables.sttURL        = "https://generativelanguage.googleapis.com/v1beta/models/%MODEL%:generateContent"
+		variables.name          = "Gemini"
+	}
+
+	@override
+	public array function getDeclaredCapabilities() {
+		return static.CAPABILITIES
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiEmbeddingsService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Seed defaults, resolve the per-request URL (Gemini embeds model name + API key in the URL),
+	 * disable the Bearer auth header, then delegates to base.
+	 * @see https://ai.google.dev/api/embeddings
+	 */
+	@override
+	public function embeddings( required AiEmbeddingRequest embeddingRequest ){
+		arguments.embeddingRequest
+			.mergeServiceParams( static.DEFAULT_EMBED_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() )
+
+		// Bake model + key into the URL for this request (Gemini uses query-param auth)
+		variables.embeddingsURL = getEmbeddingsURL()
+			.replace( '%MODEL%', arguments.embeddingRequest.getModel() )
+			& '?key=#arguments.embeddingRequest.getApiKey()#';
+
+		// No Authorization header — key is already in the URL
+		arguments.embeddingRequest.setSendAuthHeader( false );
+
+		return super.embeddings( arguments.embeddingRequest );
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * Callbacks for pre/post processing of requests and responses, to handle Gemini-specific formats for chat and embeddings
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Reshape the embedding packet to Gemini's format:
+	 * { content: { parts: [{ text: "..." }] } }
+	 * @see https://ai.google.dev/api/embeddings
+	 */
+	@override
+	private struct function preRequest(
+		required AiBaseRequest aiRequest,
+		required struct dataPacket,
+		required string operation
+	) {
+		if ( arguments.operation != "embeddings" ) {
+			return arguments.dataPacket
+		}
+		var input = arguments.aiRequest.getInput()
+		return {
+			"content": {
+				"parts": [ {
+					"text": isArray( input ) ? input.toList( " " ) : input
+				} ]
+			}
+		}
+	}
+
+	/**
+	 * Normalize Gemini's embedding response to the standard OpenAI format.
+	 * Gemini returns: { embedding: { values: [...] } }
+	 * Standard format: { data: [{ embedding, index, object }], model }
+	 * @see https://ai.google.dev/api/embeddings
+	 */
+	@override
+	private any function postResponse(
+		required AiBaseRequest aiRequest,
+		required struct dataPacket,
+		required any result,
+		required string operation
+	) {
+		if ( arguments.operation != "embeddings" ) {
+			return arguments.result
+		}
+		if ( !arguments.result.keyExists( "embedding" ) ) {
+			return { "error": "Invalid Gemini embedding response — 'embedding' key missing. Response: #arguments.result.toString()#" }
+		}
+		return {
+			"data" : [ {
+				"embedding": arguments.result.embedding.values,
+				"index"    : 0,
+				"object"   : "embedding"
+			} ],
+			"model": arguments.aiRequest.getModel()
+		}
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiChatService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Gemini chat request
+	 */
+	@override
+	public function chat( required AiChatRequest chatRequest, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+		// We need to pre-process the messages to conform to the Gemini API
+		var dataPacket = {
+			"contents": arguments.chatRequest
+				.getMessages()
+				.map( message -> {
+					return {
+						"role" : message.role == "system" ? "model" : "user",
+						"parts": [ {
+							"text": message.content
+						} ]
+					}
+				} )
+			}.append( arguments.chatRequest.getParams() )
+
+		// Tooling support
+		if( dataPacket.keyExists( "tools" ) ){
+			dataPacket.tools = dataPacket.tools.map( .getSchema )
+		}
+
+		// Update URL according to the model
+		variables.chatURL = getChatUrl().replace( '%MODEL%', chatRequest.getModel() ) & '?key=#chatRequest.getApiKey()#';
+		// No auth header
+		arguments.chatRequest.setSendAuthHeader( false );
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire beforeLLMCall middleware ---
+		// -------------------------------------------------------------------------------------------
+		var llmContext = { chatRequest: arguments.chatRequest, dataPacket: dataPacket }
+		var llmBeforeResult = arguments.chatRequest.fireMiddleware( hook: "beforeLLMCall", context: llmContext )
+		if ( llmBeforeResult.isTerminal() ) {
+			return llmBeforeResult
+		}
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire WrapLLM -> HTTP Call ---
+		// -------------------------------------------------------------------------------------------
+		var capturedDataPacket  = dataPacket;
+		var capturedChatRequest = arguments.chatRequest;
+		var result = arguments.chatRequest.fireWrapMiddleware(
+			hook         : "wrapLLMCall",
+			context      : llmContext,
+			innerFunction: () => sendChatRequest( capturedChatRequest, capturedDataPacket )
+		)
+
+		// -------------------------------------------------------------------------------------------
+		// --- Fire afterLLMCall middleware, in reverse order ---
+		// -------------------------------------------------------------------------------------------
+		arguments.chatRequest.fireMiddleware(
+			hook   : "afterLLMCall",
+			context: { chatRequest: arguments.chatRequest, result: result },
+			reverse: true
+		)
+
+		// If an error is returned, throw it
+		if( result.keyExists( "error" ) ){
+			throw(
+				type   : "ProviderError",
+				message: result.error.toString()
+			);
+		}
+
+		// Announce token usage
+		if ( result.keyExists( "usageMetadata" ) ) {
+			BoxAnnounce( "onAITokenCount", {
+				provider         : this,
+				operation        : "chat",
+				model            : arguments.chatRequest.getModel(),
+				promptTokens     : result.usageMetadata.promptTokenCount ?: 0,
+				completionTokens : result.usageMetadata.candidatesTokenCount ?: 0,
+				totalTokens      : result.usageMetadata.totalTokenCount ?: 0,
+				aiRequest        : arguments.chatRequest,
+				usage            : result.usageMetadata,
+				timestamp        : now()
+			} )
+		}
+
+		// No Tool calls yet.
+
+		// Determine return formats
+		var content = result.candidates.first().content.parts.first().text;
+		switch( chatRequest.getReturnFormat() ){
+			case "all":
+				return result.candidates;
+			case "raw":
+				return result;
+			case "json":
+				return jsonDeserialize( extractFromCodeBlock( content, "json" ) );
+			case "xml":
+				return xmlParse( extractFromCodeBlock( content, "xml" ) );
+			case "structuredOutput":
+				return populateStructuredOutput( content, chatRequest );
+			case "single": default:
+				return content;
+		}
+	}
+
+	/**
+	 * Gemini streaming chat request - overridden to use Gemini-specific streaming format
+	 * Gemini uses streamGenerateContent endpoint with ?alt=sse parameter
+	 * @see https://ai.google.dev/gemini-api/docs/text-generation#rest_5
+	 *
+	 * @chatRequest The AiChatRequest object to send to the provider
+	 * @callback A callback function to be called with each chunk of the stream
+	 */
+	@override
+	public function chatStream( required AiChatRequest chatRequest, required function callback, numeric interactionCount = 0 ){
+		// Seed the chat request with defaults
+		arguments.chatRequest.mergeServiceParams( static.DEFAULT_CHAT_PARAMS )
+
+		var userCallback = arguments.callback;
+		var requestedModel = arguments.chatRequest.getModel();
+
+		// We need to pre-process the messages to conform to the Gemini API
+		var dataPacket = {
+			"contents": arguments.chatRequest
+				.getMessages()
+				.map( message -> {
+					return {
+						"role" : message.role == "system" ? "model" : "user",
+						"parts": [ {
+							"text": message.content
+						} ]
+					}
+				} )
+			}.append( arguments.chatRequest.getParams() )
+
+		// Tooling support
+		if( dataPacket.keyExists( "tools" ) ){
+			dataPacket.tools = dataPacket.tools.map( .getSchema )
+		}
+
+		// Update URL for Gemini streaming: use streamGenerateContent endpoint with alt=sse
+		var streamingURL = getChatUrl()
+			.replace( '%MODEL%', chatRequest.getModel() )
+			.replace( 'generateContent', 'streamGenerateContent' )
+			& '?key=#chatRequest.getApiKey()#&alt=sse';
+
+		// Set the streaming URL
+		variables.chatURL = streamingURL;
+
+		// No auth header for Gemini
+		arguments.chatRequest.setSendAuthHeader( false );
+		var geminiUsage = { "promptTokens": 0, "completionTokens": 0, "totalTokens": 0, "raw": {} };
+		var normalizedCallback = ( chunk ) => {
+			var content = chunk.candidates?.first()?.content?.parts?.first()?.text ?: "";
+			var finishReason = chunk.candidates?.first()?.finishReason ?: "";
+
+			// Capture usage metadata from Gemini chunks
+			if( !isNull( chunk.usageMetadata ) ){
+				geminiUsage.promptTokens     = chunk.usageMetadata.promptTokenCount ?: 0;
+				geminiUsage.completionTokens = chunk.usageMetadata.candidatesTokenCount ?: 0;
+				geminiUsage.totalTokens      = chunk.usageMetadata.totalTokenCount ?: 0;
+				geminiUsage.raw              = chunk.usageMetadata;
+			}
+
+			userCallback({
+				"provider": "Gemini",
+				"model": requestedModel,
+				"object": "chat.completion.chunk",
+				"choices": [
+					{
+						"index": 0,
+						"delta": {
+							"role": "assistant",
+							"content": content
+						},
+						"finish_reason": finishReason
+					}
+				],
+				"raw": chunk
+			});
+		};
+
+		// Send it with streaming
+		sendStreamRequest( chatRequest, dataPacket, normalizedCallback )
+
+		// -------------------------------------------------------------------------------------------
+		// --- Usage Event Announcement (Streaming) ---
+		// -------------------------------------------------------------------------------------------
+		if( geminiUsage.totalTokens > 0 ){
+			BoxAnnounce( "onAITokenCount", {
+				provider         : this,
+				operation        : "stream",
+				model            : arguments.chatRequest.getModel(),
+				promptTokens     : geminiUsage.promptTokens,
+				completionTokens : geminiUsage.completionTokens,
+				totalTokens      : geminiUsage.totalTokens,
+				aiRequest        : arguments.chatRequest,
+				usage            : geminiUsage.raw,
+				timestamp        : now()
+			} )
+		}
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiSpeechService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Convert text to speech using Gemini's generateContent API with audio response modalities.
+	 * @see https://ai.google.dev/gemini-api/docs/speech-generation
+	 */
+	@override
+	public AiSpeechResponse function speak( required AiSpeechRequest speechRequest ){
+		arguments.speechRequest
+			.mergeServiceParams( static.DEFAULT_SPEECH_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() );
+
+		var model     = arguments.speechRequest.getModel();
+		var voiceName = arguments.speechRequest.getParams().voice ?: arguments.speechRequest.getVoice() ?: "Kore";
+		var ttsURL    = variables.ttsURL.replace( '%MODEL%', model ) & "?key=#arguments.speechRequest.getApiKey()#";
+
+		var dataPacket = {
+			"contents"       : [ { "parts": [ { "text": arguments.speechRequest.getText() } ] } ],
+			"generationConfig": {
+				"response_modalities": [ "AUDIO" ],
+				"speech_config": {
+					"voice_config": {
+						"prebuilt_voice_config": { "voice_name": voiceName }
+					}
+				}
+			}
+		};
+
+		bx:http url=ttsURL method="post" result="ttsResult" timeout=arguments.speechRequest.getTimeout(){
+			bx:httpParam type="header" name="content-type" value="application/json";
+			bx:httpParam type="body" value=jsonSerialize( dataPacket );
+		}
+
+		if ( ttsResult.statusCode != "200" ) {
+			var errMsg = ttsResult.fileContent;
+			try { errMsg = jsonDeserialize( ttsResult.fileContent ).error?.message ?: errMsg; } catch( any e ){}
+			throw( type: "ProviderError", message: "Gemini TTS error: #errMsg#" );
+		}
+
+		var parsed     = jsonDeserialize( ttsResult.fileContent );
+		var inlineData = parsed.candidates.first().content.parts.first().inlineData;
+		var audioBytes = binaryDecode( inlineData.data, "base64" );
+		var mimeType   = inlineData.mimeType ?: "audio/wav";
+		var format     = mimeType.contains( "mp3" ) ? "mp3" : "wav";
+
+		return new AiSpeechResponse( audioData: audioBytes, audioFormat: format, model: model, provider: variables.name );
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiTranscriptionService Implementation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Transcribe audio to text using Gemini's generateContent API with inline audio data.
+	 * @see https://ai.google.dev/gemini-api/docs/audio
+	 */
+	@override
+	public AiTranscriptionResponse function transcribe( required AiTranscriptionRequest transcriptionRequest ){
+		return geminiTranscribe( arguments.transcriptionRequest, "Please transcribe this audio accurately." );
+	}
+
+	/**
+	 * Translate audio to English using Gemini's generateContent API.
+	 * @see https://ai.google.dev/gemini-api/docs/audio
+	 */
+	@override
+	public AiTranscriptionResponse function translate( required AiTranscriptionRequest transcriptionRequest ){
+		return geminiTranscribe( arguments.transcriptionRequest, "Please transcribe and translate this audio to English." );
+	}
+
+	/**
+	 * Shared Gemini STT logic — sends audio as base64 inline data to generateContent.
+	 */
+	private AiTranscriptionResponse function geminiTranscribe(
+		required AiTranscriptionRequest transcriptionRequest,
+		required string prompt
+	){
+		arguments.transcriptionRequest
+			.mergeServiceParams( static.DEFAULT_TRANSCRIPTION_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() );
+
+		var model  = arguments.transcriptionRequest.getModel();
+		var sttURL = variables.sttURL.replace( '%MODEL%', model ) & "?key=#arguments.transcriptionRequest.getApiKey()#";
+
+		// Resolve audio source to base64
+		var base64Audio = "";
+		var mimeType    = "audio/mp3";
+		if ( arguments.transcriptionRequest.getAudioFile().len() ) {
+			base64Audio = toBase64( fileReadBinary( arguments.transcriptionRequest.getAudioFile() ) );
+		} else if ( !isSimpleValue( arguments.transcriptionRequest.getAudioData() ) ) {
+			base64Audio = toBase64( arguments.transcriptionRequest.getAudioData() );
+		}
+
+		var dataPacket = {
+			"contents": [ {
+				"parts": [
+					{ "inlineData": { "mimeType": mimeType, "data": base64Audio } },
+					{ "text": arguments.prompt }
+				]
+			} ]
+		};
+
+		bx:http url=sttURL method="post" result="sttResult" timeout=arguments.transcriptionRequest.getTimeout(){
+			bx:httpParam type="header" name="content-type" value="application/json";
+			bx:httpParam type="body" value=jsonSerialize( dataPacket );
+		}
+
+		if ( sttResult.statusCode != "200" ) {
+			var errMsg = sttResult.fileContent;
+			try { errMsg = jsonDeserialize( sttResult.fileContent ).error?.message ?: errMsg; } catch( any e ){}
+			throw( type: "ProviderError", message: "Gemini STT error: #errMsg#" );
+		}
+
+		var parsed = jsonDeserialize( sttResult.fileContent );
+		var text   = parsed.candidates.first().content.parts.first().text ?: "";
+		return new AiTranscriptionResponse( text: text, model: model, provider: variables.name );
+	}
+
+	/**
+	 * ---------------------------------------------------------------------------------------------------------
+	 * IAiImageService Implementation — Gemini native image generation (Nano Banana)
+	 * https://ai.google.dev/gemini-api/docs/image-generation
+	 * ---------------------------------------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Generate images using Gemini's generateContent endpoint for image models.
+	 *
+	 * @imageRequest The AiImageRequest object
+	 *
+	 * @return AiImageResponse
+	 */
+	@override
+	public AiImageResponse function generateImage( required AiImageRequest imageRequest ){
+		arguments.imageRequest
+			.mergeServiceParams( static.DEFAULT_IMAGE_PARAMS )
+			.setApiKeyIfEmpty( getAPIKey() )
+
+		var model    = arguments.imageRequest.getModel()
+		var imageURL = variables.imageURL.replace( '%MODEL%', model ) & "?key=#arguments.imageRequest.getApiKey()#"
+
+		// Map size to aspect ratio for Gemini image_config
+		var sizeToAspect = {
+			"1024x1024" : "1:1",
+			"1024x1792" : "9:16",
+			"1792x1024" : "16:9",
+			"512x512"   : "1:1",
+			"256x256"   : "1:1"
+		}
+		var aspectRatio = sizeToAspect[ arguments.imageRequest.getSize() ] ?: "1:1"
+
+		// Build Gemini generateContent request body — append instructions to prompt when set
+		var effectivePrompt = arguments.imageRequest.getPrompt()
+		if ( arguments.imageRequest.getInstructions().len() ) {
+			effectivePrompt &= " " & arguments.imageRequest.getInstructions()
+		}
+
+		var dataPacket = {
+			"contents" : [ {
+				"parts": [ {
+					"text": effectivePrompt
+				} ]
+			} ],
+			"generationConfig" : {
+				"responseModalities" : [ "IMAGE" ],
+				"imageConfig" : {
+					"aspectRatio" : aspectRatio
+				}
+			}
+		}
+
+		// Fire preRequest hook
+		dataPacket = preRequest( arguments.imageRequest, dataPacket, "image" )
+
+		// Fire onAIImageRequest announcement
+		BoxAnnounce( "onAIImageRequest", {
+			provider   : this,
+			operation  : "image",
+			aiRequest  : arguments.imageRequest,
+			dataPacket : dataPacket
+		} )
+
+		// Logging
+		if ( arguments.imageRequest.getLogRequest() ) {
+			writeLog( text: "aiImage request to #imageURL#: #jsonSerialize( dataPacket )#", type: "info", log: "ai" )
+		}
+		if ( arguments.imageRequest.getLogRequestToConsole() ) {
+			println( "aiImage request to #imageURL#: #jsonSerialize( dataPacket )#" )
+		}
+
+		// HTTP call — Gemini returns inlineData parts with base64-encoded image data
+		bx: http
+			url     = imageURL
+			method  = "post"
+			result  = "imageResult"
+			charset = "utf-8"
+			timeout = arguments.imageRequest.getTimeout()
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+			bx:httpParam type="body" value=jsonSerialize( dataPacket );
+		}
+
+		// Error detection
+		if ( imageResult.statusCode != "200" ) {
+			var errorMessage = imageResult.fileContent
+			try {
+				var errorData = jsonDeserialize( imageResult.fileContent )
+				errorMessage  = errorData.error?.message ?: errorData.toString()
+			} catch ( any parseEx ) {}
+
+			BoxAnnounce( "onAIError", {
+				error        : errorMessage,
+				errorMessage : errorMessage,
+				provider     : this,
+				operation    : "image",
+				aiRequest    : arguments.imageRequest,
+				canRetry     : false
+			} )
+
+			throw(
+				type   : "ProviderError",
+				message: "Gemini image error: #errorMessage#"
+			)
+		}
+
+		// Parse Gemini generateContent response
+		var parsedResponse = jsonDeserialize( imageResult.fileContent )
+		var parts          = parsedResponse.candidates?.first()?.content?.parts ?: []
+		var images         = parts
+			.filter( part => {
+				var imagePart = part.inlineData ?: part.inline_data ?: javaCast( "null", "" )
+				return !isNull( imagePart ) && !isNull( imagePart.data )
+			} )
+			.map( part => {
+				var imagePart = part.inlineData ?: part.inline_data
+				var mimeType = imagePart.mimeType ?: imagePart.mime_type ?: "image/png"
+				return {
+					url           : "",
+					data          : binaryDecode( imagePart.data, "base64" ),
+					mimeType      : mimeType,
+					revisedPrompt : ""
+				}
+			} )
+		var imageFormat = arguments.imageRequest.getFormat()
+		if ( images.len() ) {
+			imageFormat = ( images[ 1 ].mimeType ?: "image/png" ).listLast( "/" )
+		}
+
+		// Logging
+		if ( arguments.imageRequest.getLogResponse() ) {
+			writeLog( text: "aiImage response status=#imageResult.statusCode# images=#images.len()#", type: "info", log: "ai" )
+		}
+		if ( arguments.imageRequest.getLogResponseToConsole() ) {
+			println( "aiImage response status=#imageResult.statusCode# images=#images.len()#" )
+		}
+
+		var results = new AiImageResponse(
+			images      : images,
+			imageFormat : imageFormat,
+			model       : model,
+			provider    : variables.name
+		)
+
+		results = postResponse( arguments.imageRequest, dataPacket, results, "image" )
+
+		BoxAnnounce( "onAIImageResponse", {
+			provider   : this,
+			operation  : "image",
+			aiRequest  : arguments.imageRequest,
+			aiResponse : results
+		} )
+
+		return results
+	}
+
+}

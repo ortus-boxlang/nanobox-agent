@@ -1,0 +1,411 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * ----------------------------------------------------------------------------------
+ * This is the module descriptor and entry point for your module in the runtime.
+ * The unique name of the moduel is the name of the directory on the modules folder.
+ * A BoxLang mapping will be created for you with the name of the module.
+ *
+ * A module can have the following folders that will be automatically registered:
+ * + bifs - Custom BIFs that will be registered into the runtime
+ * + interceptors - Custom interceptors that will be registered into the runtime via the configure() method
+ * + libs - Custom java libraries that your module leverages
+ * + tags - Custom tags that will be registered into the runtime
+ *
+ * Every module will have its own classloader that will be used to load the module libs and dependencies.
+ */
+class {
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * Injections
+	 * --------------------------------------------------------------------------
+	 */
+	property name="moduleRecord";
+	property name="boxRuntime";
+	property name="functionService";
+	property name="componentService";
+	property name="interceptorService";
+	property name="asyncService";
+	property name="schedulerService";
+	property name="datasourceService";
+	property name="cacheService";
+	property name="log";
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * Module Properties
+	 * --------------------------------------------------------------------------
+	 * Here is where you define the properties of your module that the module service
+	 * will use to register and activate your module
+	 */
+
+	/**
+	 * Your module version. Try to use semantic versioning
+	 * @mandatory
+	 */
+	this.version = "3.3.2+17"
+
+	/**
+	 * The BoxLang mapping for your module.  All BoxLang modules are registered with an internal
+	 * mapping prefix of : bxModules.{this.mapping}, /bxmodules/{this.mapping}. Ex: bxModules.test, /bxmodules/test
+	 */
+	this.mapping = "bxai"
+
+	/**
+	 * The public mapping for your module.  This is the public facing mapping
+	 * that users will use to access your module features.
+	 * For us it will be /~bxai -> public mapping
+	 */
+	this.publicMapping = {
+		name : "~bxai",
+		usePrefix: false,
+		path: "public"
+	}
+
+	/**
+	 * Who built the module
+	 */
+	this.author = "Luis Majano"
+
+	/**
+	 * The module description
+	 */
+	this.description = "This module does amazing things with AI"
+
+	/**
+	 * The module web URL
+	 */
+	this.webURL = "https://www.ortussolutions.com"
+
+	/**
+	 * This boolean flag tells the module service to skip the module registration/activation process.
+	 */
+	this.enabled = true
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * Module Methods
+	 * --------------------------------------------------------------------------
+	 */
+
+	/**
+	 * Called by the ModuleService on module registration
+	 */
+	function configure(){
+		settings = {
+			// The default provider LLM AI: openai, deepseek, etc
+			provider : "openai",
+			// The default API Key for the provider
+			apiKey : "",
+			// The default request params to use when calling a provider, any provider
+			// Ex: { temperature: 0.5, max_tokens: 100, model: "gpt-3.5-turbo" }
+			defaultParams : {
+			},
+			// The default memory to use when calling aiMemory()
+			memory : {
+				provider : "window",
+				config : {}
+			},
+			// This is used to configure default options and parameters for a specific provider
+			// The name of the key is the provider name, each provider can have its own params and options
+			providers : {
+				// openai : {
+				// 	params : {},
+				// 	options: {}
+				// }
+			},
+			// The default timeout of the ai requests
+			timeout : 45,
+			// If true, the AI request will be logged into the ai.log
+			logRequest : false,
+			// If true, the AI request will be logged to the console
+			logRequestToConsole : false,
+			// If true, the AI response will be logged into the ai.log
+			logResponse : false,
+			// If true, the AI response will be logged to the console
+			logResponseToConsole : false,
+			// The default return format of the AI response: single, all, raw
+			returnFormat : "single",
+			// --------------------------------------------------------------------------
+			// Skills Directory — Global Skill Auto-Discovery
+			// --------------------------------------------------------------------------
+			// Path to the directory scanned for SKILL.md files at module startup.
+			// Defaults to "/{webroot}/.agents/skills" — a vendor-neutral convention that works with
+			// any AI toolchain.  Can be absolute or relative (relative paths are
+			// expanded from the CWD).  Set to "" to disable auto-discovery entirely.
+			skillsDirectory : "/.agents/skills",
+
+			// When true, skills found in skillsDirectory are automatically loaded and injected
+			// into every agent created with aiAgent() as global / shared skills.
+			autoLoadSkills : true,
+
+			// Internal — populated by onLoad() with the globally discovered skills.
+			// Access via aiGlobalSkills() with no arguments, or read directly from settings.
+			globalSkills : [],
+
+			// --------------------------------------------------------------------------
+			// Audio Settings — Defaults for aiSpeak() / aiTranscribe() / aiTranslate()
+			// --------------------------------------------------------------------------
+			audio : {
+				defaultProvider		   	  : "openai",
+				defaultApiKey			  : "",
+				defaultVoice              : "",
+				defaultOutputFormat       : "mp3",
+				defaultSpeechModel        : "",
+				defaultTranscriptionModel : "",
+				/**
+				 * Gender-to-voice keyword mapping per provider.
+				 * When voice is set to "male" or "female", aiSpeak() resolves it to the
+				 * concrete voice name for the active provider using this map.
+				 *
+				 * Override any entry here to swap which voice "male"/"female" resolves to.
+				 * An empty string means no override — the provider will use its own default.
+				 *
+				 * Example override in your module config:
+				 *   audio.voiceGenderMap.openai.male = "echo"
+				 */
+				voiceGenderMap : {
+					openai     : { male : "ash",                     female : "nova"                   },
+					grok       : { male : "onyx",                    female : "nova"                   },
+					gemini     : { male : "Fenrir",                  female : "Aoede"                  },
+					mistral    : { male : "",                        female : "Charlotte"               },
+					elevenlabs : { male : "",                        female : "21m00Tcm4TlvDq8ikWAM"   }
+				}
+			},
+
+			// --------------------------------------------------------------------------
+			// Image Settings — Defaults for aiImage()
+			// --------------------------------------------------------------------------
+			image : {
+				// Default provider for image generation (openai, gemini, grok, openrouter)
+				defaultProvider     : "openai",
+				// Provider-specific API key override for image generation
+				defaultApiKey       : "",
+				// Default model override (leave empty to use provider's built-in default)
+				defaultModel        : "",
+				// Default image dimensions — "auto", "1024x1024", "1792x1024", "1024x1792"
+				defaultSize         : "auto",
+				// Default quality level — "low", "medium", "high", or "auto"; provider-specific support
+				defaultQuality      : "auto",
+				// Default visual style — "vivid" or "natural" (OpenAI DALL-E 3); leave empty for provider default
+				defaultStyle        : "",
+				// Default style/tone/mood instructions appended to every image prompt
+				defaultInstructions : ""
+			},
+
+			// --------------------------------------------------------------------------
+			// Web Search Settings — Defaults for aiWebSearch()/aiWebSearchAsync() BIFs and WebSearchTools
+			// --------------------------------------------------------------------------
+			webSearch : {
+				// Default search provider: http, brave, google, tavily, exa
+				defaultProvider : "http",
+				// Maximum number of results to return per search
+				maxResults : 5,
+				// HTTP request timeout in seconds
+				timeout : 30,
+				// Provider API keys (also resolved via environment variables)
+				braveApiKey : "",
+				googleApiKey : "",
+				googleSearchEngineId : "",
+				tavilyApiKey : "",
+				exaApiKey : "",
+				// Logging
+				logRequest : false,
+				logResponse : false
+			}
+		}
+
+		/**
+		 * The module interceptors to register into the runtime
+		 */
+		interceptors = [
+			// { class="path.to.Interceptor", properties={} }
+		]
+
+		/**
+		 * A list of custom interception points to register into the runtime
+		 */
+		customInterceptionPoints = [
+			// Agent Events
+			"beforeAIAgentRun",
+			"afterAIAgentRun",
+			"onAIAgentCreate",
+
+			// Model & Provider Events
+			"beforeAIModelInvoke",
+			"afterAIModelInvoke",
+			"onAIModelCreate",
+			"onAIProviderCreate",
+			"onMissingAiProvider",
+
+			// Request & Response Events
+			"onAIChatRequest",
+			"onAIChatRequestCreate",
+			"onAIChatResponse",
+			"onAIRateLimitHit",
+			"onAIError",
+
+			// Embedding Events
+			"beforeAIEmbed",
+			"afterAIEmbed",
+			"onAIEmbedRequest",
+			"onAIEmbedResponse",
+
+			// Pipeline Events
+			"beforeAIPipelineRun",
+			"afterAIPipelineRun",
+
+			// Tool Events
+			"beforeAIToolExecute",
+			"afterAIToolExecute",
+			"onAIToolCreate",
+
+			// Component Creation Events
+			"onAiLoaderCreate",
+			"onAiMemoryCreate",
+			"onAIMessageCreate",
+			"onAITransformerCreate",
+
+			// Utility Events
+			"onAITokenCount",
+
+			// Memory Events
+			"onHybridMemoryAdd",
+			"onVectorSearch",
+
+			// Audio Events
+			"beforeAISpeech",
+			"afterAISpeech",
+			"beforeAITranscription",
+			"afterAITranscription",
+			"beforeAITranslation",
+			"afterAITranslation",
+
+			// Image Events
+			"beforeAIImageGeneration",
+			"afterAIImageGeneration",
+			"onAIImageRequest",
+			"onAIImageResponse",
+
+			// MCP Server Events
+			"onMCPServerCreate",
+			"onMCPServerPause",
+			"onMCPServerRemove",
+			"onMCPServerResume",
+			"onMCPRequest",
+			"onMCPResponse",
+			"onMCPError",
+			// MCP Client Events
+			"onMCPClientRequest",
+			"onMCPClientResponse",
+			"onMCPClientError",
+
+			// Tool Registry Events
+			"onAIToolRegistryRegister",
+			"onAIToolRegistryUnregister",
+
+			// Agent Registry Events
+			"onAIAgentRegistryRegister",
+			"onAIAgentRegistryUnregister",
+
+			// Web Search Events
+			"beforeAIWebSearch",
+			"afterAIWebSearch",
+			"onAIWebSearchRequest",
+			"onAIWebSearchResponse",
+			"onAIWebSearchError"
+		 ]
+	}
+
+	/**
+	 * Called by the ModuleService on runtime start, after all modules have been registered.
+	 * This is a good place to perform any setup that requires multiple modules to be registered,
+	 * such as cross-module dependencies, or in our case, auto-discovering skills from the filesystem.
+	 *
+	 * Also assures us that datasources and caches are available if our skills need them during auto-discovery.
+	 */
+	function onRuntimeStart(){
+		// Auto-discover global skills from the configured skillsDirectory
+		var skillsDir = moduleRecord.settings.skillsDirectory
+
+		if ( moduleRecord.settings.autoLoadSkills && len( skillsDir ) ) {
+			// Expand relative paths against the current working directory
+			if ( !skillsDir.startsWith( "/" ) && !reFind( "^[A-Za-z]:\\", skillsDir ) ) {
+				skillsDir = expandPath( skillsDir )
+			}
+
+			if ( directoryExists( skillsDir ) ) {
+				moduleRecord.settings.globalSkills = bxModules.bxai.models.skills.AiSkill::fromDirectory( skillsDir )
+				writeLog(
+					text: "bxAI: Auto-loaded [#moduleRecord.settings.globalSkills.len()#] global skill(s) from: #skillsDir#",
+					type: "debug",
+					log: "ai"
+				)
+			}
+		}
+
+		// Register core tools into the registry.
+		aiToolRegistry().scanClass(
+			new bxModules.bxai.models.tools.core.CoreTools(),
+			"bxai"
+		)
+
+		// Register audio tools into the registry.
+		aiToolRegistry().scanClass(
+			new bxModules.bxai.models.tools.audio.AudioTools(),
+			"bxai"
+		)
+
+		// Register image tools into the registry.
+		aiToolRegistry().scanClass(
+			new bxModules.bxai.models.tools.image.ImageTools(),
+			"bxai"
+		)
+
+		// Register web search tools into the registry.
+		aiToolRegistry().scanClass(
+			new bxModules.bxai.models.tools.search.WebSearchTools(),
+			"bxai"
+		)
+
+		// Log module load and core/audio/image/search tool registration
+		writeLog(
+			text: "BoxLang AI loaded and core/audio/image/search tools registered into the registry",
+			type: "debug",
+			log: "ai"
+		)
+	}
+
+	/**
+	 * Called by the ModuleService on module activation
+	 */
+	function onLoad(){
+	}
+
+	/**
+	 * Called by the ModuleService on module deactivation
+	 */
+	function onUnload(){
+	}
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * AI CLI
+	 * --------------------------------------------------------------------------
+	 */
+
+	function main( args = [] ){
+	}
+
+}
