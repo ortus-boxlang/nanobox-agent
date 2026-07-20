@@ -23,3 +23,6 @@ derby.log
 
 ### Ollama Data ###
 .ollama/
+
+### Local NanoBox Tests ###
+.nanobox/**
