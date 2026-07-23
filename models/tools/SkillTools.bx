@@ -11,12 +11,12 @@
 class {
 	@AITool( "List all installed skills with their name, description, version, and activation status." )
 	public array function skill_list() {
-		return new "/cli/SkillManager"( expandPath( ".agents/skills" ) ).list()
+		return new "models.skills.SkillManager"( expandPath( ".agents/skills" ) ).list()
 	}
 
 	@AITool( "Show detailed information about a specific installed skill by name." )
 	public struct function skill_show( required string name ) {
-		var result = new "/cli/SkillManager"( expandPath( ".agents/skills" ) ).show( arguments.name )
+		var result = new "models.skills.SkillManager"( expandPath( ".agents/skills" ) ).show( arguments.name )
 		return structIsEmpty( result ) ? { error: "Skill not found: " & arguments.name } : result
 	}
 }

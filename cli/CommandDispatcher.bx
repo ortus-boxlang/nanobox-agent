@@ -39,7 +39,17 @@ class {
 		if ( positionals.len() == 0 ) { return "help" }
 		var command = positionals.first()
 		if ( command == "gateway" ) { return dispatchGateway( positionals, options ) }
-		var handlers = { start: "StartCommand", stop: "StopCommand", status: "StatusCommand", restart: "RestartCommand", doctor: "DoctorCommand", chat: "ChatCommand", model: "ModelCommand", session: "SessionCommand", cron: "CronCommand", config: "ConfigCommand", agent: "AgentCommand", tool: "ToolCommand", skill: "SkillCommand" }
+		var handlers = {
+			start: "StartCommand", stop: "StopCommand", status: "StatusCommand",
+			restart: "RestartCommand", doctor: "DoctorCommand",
+			chat: "ChatCommand", model: "ModelCommand",
+			session: "SessionCommand", cron: "CronCommand", config: "ConfigCommand",
+			agent: "AgentCommand", tool: "ToolCommand", skill: "SkillCommand",
+			mcp: "MCPCommand", script: "ScriptCommand", backup: "BackupCommand",
+			update: "UpdateCommand", vault: "VaultCommand",
+			security: "SecurityCommand", web: "WebCommand", worker: "WorkerCommand",
+			tokens: "TokenCommand", token: "TokenCommand"
+		}
 		if ( !structKeyExists( handlers, command ) ) { variables.prettyCli.error( "Unknown command: #command#" ); return "unknown" }
 		return handlers[ command ]
 	}

@@ -11,12 +11,12 @@
 class {
 	@AITool( "Read a NanoBox configuration value by key. Returns the current value or empty string if not set." )
 	public string function config_get( required string key ) {
-		return new "/cli/util/ConfigManager"().get( arguments.key, "" ).toString()
+		return new "models.system.ConfigManager"().get( arguments.key, "" ).toString()
 	}
 
 	@AITool( "Set a NanoBox configuration value by key and value. Persists the change to disk immediately." )
 	public struct function config_set( required string key, required string value ) {
-		new "/cli/util/ConfigManager"().set( arguments.key, arguments.value )
+		new "models.system.ConfigManager"().set( arguments.key, arguments.value )
 		return { success: true, key: arguments.key, value: arguments.value }
 	}
 }

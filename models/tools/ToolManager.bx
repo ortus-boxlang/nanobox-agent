@@ -21,7 +21,7 @@ class {
 		if ( !isNull( arguments.configManager ) ) {
 			variables.configManager = arguments.configManager
 		} else {
-			variables.configManager = new "/cli/util/ConfigManager"()
+			variables.configManager = new "models.system.ConfigManager"()
 		}
 		variables.homePath = len( arguments.homePath ) ? arguments.homePath : expandPath( "~/.nanobox" )
 		refresh()
