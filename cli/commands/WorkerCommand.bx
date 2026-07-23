@@ -1,15 +1,38 @@
+/**
+ * WorkerCommand — CLI interface for managing the NanoBox worker scheduler process.
+ *
+ * Delegates start, stop, restart, and status actions to WorkerSupervisor, which
+ * launches the BoxLang scheduler ({@code boxlang schedule worker/nanobox-worker.bx})
+ * and tracks its PID via ProcessManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 
 	property supervisor;
 
+	/**
+	 * @processManager ProcessManager instance used to spawn and track the worker
+	 * @projectRoot    Absolute path to the project root; defaults to current directory
+	 */
 	function init( required any processManager, string projectRoot = "" ) {
 		variables.supervisor = new "worker.core.WorkerSupervisor"(
 			arguments.processManager,
 			len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
 		)
-		return this
 	}
 
+	/**
+	 * Dispatches a worker action.
+	 *
+	 * Supported actions: start, stop, restart, status.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Optional args forwarded to WorkerSupervisor.start()
+	 * @return  Result struct with success flag and process status information
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "start":   return variables.supervisor.start( arguments.args )

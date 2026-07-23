@@ -1,10 +1,38 @@
+/**
+ * CommandDispatcher — lightweight pre-routing layer for the NanoBox CLI.
+ *
+ * Accepts a parsed CLI struct and returns a handler class name string (or struct for
+ * gateway commands) that the caller can use to instantiate the correct command class.
+ * Primary routing is handled by {@link CommandRuntime}; this class covers a subset of
+ * command namespaces for legacy or shell-completion use cases.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property prettyCli;
 	property configManager;
 	property debug;
 
+	/**
+	 * @prettyCli      PrettyCli instance for error output
+	 * @configManager  ConfigManager (available for handlers that require it)
+	 * @debug          When true, enables verbose diagnostic output
+	 */
 	function init( required any prettyCli, required any configManager, boolean debug = false ) { variables.prettyCli = arguments.prettyCli; variables.configManager = arguments.configManager; variables.debug = arguments.debug; return this }
 
+	/**
+	 * Maps the leading positional argument to a handler class name.
+	 *
+	 * For the {@code gateway} namespace, returns a struct with handler, action, and args keys.
+	 * For all other supported namespaces, returns the handler class name string.
+	 * Returns {@code "help"} when no positionals are present, or {@code "unknown"} for an
+	 * unrecognised command (with an error printed to the terminal).
+	 *
+	 * @cli  Parsed CLI struct with positionals and options keys
+	 * @return Handler class name string, routing struct for gateway, "help", or "unknown"
+	 */
 	any function dispatch( required struct cli ) {
 		var positionals = arguments.cli.positionals ?: []
 		var options = arguments.cli.options ?: {}
@@ -16,6 +44,13 @@ class {
 		return handlers[ command ]
 	}
 
+	/**
+	 * Extracts gateway routing metadata from the positional and option arrays.
+	 *
+	 * @positionals  Full positional argument array from the CLI parser
+	 * @options      Named options struct from the CLI parser
+	 * @return       Struct with handler, action, and args keys
+	 */
 	private struct function dispatchGateway( required array positionals, required struct options ) {
 		var action = arguments.positionals.len() >= 2 ? arguments.positionals[ 2 ] : "status"
 		var args = duplicate( arguments.options )
@@ -25,5 +60,11 @@ class {
 		if ( arguments.positionals.len() >= 5 && !structKeyExists( args, "message" ) ) { args.message = arguments.positionals[ 5 ] }
 		return { handler: "GatewayCommand", action: action, args: args }
 	}
+
+	/**
+	 * Returns whether debug mode is enabled for this dispatcher instance.
+	 *
+	 * @return true if debug mode is active
+	 */
 	boolean function isDebug() { return variables.debug }
 }

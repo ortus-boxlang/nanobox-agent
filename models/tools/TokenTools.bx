@@ -1,3 +1,13 @@
+/**
+ * TokenTools — AI-callable tools for querying token usage statistics.
+ *
+ * Exposes a tool to the bx-ai tool registry that allows an LLM agent to retrieve
+ * cumulative token consumption figures across all providers and sessions.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Get current token usage statistics across all providers, including total tokens used, cost breakdown, and limits." )
 	public struct function token_usage() {

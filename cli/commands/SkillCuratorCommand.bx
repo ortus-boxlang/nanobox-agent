@@ -1,8 +1,36 @@
+/**
+ * SkillCuratorCommand — CLI interface for the NanoBox skill lifecycle curator.
+ *
+ * Exposes curator operations (status, run/prune, pin, unpin, mode, archive,
+ * restore, backup, rollback, pause, resume, list-archived) through the
+ * injected SkillCurator and CuratorReportManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property curator;
 	property reports;
 	property config;
+
+	/**
+	 * @skillCurator    SkillCurator instance that drives lifecycle decisions
+	 * @reportManager   Optional CuratorReportManager; a default instance is created if omitted
+	 * @configManager   Optional ConfigManager for reading the curator model setting
+	 */
 	function init( required any skillCurator, any reportManager = null, any configManager = null ) { variables.curator = arguments.skillCurator; variables.reports = arguments.reportManager ?: new "models.skills.CuratorReportManager"( expandPath( "." ) ); variables.config = arguments.configManager; return this }
+
+	/**
+	 * Dispatches a curator action.
+	 *
+	 * Supported actions: status, run, pin, unpin, mode, archive, restore, backup,
+	 * rollback, pause, resume, list-archived, prune.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, dryRun, staleAfterDays, archiveAfterDays, mode, id, reason)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "status": return variables.curator.status()

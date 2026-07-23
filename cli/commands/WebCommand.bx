@@ -1,7 +1,32 @@
+/**
+ * WebCommand — CLI interface for the BoxLang MiniServer web process.
+ *
+ * Starts the MiniServer on the configured host/port, serving files from webRoot.
+ * Uses ProcessManager for cross-restart PID tracking.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property processes;
 	property webRoot;
+
+	/**
+	 * @processManager ProcessManager instance used to track the web server process
+	 * @webRoot        Absolute path to the web document root; defaults to current directory
+	 */
 	function init( required any processManager, string webRoot = "" ) { variables.processes = arguments.processManager; variables.webRoot = arguments.webRoot != "" ? arguments.webRoot : expandPath( "." ); return this }
+
+	/**
+	 * Dispatches a web server action.
+	 *
+	 * Supported actions: start, stop, status.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Optional args for start: port (default 8080), host (default 127.0.0.1), debug
+	 * @return  Result struct with success flag and process status information
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "start": return start( arguments.args )
@@ -10,6 +35,13 @@ class {
 			default: return { success: false, error: "Unknown web action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Starts the BoxLang MiniServer process.
+	 *
+	 * @args  Struct with optional port (default 8080), host (default 127.0.0.1), and debug flag
+	 * @return Struct with success, status, pid, and name keys
+	 */
 	private struct function start( struct args ) {
 		var port     = arguments.args.port ?: 8080
 		var host     = arguments.args.host ?: "127.0.0.1"
@@ -18,6 +50,14 @@ class {
 		return variables.processes.start( "web", findMiniServerBin(), commandArgs )
 	}
 
+	/**
+	 * Locates the BoxLang MiniServer executable.
+	 *
+	 * Checks BVM (~/.bvm/current/bin/boxlang-miniserver) then common system paths
+	 * before falling back to a bare name resolved via the OS PATH.
+	 *
+	 * @return Absolute path to the MiniServer binary, or "boxlang-miniserver" for PATH fallback
+	 */
 	private string function findMiniServerBin() {
 		var candidates = [
 			expandPath( "~/.bvm/current/bin/boxlang-miniserver" ),

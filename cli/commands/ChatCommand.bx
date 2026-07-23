@@ -1,8 +1,35 @@
+/**
+ * ChatCommand — executes a single-turn AI chat request.
+ *
+ * Resolves the provider and model from the active configuration (supporting
+ * named models, explicit overrides, and defaults), then calls aiChat() and
+ * returns the response.  Token usage is available on the returned struct.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property configManager;
 	property tokenTracker;
 
+	/**
+	 * @appConfig     ConfigManager instance for provider/model resolution
+	 * @usageTracker  TokenTracker instance for recording usage (currently stored on callers)
+	 */
 	function init( required any appConfig, required any usageTracker ) { variables.configManager = arguments.appConfig; variables.tokenTracker = arguments.usageTracker; return this }
+
+	/**
+	 * Executes a chat query and returns the AI response.
+	 *
+	 * Supports per-request overrides for temperature, max_tokens, provider,
+	 * model, and named models.  On success the returned struct contains content,
+	 * provider, serviceProvider, model, namedModel, usage, and raw keys.
+	 *
+	 * @query    User prompt text; must be non-empty
+	 * @options  Optional overrides: provider, model, namedModel, temperature, max_tokens
+	 * @return   Struct with success flag, content, provider, model, and error keys
+	 */
 	struct function execute( required string query, struct options = {} ) {
 		if ( !len( trim( arguments.query ) ) ) { return { success: false, error: "A query is required" } }
 		var selection = resolveModel( arguments.options )
@@ -23,6 +50,16 @@ class {
 			return { success: true, content: content, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel, usage: {}, raw: response }
 		} catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ), provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel } }
 	}
+
+	/**
+	 * Resolves the effective provider and model for a request.
+	 *
+	 * Resolution order: named model config → per-request override → default config.
+	 * Returns an error struct when the provider or model cannot be determined.
+	 *
+	 * @options  Request options that may contain provider, model, or namedModel keys
+	 * @return   Struct with success, provider, model, options, and namedModel keys
+	 */
 	private struct function resolveModel( struct options ) {
 		var named = arguments.options.namedModel ?: arguments.options[ "named-model" ] ?: variables.configManager.get( "bx-ai.defaultNamedModel", "" )
 		if ( len( named ) ) { var namedConfig = variables.configManager.get( "bx-ai.namedModels.#named#", {} ); if ( structIsEmpty( namedConfig ) ) { return { success: false, error: "Named model not found: #named#" } }; return { success: true, provider: namedConfig.provider, model: namedConfig.model, options: namedConfig.options ?: {}, namedModel: named } }

@@ -1,8 +1,23 @@
+/**
+ * ConfigManager — reads and writes the NanoBox JSON configuration file.
+ *
+ * Config is stored at {@code $NANOBOX_HOME/config/nanobox.json}; user preferences
+ * live in {@code preferences.json} beside it.  Environment variable interpolation
+ * is applied on load: values of the form {@code ${VAR}} are replaced with the
+ * system property or environment variable named {@code VAR}.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property nanoboxHome;
 	property configPath;
 	property preferencesPath;
 
+	/**
+	 * @nanoboxHome Explicit home directory override; defaults to $NANOBOX_HOME or ~/.nanobox
+	 */
 	function init( string nanoboxHome = "" ) {
 		var defaultHome = getSystemSetting( "NANOBOX_HOME", "" )
 		if ( !len( defaultHome ) ) { defaultHome = getSystemSetting( "user.home", "." ) & "/.nanobox" }
@@ -12,17 +27,97 @@ class {
 		return this
 	}
 
+	/**
+	 * Returns the built-in default configuration struct.
+	 *
+	 * @return Struct matching the NanoBox v1 config schema
+	 */
 	struct function defaults() { return { "$schema": "https://nanobox.io/schemas/v1/config.json", version: "1", "bx-ai": { defaultProvider: "", defaultModel: "", providers: {} }, nanobox: { web: { enabled: true, host: "127.0.0.1", port: 8080 }, worker: { enabled: true, debug: false }, sessions: { enabled: true, maxSessions: 1000, pruneAfterDays: 90 }, cron: { enabled: true, maxJobs: 50 }, security: { enabled: true, autoDisable: true } } } }
+
+	/**
+	 * Loads the config file from disk, creating it with defaults if absent.
+	 * Environment variable placeholders are resolved after parsing.
+	 *
+	 * @return Deserialized config struct
+	 */
 	struct function load() { ensureConfigDirectory(); if ( !fileExists( variables.configPath ) ) { var data = defaults(); writeConfig( data ); return data }; try { return resolveEnvironment( jsonDeserialize( fileRead( variables.configPath ) ) ) } catch ( any exception ) { return defaults() } }
+
+	/**
+	 * Persists a config struct to disk.
+	 *
+	 * @configData Config struct to serialise and write
+	 */
 	void function save( required struct configData ) { ensureConfigDirectory(); writeConfig( arguments.configData ) }
+
+	/**
+	 * Reads a single dot-notated config key.
+	 *
+	 * @key          Dot-separated key path (e.g. "bx-ai.defaultProvider")
+	 * @defaultValue Value returned when the key is absent
+	 * @return       The stored value, or defaultValue if the path does not exist
+	 */
 	any function get( required string key, any defaultValue = "" ) { var current = load(); for ( var part in listToArray( arguments.key, "." ) ) { if ( !isStruct( current ) || !structKeyExists( current, part ) ) { return arguments.defaultValue }; current = current[ part ] }; return current }
+
+	/**
+	 * Writes a single dot-notated config key, creating intermediate nodes as needed.
+	 *
+	 * @key   Dot-separated key path
+	 * @value Value to store
+	 */
 	void function set( required string key, required any value ) { var data = load(); var parts = listToArray( arguments.key, "." ); var current = data; for ( var i = 1; i < parts.len(); i++ ) { if ( !structKeyExists( current, parts[ i ] ) || !isStruct( current[ parts[ i ] ] ) ) { current[ parts[ i ] ] = {} }; current = current[ parts[ i ] ] }; current[ parts.last() ] = arguments.value; save( data ) }
+
+	/**
+	 * Removes a single dot-notated config key.  No-ops when the key is absent.
+	 *
+	 * @key Dot-separated key path to delete
+	 */
 	void function unset( required string key ) { var data = load(); var parts = listToArray( arguments.key, "." ); var current = data; for ( var i = 1; i < parts.len(); i++ ) { if ( !structKeyExists( current, parts[ i ] ) ) { return }; current = current[ parts[ i ] ] }; if ( structKeyExists( current, parts.last() ) ) { structDelete( current, parts.last() ) }; save( data ) }
+
+	/**
+	 * Loads the user preferences file, creating it with defaults if absent.
+	 *
+	 * @return Preferences struct with tone, verbosity, model, and provider keys
+	 */
 	struct function loadPreferences() { ensureConfigDirectory(); if ( !fileExists( variables.preferencesPath ) ) { var preferences = { tone: "helpful", verbosity: "normal", model: "", provider: "" }; fileWrite( variables.preferencesPath, jsonSerialize( preferences, true ) ); return preferences }; return jsonDeserialize( fileRead( variables.preferencesPath ) ) }
+
+	/**
+	 * Persists user preferences to disk.
+	 *
+	 * @preferences Preferences struct to serialise
+	 */
 	void function savePreferences( required struct preferences ) { ensureConfigDirectory(); fileWrite( variables.preferencesPath, jsonSerialize( arguments.preferences, true ) ) }
+
+	/**
+	 * Returns the absolute path to the main config file.
+	 *
+	 * @return Absolute path string
+	 */
 	string function getConfigPath() { return variables.configPath }
+
+	/**
+	 * Returns the NanoBox home directory path.
+	 *
+	 * @return Absolute path string
+	 */
 	string function getNanoboxHome() { return variables.nanoboxHome }
+
+	/**
+	 * Creates the config directory tree if it does not already exist.
+	 */
 	private void function ensureConfigDirectory() { var path = variables.nanoboxHome & "/config"; if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }
+
+	/**
+	 * Serialises configData to JSON and writes it to the config file path.
+	 *
+	 * @configData Struct to write
+	 */
 	private void function writeConfig( required struct configData ) { fileWrite( variables.configPath, jsonSerialize( arguments.configData, true ) ) }
+
+	/**
+	 * Recursively replaces {@code ${VAR}} placeholders with system/env values.
+	 *
+	 * @value  Any BoxLang value (struct, array, scalar)
+	 * @return The input value with all placeholders resolved
+	 */
 	private any function resolveEnvironment( required any value ) { if ( isStruct( arguments.value ) ) { for ( var key in arguments.value ) { arguments.value[ key ] = resolveEnvironment( arguments.value[ key ] ) }; return arguments.value }; if ( isArray( arguments.value ) ) { for ( var i = 1; i <= arguments.value.len(); i++ ) { arguments.value[ i ] = resolveEnvironment( arguments.value[ i ] ) }; return arguments.value }; if ( !isSimpleValue( arguments.value ) ) { return arguments.value }; var text = toString( arguments.value ); if ( left( text, 2 ) == "${" && right( text, 1 ) == "}" ) { return getSystemSetting( mid( text, 3, len( text ) - 3 ), "" ) }; return arguments.value }
 }

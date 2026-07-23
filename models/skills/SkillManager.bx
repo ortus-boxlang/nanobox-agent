@@ -1,16 +1,94 @@
+/**
+ * SkillManager — installs, lists, searches, and removes NanoBox skills.
+ *
+ * Skills are SKILL.md files under two roots: the built-in skills directory
+ * ({@code ~/.nanobox/skills}) and the custom skills directory ({@code ~/.nanobox/skills-custom}).
+ * Skills can be installed from the NanoBox registry (owner/repo/skill slug), any HTTP URL, or
+ * a local file/directory path.  Usage telemetry is persisted to a {@code .usage.json} file
+ * inside each skill directory.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property skillsPath;
 	property customPath;
 	property registryUrl;
 	property manifestPath;
+
+	/**
+	 * @skillsPath   Root directory for built-in skills; defaults to ~/.nanobox/skills
+	 * @registryUrl  Base URL of the NanoBox skill registry; defaults to https://skills.boxlang.io
+	 */
 	function init( string skillsPath = "", string registryUrl = "https://skills.boxlang.io" ) { variables.skillsPath = len( arguments.skillsPath ) ? arguments.skillsPath : expandPath( "~/.nanobox/skills" ); var customRoot = getDirectoryFromPath( variables.skillsPath ) & "/skills-custom"; variables.customPath = customRoot; variables.registryUrl = arguments.registryUrl; variables.manifestPath = getDirectoryFromPath( variables.skillsPath ) & "/skills-manifest.json"; ensureDirectories(); return this }
+
+	/**
+	 * Returns the configured registry base URL.
+	 *
+	 * @return Registry URL string
+	 */
 	string function getRegistryUrl() { return variables.registryUrl }
+
+	/**
+	 * Performs a raw HTTP GET to the registry skills endpoint for debugging.
+	 *
+	 * @return HTTP response struct from the registry API
+	 */
 	struct function debugRemote() { return httpRequest( variables.registryUrl & "/api/skills/ortus-boxlang/skills", "GET", {} ) }
+
+	/**
+	 * Returns parsed metadata for all installed skills (built-in + custom).
+	 *
+	 * @return Array of skill metadata structs with name, description, content, path, and custom keys
+	 */
 	array function list() { var result = []; for ( var root in [ variables.skillsPath, variables.customPath ] ) { if ( directoryExists( root ) ) { for ( var dir in directoryList( root, false, "query" ) ) { if ( dir.type == "dir" && fileExists( dir.directory & "/" & dir.name & "/SKILL.md" ) ) { result.append( parse( dir.directory & "/" & dir.name & "/SKILL.md", root == variables.customPath ) ) } } } }; return result }
+
+	/**
+	 * Returns the metadata struct for a single skill by name and records a view telemetry event.
+	 *
+	 * @name  Skill name to find
+	 * @return Skill metadata struct, or empty struct if not found
+	 */
 	struct function show( required string name ) { for ( var item in list() ) { if ( item.name == arguments.name ) { recordTelemetry( arguments.name, "view" ); return item } }; return {} }
+
+	/**
+	 * Full-text searches skill names, descriptions, and content.
+	 *
+	 * @query  Search string (case-insensitive)
+	 * @return Array of matching skill metadata structs
+	 */
 	array function search( required string query ) { var q = lCase( arguments.query ); var result = []; for ( var item in list() ) { if ( find( q, lCase( item.name & " " & item.description & " " & item.content ) ) > 0 ) { result.append( item ) } }; return result }
+
+	/**
+	 * Creates a new custom skill with YAML frontmatter.
+	 *
+	 * @name         Unique skill name (alphanumeric, hyphens, underscores)
+	 * @description  Short description written into the SKILL.md frontmatter
+	 * @content      Instruction body of the skill
+	 * @return       Struct with success flag and parsed skill metadata
+	 */
 	struct function create( required string name, string description = "", string content = "" ) { if ( !validName( arguments.name ) ) { return { success: false, error: "Invalid skill name" } }; var path = variables.customPath & "/" & arguments.name; if ( directoryExists( path ) ) { return { success: false, error: "Skill already exists: #arguments.name#" } }; directoryCreate( path, true ); var skillContent = "---" & char( 10 ) & "name: " & arguments.name & char( 10 ) & "description: " & arguments.description & char( 10 ) & "---" & char( 10 ) & char( 10 ) & arguments.content; fileWrite( path & "/SKILL.md", skillContent ); recordTelemetry( arguments.name, "create" ); return { success: true, skill: parse( path & "/SKILL.md", true ) } }
+
+	/**
+	 * Deletes a skill directory and removes it from the manifest.
+	 *
+	 * @name  Skill name to remove
+	 * @return Struct with success flag and removed skill name
+	 */
 	struct function remove( required string name ) { var item = show( arguments.name ); if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }; var skillDir = getDirectoryFromPath( item.path ); if ( directoryExists( skillDir ) ) { directoryDelete( skillDir, true ) }; var manifest = readManifest(); if ( manifest.skills.keyExists( arguments.name ) ) { structDelete( manifest.skills, arguments.name ) }; writeManifest( manifest ); return { success: true, name: arguments.name } }
+
+	/**
+	 * Installs a skill from the registry, an HTTP URL, or a local path.
+	 *
+	 * The source type is auto-detected: registry slugs use {@code owner/repo/skill} format;
+	 * HTTP sources start with {@code http://} or {@code https://}; everything else is local.
+	 *
+	 * @source  Registry slug, HTTP URL, or local file/directory path
+	 * @force   When true, overwrites an existing skill with the same name
+	 * @name    Optional override for the installed skill name
+	 * @return  Struct with success flag, parsed skill metadata, and source type
+	 */
 	struct function install( required string source, boolean force = false, string name = "" ) {
 		var sourceType = detectSourceType( arguments.source )
 		var result = {}
@@ -32,6 +110,44 @@ class {
 		return result
 	}
 
+	/**
+	 * Searches the remote registry for skills matching the given criteria.
+	 *
+	 * @query     Optional free-text filter applied to the full JSON of each item
+	 * @owner     Unused placeholder (future filtering by registry owner)
+	 * @repo      Unused placeholder (future filtering by repository)
+	 * @category  Optional category filter (case-insensitive match)
+	 * @return    Array of skill metadata structs from the registry
+	 */
+	array function findRemote( string query = "", string owner = "", string repo = "", string category = "" ) { var response = httpRequest( variables.registryUrl & "/api/skills/ortus-boxlang/skills", "GET", {} ); if ( !response.success ) { return [] }; var payload = response.data; var items = isStruct( payload ) && payload.keyExists( "data" ) ? payload.data : payload; if ( isStruct( items ) && items.keyExists( "data" ) ) { items = items.data }; if ( !isArray( items ) ) { return [] }; if ( len( arguments.query ) ) { var q = lCase( arguments.query ); var filtered = []; for ( var item in items ) { if ( find( q, lCase( jsonSerialize( item ) ) ) > 0 ) { filtered.append( item ) } }; items = filtered }; if ( len( arguments.category ) ) { var categoryItems = []; for ( var item in items ) { if ( lCase( item.category ?: "" ) == lCase( arguments.category ) ) { categoryItems.append( item ) } }; items = categoryItems }; return items }
+
+	/**
+	 * Re-downloads all registry-sourced skills from their original registry slugs.
+	 *
+	 * @return Struct with success flag and count of successfully refreshed skills
+	 */
+	struct function refresh() { var manifest = readManifest(); var count = 0; for ( var name in manifest.skills ) { var item = manifest.skills[ name ]; if ( item.owner ?: "" != "" && item.repo ?: "" != "" && item.slug ?: "" != "" ) { var result = install( "#item.owner#/#item.repo#/#item.slug#", true ); if ( result.success ) { count++ } } }; return { success: true, refreshed: count } }
+
+	/**
+	 * Records a patch telemetry event for the named skill.
+	 *
+	 * @name  Skill name to record the patch event for
+	 */
+	public void function recordPatch( required string name ) { recordTelemetry( arguments.name, "patch" ) }
+
+	/**
+	 * Records a use telemetry event for the named skill.
+	 *
+	 * @name  Skill name to record the use event for
+	 */
+	public void function recordUse( required string name ) { recordTelemetry( arguments.name, "use" ) }
+
+	/**
+	 * Detects the install source type from the source string.
+	 *
+	 * @source  Source string to classify
+	 * @return  "http", "local", "registry", or "invalid"
+	 */
 	private string function detectSourceType( required string source ) {
 		if ( reFindNoCase( "^https?://", arguments.source ) ) {
 			return "http"
@@ -50,6 +166,14 @@ class {
 		return "invalid"
 	}
 
+	/**
+	 * Installs a skill from the NanoBox registry using an owner/repo/skill slug.
+	 *
+	 * @slug   Registry slug in owner/repo/skill format
+	 * @force  When true, overwrites an existing skill
+	 * @name   Optional name override for the installed skill
+	 * @return Struct with success flag and parsed skill metadata
+	 */
 	private struct function installFromRegistry( required string slug, boolean force = false, string name = "" ) {
 		var parts = listToArray( arguments.slug, "/" );
 		if ( parts.len() < 3 ) { return { success: false, error: "Registry slug must be owner/repo/skill" } };
@@ -104,6 +228,14 @@ class {
 		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "registry" }
 	}
 
+	/**
+	 * Installs a skill by downloading SKILL.md content from an HTTP URL.
+	 *
+	 * @url    HTTP or HTTPS URL to download
+	 * @force  When true, overwrites an existing skill
+	 * @name   Optional name override
+	 * @return Struct with success flag and parsed skill metadata
+	 */
 	private struct function installFromHttp( required string url, boolean force = false, string name = "" ) {
 		var response = httpRequest( arguments.url, "GET", {} );
 		if ( !response.success ) {
@@ -145,6 +277,14 @@ class {
 		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "http" }
 	}
 
+	/**
+	 * Installs a skill from a local SKILL.md file or directory.
+	 *
+	 * @path   Absolute path to a SKILL.md file or a directory containing one
+	 * @force  When true, overwrites an existing skill
+	 * @name   Optional name override
+	 * @return Struct with success flag and parsed skill metadata
+	 */
 	private struct function installFromLocal( required string path, boolean force = false, string name = "" ) {
 		if ( !fileExists( arguments.path ) && !directoryExists( arguments.path ) ) {
 			return { success: false, error: "Local path does not exist: #arguments.path#" }
@@ -198,17 +338,66 @@ class {
 		recordTelemetry( skillName, "patch" );
 		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "local" }
 	}
-	array function findRemote( string query = "", string owner = "", string repo = "", string category = "" ) { var response = httpRequest( variables.registryUrl & "/api/skills/ortus-boxlang/skills", "GET", {} ); if ( !response.success ) { return [] }; var payload = response.data; var items = isStruct( payload ) && payload.keyExists( "data" ) ? payload.data : payload; if ( isStruct( items ) && items.keyExists( "data" ) ) { items = items.data }; if ( !isArray( items ) ) { return [] }; if ( len( arguments.query ) ) { var q = lCase( arguments.query ); var filtered = []; for ( var item in items ) { if ( find( q, lCase( jsonSerialize( item ) ) ) > 0 ) { filtered.append( item ) } }; items = filtered }; if ( len( arguments.category ) ) { var categoryItems = []; for ( var item in items ) { if ( lCase( item.category ?: "" ) == lCase( arguments.category ) ) { categoryItems.append( item ) } }; items = categoryItems }; return items }
-	struct function refresh() { var manifest = readManifest(); var count = 0; for ( var name in manifest.skills ) { var item = manifest.skills[ name ]; if ( item.owner ?: "" != "" && item.repo ?: "" != "" && item.slug ?: "" != "" ) { var result = install( "#item.owner#/#item.repo#/#item.slug#", true ); if ( result.success ) { count++ } } }; return { success: true, refreshed: count } }
-	public void function recordPatch( required string name ) { recordTelemetry( arguments.name, "patch" ) }
-	public void function recordUse( required string name ) { recordTelemetry( arguments.name, "use" ) }
+
+	/**
+	 * Finds a skill by name without recording telemetry (used internally by recordTelemetry).
+	 *
+	 * @name  Skill name to find
+	 * @return Skill metadata struct, or empty struct if not found
+	 */
 	private struct function showWithoutTelemetry( required string name ) { for ( var item in list() ) { if ( item.name == arguments.name ) { return item } }; return {} }
+
+	/**
+	 * Appends a telemetry event to the skill's {@code .usage.json} file.
+	 *
+	 * @name   Skill name
+	 * @event  Event type: "view", "use", "create", or "patch"
+	 */
 	private void function recordTelemetry( required string name, required string event ) { var item = showWithoutTelemetry( arguments.name ); if ( structIsEmpty( item ) ) { return }; var dir = getDirectoryFromPath( item.path ); var path = dir & "/.usage.json"; var usage = fileExists( path ) ? jsonDeserialize( fileRead( path ) ) : { useCount: 0, viewCount: 0, patchCount: 0, activityCount: 0, createdBy: item.custom ? "user" : "registry" }; var key = arguments.event == "view" ? "viewCount" : ( arguments.event == "use" ? "useCount" : ( arguments.event == "create" ? "createCount" : "patchCount" ) ); usage[ key ] = ( usage[ key ] ?: 0 ) + 1; usage.activityCount = ( usage.activityCount ?: 0 ) + 1; usage.lastActivityAt = now(); usage[ "last#arguments.event#At" ] = now(); fileWrite( path, jsonSerialize( usage, true ) ) }
+
+	/**
+	 * Parses a SKILL.md file into a metadata struct, extracting YAML frontmatter if present.
+	 *
+	 * @path    Absolute path to the SKILL.md file
+	 * @custom  true when the skill lives under the custom skills root
+	 * @return  Struct with name, description, content, path, and custom keys
+	 */
 	private struct function parse( required string path, boolean custom = false ) { var content = fileRead( arguments.path ); var metadata = { name: getFileFromPath( getDirectoryFromPath( arguments.path ) ), description: "" }; var instructions = content; if ( left( content, 3 ) == "---" ) { var end = find( "---", content, 4 ); if ( end > 0 ) { for ( var line in listToArray( mid( content, 4, end - 4 ), char( 10 ) ) ) { var clean = trim( line ); if ( left( clean, 5 ) == "name:" ) { metadata.name = trim( mid( clean, 6, len( clean ) ) ) }; if ( left( clean, 12 ) == "description:" ) { metadata.description = trim( mid( clean, 13, len( clean ) ) ) } }; instructions = trim( mid( content, end + 3, len( content ) ) ) } }; return { name: metadata.name, description: metadata.description, content: instructions, path: arguments.path, custom: arguments.custom } }
+
+	/**
+	 * Performs an HTTP GET or POST request, returning a normalised result struct.
+	 *
+	 * @url     Target URL
+	 * @method  HTTP method ("GET" or "POST")
+	 * @data    Body parameters for POST requests
+	 * @return  Struct with success flag and data (parsed JSON) or error keys
+	 */
 	private struct function httpRequest( required string url, required string method, required struct data ) { try { var client = http( arguments.url ); var response = arguments.method == "GET" ? client.get().send() : client.post().formField( "owner", arguments.data.owner ?: "" ).formField( "repo", arguments.data.repo ?: "" ).formField( "skill", arguments.data.skill ?: "" ).send(); if ( val( response.statusCode ?: 500 ) >= 400 ) { return { success: false, error: "HTTP #arguments.method# returned #response.statusCode#" } }; var body = response.fileContent ?: response.content ?: ""; if ( !len( body ) ) { return { success: true, data: "" } }; try { return { success: true, data: jsonDeserialize( body ) } } catch ( any ignored ) { return { success: true, data: body } } } catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ) } } }
-	private string function urlEncoded( required struct data ) { var parts = []; for ( var key in arguments.data ) { parts.append( urlEncode( key ) & "=" & urlEncode( toString( arguments.data[ key ] ) ) ) }; return arrayToList( parts, "&" ) }
+
+	/**
+	 * Reads the skills manifest file, returning an empty manifest if it does not exist.
+	 *
+	 * @return Manifest struct with a skills key (struct of skill metadata by name)
+	 */
 	private struct function readManifest() { if ( !fileExists( variables.manifestPath ) ) { return { skills: {} } }; return jsonDeserialize( fileRead( variables.manifestPath ) ) }
+
+	/**
+	 * Serialises and writes the manifest struct to disk.
+	 *
+	 * @data  Full manifest struct to persist
+	 */
 	private void function writeManifest( required struct data ) { fileWrite( variables.manifestPath, jsonSerialize( arguments.data, true ) ) }
+
+	/**
+	 * Creates the skills and custom-skills directories and initialises the manifest if missing.
+	 */
 	private void function ensureDirectories() { for ( var path in [ variables.skillsPath, variables.customPath ] ) { if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }; if ( !fileExists( variables.manifestPath ) ) { writeManifest( { skills: {} } ) } }
+
+	/**
+	 * Validates that a skill name contains only alphanumeric characters, hyphens, and underscores.
+	 *
+	 * @name  Candidate skill name
+	 * @return true if the name is valid
+	 */
 	private boolean function validName( required string name ) { return reFind( "^[A-Za-z0-9_-]+$", arguments.name ) == 1 }
 }

@@ -1,20 +1,37 @@
 /**
  * WorkerSupervisor — manages the lifecycle of the NanoBox worker process.
  *
- * Locates the BoxLang binary, builds the `boxlang schedule` command, and
+ * Locates the BoxLang binary, builds the {@code boxlang schedule} command, and
  * delegates process start/stop/status to ProcessManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
  */
 class {
 
 	property processes;
 	property projectRoot;
 
+	/**
+	 * @processManager ProcessManager instance used to spawn and track the worker
+	 * @projectRoot    Absolute path to the project root; defaults to the current directory
+	 */
 	function init( required any processManager, string projectRoot = "" ) {
 		variables.processes   = arguments.processManager
 		variables.projectRoot = len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
 		return this
 	}
 
+	/**
+	 * Starts the BoxLang worker scheduler process.
+	 *
+	 * Verifies that {@code worker/nanobox-worker.bx} exists before launching.
+	 * Uses {@code boxlang schedule <file>} which blocks until killed.
+	 *
+	 * @args  Optional runtime args (currently unused; reserved for future flags)
+	 * @return Struct with success, status, pid, and name keys
+	 */
 	struct function start( struct args = {} ) {
 		var schedulerFile = variables.projectRoot & "/worker/nanobox-worker.bx"
 		if ( !fileExists( schedulerFile ) ) {
@@ -25,14 +42,41 @@ class {
 		return variables.processes.start( "worker", executable, cmdArgs )
 	}
 
+	/**
+	 * Stops the worker process.
+	 *
+	 * @return Struct with success, status, name, and pid keys
+	 */
 	struct function stop()   { return variables.processes.stop( "worker" ) }
+
+	/**
+	 * Returns the current status of the worker process.
+	 *
+	 * @return Struct with name, status (running|stopped), pid, started, and command keys
+	 */
 	struct function status() { return variables.processes.status( "worker" ) }
+
+	/**
+	 * Stops then starts the worker process.
+	 *
+	 * @args  Optional runtime args forwarded to start()
+	 * @return Result of the start() call
+	 */
 	struct function restart( struct args = {} ) { stop(); return start( arguments.args ) }
 
 	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Locates the BoxLang executable by checking well-known paths in priority order.
+	 *
+	 * Priority: BVM installation (~/.bvm/current/bin/boxlang), then common
+	 * system-wide install locations, then falls back to bare "boxlang" and
+	 * relies on the OS PATH.
+	 *
+	 * @return Absolute path to the BoxLang binary, or "boxlang" for PATH fallback
+	 */
 	private string function findBoxLangBin() {
 		var candidates = [
 			// BVM (BoxLang Version Manager) — most common on dev machines

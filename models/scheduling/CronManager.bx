@@ -1,11 +1,34 @@
+/**
+ * CronManager — SQLite-backed registry for NanoBox scheduled tasks.
+ *
+ * Provides full CRUD for cron task definitions stored in the
+ * {@code nanobox_cron_tasks} table.  Actual execution is handled by the
+ * BoxLang scheduler running {@code worker/nanobox-worker.bx}; this class
+ * only manages the metadata and run/failure counters.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property datasource;
 
+	/**
+	 * Initialises the manager and binds to the nanobox datasource.
+	 *
+	 * @tasksPath  Unused legacy parameter; retained for API compatibility
+	 */
 	function init( string tasksPath = "" ) {
 		variables.datasource = "nanobox"
 		return this
 	}
 
+	/**
+	 * Returns all cron tasks, optionally filtered by group.
+	 *
+	 * @group  Group name to filter by; empty string returns all tasks
+	 * @return Array of task structs sorted by name ascending
+	 */
 	array function list( string group = "" ) {
 		var sql = "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks"
 		var params = {}
@@ -18,6 +41,14 @@ class {
 		return queryToArray( result )
 	}
 
+	/**
+	 * Returns the unique list of skill names referenced across all tasks.
+	 *
+	 * Parses the comma-delimited skills field of every task and deduplicates
+	 * the result.
+	 *
+	 * @return Sorted array of skill name strings
+	 */
 	array function referencedSkills() {
 		var result = []
 		for ( var task in list() ) {
@@ -33,6 +64,18 @@ class {
 		return result
 	}
 
+	/**
+	 * Creates a new cron task.
+	 *
+	 * Returns an error if a task with the same name already exists.
+	 *
+	 * @name      Unique task name
+	 * @schedule  Cron expression (e.g. "0 * * * *")
+	 * @prompt    AI prompt text to execute on each firing
+	 * @group     Logical group name (default "default")
+	 * @skills    Array of skill names the task may use
+	 * @return    Struct with success flag and the created task struct
+	 */
 	struct function create( required string name, required string schedule, string prompt = "", string group = "default", array skills = [] ) {
 		var existing = show( arguments.name )
 		if ( structKeyExists( existing, "name" ) ) {
@@ -53,19 +96,48 @@ class {
 		return { success: true, task: show( arguments.name ) }
 	}
 
+	/**
+	 * Returns a single task by name.
+	 *
+	 * Returns an empty struct when the task does not exist; callers should
+	 * check {@code structKeyExists( result, "name" )} before using the value.
+	 *
+	 * @name  Task name to look up
+	 * @return Task struct, or empty struct if not found
+	 */
 	struct function show( required string name ) {
 		var result = queryExecute( "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks WHERE name = :name", { name: arguments.name }, { datasource: variables.datasource } )
 		return queryToArray( result ).first()
 	}
 
+	/**
+	 * Disables a cron task so the worker skips it on the next cycle.
+	 *
+	 * @name  Task name to pause
+	 * @return Struct with success flag and updated task struct
+	 */
 	struct function pause( required string name ) {
 		return setEnabled( arguments.name, false )
 	}
 
+	/**
+	 * Re-enables a previously paused cron task.
+	 *
+	 * @name  Task name to resume
+	 * @return Struct with success flag and updated task struct
+	 */
 	struct function resume( required string name ) {
 		return setEnabled( arguments.name, true )
 	}
 
+	/**
+	 * Records a successful execution of a cron task.
+	 *
+	 * Increments the {@code runs} counter and updates {@code lastRun}.
+	 *
+	 * @name  Task name that ran
+	 * @return Struct with success flag, updated task struct, and a note
+	 */
 	struct function run( required string name ) {
 		var task = show( arguments.name )
 		if ( !structKeyExists( task, "name" ) ) {
@@ -79,6 +151,14 @@ class {
 		return { success: true, task: show( arguments.name ), note: "Run recorded; worker executes enabled tasks" }
 	}
 
+	/**
+	 * Records a failed execution of a cron task.
+	 *
+	 * Increments the {@code failures} counter and updates {@code lastRun}.
+	 *
+	 * @name  Task name that failed
+	 * @return Struct with success flag and updated task struct
+	 */
 	struct function fail( required string name ) {
 		var task = show( arguments.name )
 		if ( !structKeyExists( task, "name" ) ) {
@@ -92,6 +172,12 @@ class {
 		return { success: true, task: show( arguments.name ) }
 	}
 
+	/**
+	 * Deletes a cron task permanently.
+	 *
+	 * @name  Task name to remove
+	 * @return Struct with success flag and deleted task name
+	 */
 	struct function remove( required string name ) {
 		var task = show( arguments.name )
 		if ( !structKeyExists( task, "name" ) ) {
@@ -101,6 +187,11 @@ class {
 		return { success: true, name: arguments.name }
 	}
 
+	/**
+	 * Returns aggregate statistics across all cron tasks.
+	 *
+	 * @return Struct with total, enabled, disabled, and runs keys
+	 */
 	struct function stats() {
 		var total = queryExecute( "SELECT COUNT(*) AS cnt FROM nanobox_cron_tasks", {}, { datasource: variables.datasource } )
 		var enabled = queryExecute( "SELECT COUNT(*) AS cnt FROM nanobox_cron_tasks WHERE enabled = 1", {}, { datasource: variables.datasource } )
@@ -113,6 +204,13 @@ class {
 		}
 	}
 
+	/**
+	 * Sets the enabled flag on a task to the given boolean value.
+	 *
+	 * @name     Task name to update
+	 * @enabled  true to enable, false to disable
+	 * @return   Struct with success flag and updated task struct
+	 */
 	private struct function setEnabled( required string name, required boolean enabled ) {
 		var task = show( arguments.name )
 		if ( !structKeyExists( task, "name" ) ) {
@@ -122,6 +220,12 @@ class {
 		return { success: true, task: show( arguments.name ) }
 	}
 
+	/**
+	 * Converts a query object to an array of structs.
+	 *
+	 * @data  Query result to convert
+	 * @return Array where each element is a struct keyed by column name
+	 */
 	private array function queryToArray( required query data ) {
 		var rows = []
 		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {

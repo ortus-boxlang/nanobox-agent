@@ -1,3 +1,13 @@
+/**
+ * SkillTools — AI-callable tools for browsing installed NanoBox skills.
+ *
+ * Exposes tools to the bx-ai tool registry that allow an LLM agent to list all
+ * installed skills and retrieve detailed information about a specific skill by name.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "List all installed skills with their name, description, version, and activation status." )
 	public array function skill_list() {

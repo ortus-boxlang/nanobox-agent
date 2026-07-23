@@ -1,10 +1,36 @@
+/**
+ * GatewayCommand — CLI interface for configuring and operating messaging gateways.
+ *
+ * Supports setup, status/list, log tailing, test/health checks, connect/disconnect,
+ * enable/disable, restart, remove, targeted send, and broadcast across all gateways.
+ * Interactive prompts are triggered for required config values when running in a TTY.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property registry;
 	property configManager;
 	property logger;
 
+	/**
+	 * @gatewayRegistry  GatewayRegistry instance owning gateway lifecycle
+	 * @configManager    Optional ConfigManager for reading global settings
+	 * @gatewayLogger    Optional GatewayLogger; a default instance is created if omitted
+	 */
 	function init( required any gatewayRegistry, any configManager = null, any gatewayLogger = null ) { variables.registry = arguments.gatewayRegistry; variables.configManager = arguments.configManager; variables.logger = arguments.gatewayLogger ?: new "models.gateway.GatewayLogger"(); return this }
 
+	/**
+	 * Dispatches a gateway action.
+	 *
+	 * Supported actions: setup, status, list, log, clear-log, test, health,
+	 * connect, disconnect, enable, disable, restart, remove, send, broadcast.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (platform, name, tokenEnv, recipient, message, lines, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var operation = lCase( arguments.action )
 		switch ( operation ) {
@@ -27,6 +53,16 @@ class {
 		}
 	}
 
+	/**
+	 * Guides the user through gateway configuration for a given platform.
+	 *
+	 * Prompts interactively for platform-specific values (e.g. token env var for
+	 * Telegram) when not supplied via args.  Stores credential references as
+	 * environment variable placeholders rather than literal values.
+	 *
+	 * @args  Struct with optional platform, tokenEnv/token-env, and nonInteractive keys
+	 * @return Struct with success, configured, secretStorage, and gateway keys
+	 */
 	private struct function setup( struct args ) {
 		var platform = arguments.args.platform ?: ""
 		if ( !len( platform ) ) { platform = cliRead( "Gateway platform (telegram/email/discord/slack/whatsapp/whatsapp-business/signal/sms): " ) }
@@ -41,6 +77,12 @@ class {
 		return result
 	}
 
+	/**
+	 * Tests connectivity for a named gateway and logs the outcome.
+	 *
+	 * @args  Struct with name or platform key identifying the gateway
+	 * @return Struct with success, gateway name, and status sub-struct
+	 */
 	private struct function test( struct args ) {
 		var target = arguments.args.name ?: arguments.args.platform ?: ""
 		var result = variables.registry.connect( target )
@@ -48,11 +90,22 @@ class {
 		return { success: result.connected ?: false, gateway: target, status: result }
 	}
 
+	/**
+	 * Clears the gateway log file.
+	 *
+	 * @return Struct with success flag and log file path
+	 */
 	private struct function clearLog() {
 		fileWrite( variables.logger.getPath(), "" )
 		return { success: true, path: variables.logger.getPath() }
 	}
 
+	/**
+	 * Sends a message via a specific gateway.
+	 *
+	 * @args  Struct with name (gateway identifier), recipient, and message keys
+	 * @return Gateway send result struct
+	 */
 	private struct function send( struct args ) {
 		var target = arguments.args.name ?: ""
 		var gateway = variables.registry.get( target )
@@ -63,6 +116,12 @@ class {
 		return result
 	}
 
+	/**
+	 * Broadcasts a message to all registered gateways.
+	 *
+	 * @args  Struct with recipient and message keys
+	 * @return Struct with success flag and results array (one entry per gateway)
+	 */
 	private struct function broadcast( struct args ) {
 		var results = []
 		for ( var gatewayStatus in variables.registry.list() ) { results.append( send( { name: gatewayStatus.name, recipient: arguments.args.recipient ?: "", message: arguments.args.message ?: "" } ) ) }

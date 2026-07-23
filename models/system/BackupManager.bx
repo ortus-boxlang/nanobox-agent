@@ -1,7 +1,21 @@
+/**
+ * BackupManager — creates, lists, and restores ZIP archives of the NanoBox home directory.
+ *
+ * Each backup is a timestamped ZIP file written to {@code ~/.nanobox/backups/}.  The path
+ * and size of the most recent backup are recorded in {@code latest.json} alongside the archives.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property sourceRoot;
 	property backupPath;
 
+	/**
+	 * @sourceRoot   Root directory to back up; defaults to ~/.nanobox
+	 * @backupPath   Directory to write backup archives; defaults to ~/.nanobox/backups
+	 */
 	function init( string sourceRoot = "", string backupPath = "" ) {
 		variables.sourceRoot = arguments.sourceRoot != "" ? arguments.sourceRoot : expandPath( "~/.nanobox" )
 		variables.backupPath = arguments.backupPath != "" ? arguments.backupPath : variables.sourceRoot & "/backups"
@@ -9,6 +23,11 @@ class {
 		return this
 	}
 
+	/**
+	 * Creates a timestamped ZIP backup of the entire source root.
+	 *
+	 * @return Struct with success flag, archive file path, and file size in bytes
+	 */
 	struct function run() {
 		var stamp = dateFormat( now(), "yyyy-mm-dd" ) & "_" & timeFormat( now(), "HH-mm-ss" )
 		var target = variables.backupPath & "/nanobox-" & stamp & ".zip"
@@ -25,12 +44,22 @@ class {
 		}
 	}
 
+	/**
+	 * Returns metadata for all backup archives in the backup directory.
+	 *
+	 * @return Array of structs with name, path, size, and modified keys
+	 */
 	array function list() {
 		var result = []
 		for ( var file in directoryList( variables.backupPath, false, "query", "*.zip" ) ) { result.append( { name: file.name, path: file.directory & "/" & file.name, size: file.size, modified: file.dateLastModified } ) }
 		return result
 	}
 
+	/**
+	 * Returns metadata about the most recent backup from {@code latest.json}.
+	 *
+	 * @return Struct with file, created, and size keys, or {@code {status: "never"}} if no backup exists
+	 */
 	struct function status() {
 		var path = variables.backupPath & "/latest.json"
 		var data = fileExists( path ) ? jsonDeserialize( fileRead( path ) ) : { status: "never" }
@@ -38,6 +67,14 @@ class {
 		return data
 	}
 
+	/**
+	 * Restores the NanoBox home directory from a backup archive.
+	 *
+	 * Accepts either a filename relative to the backup directory or an absolute path.
+	 *
+	 * @backup  Backup filename or absolute archive path
+	 * @return  Struct with success flag and archive path
+	 */
 	struct function restore( required string backup ) {
 		var path = variables.backupPath & "/" & arguments.backup
 		if ( !fileExists( path ) ) { path = arguments.backup }

@@ -1,8 +1,24 @@
+/**
+ * CommandRuntime — master command router for the NanoBox CLI.
+ *
+ * Receives a parsed CLI struct from {@code nanobox.bx}, maps the leading positional
+ * argument to the appropriate command class, and delegates execution.  All NanoBox
+ * subsystems (session, chat, agent, tool, MCP, vault, gateway, etc.) are instantiated
+ * here and never cached — each command invocation gets a fresh object graph.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property output;
 	property config;
 	property home;
 
+	/**
+	 * @cliOutput      PrettyCli instance for formatted terminal output
+	 * @configManager  ConfigManager providing access to the NanoBox config file
+	 */
 	function init( required any cliOutput, required any configManager ) {
 		variables.output = arguments.cliOutput
 		variables.config = arguments.configManager
@@ -10,6 +26,16 @@ class {
 		return this
 	}
 
+	/**
+	 * Dispatches the parsed CLI struct to the correct command handler.
+	 *
+	 * The first positional argument is the command namespace.  A second positional
+	 * argument (when present) is the sub-action.  Remaining positionals and options
+	 * are normalised by {@link #positionalArguments} and forwarded to the handler.
+	 *
+	 * @parsed  Struct produced by the CLI argument parser; must have positionals and options keys
+	 * @return  Command result struct with at least a success key
+	 */
 	struct function execute( required struct parsed ) {
 		var command = arguments.parsed.positionals.first()
 		var action = arguments.parsed.positionals.len() >= 2 ? arguments.parsed.positionals[ 2 ] : ""
@@ -52,8 +78,27 @@ class {
 		}
 	}
 
+	/**
+	 * Normalises a process-command result so {@code success} reflects whether the process is stopped.
+	 *
+	 * @result  Raw result struct from WebCommand or WorkerCommand
+	 * @return  Result with success set to true when the process status is "stopped"
+	 */
 	private struct function wrapProcessResult( required struct result ) { arguments.result.success = ( arguments.result.success ?: ( arguments.result.status ?: "stopped" ) == "stopped" ); return arguments.result }
 
+	/**
+	 * Extracts named argument values from the positional argument array.
+	 *
+	 * Each command/action combination has defined positional slots for its required
+	 * arguments.  This method maps those slots into named keys on the args struct so
+	 * command handlers can use a uniform named-parameter API.
+	 *
+	 * @command    First positional (command namespace)
+	 * @action     Second positional (sub-action)
+	 * @positionals Full array of positional arguments from the CLI parser
+	 * @options    Named options struct from the CLI parser
+	 * @return     Merged args struct combining options and extracted positional values
+	 */
 	private struct function positionalArguments( required string command, required string action, required array positionals, required struct options ) {
 		var result = duplicate( arguments.options )
 		var values = arguments.positionals
@@ -111,6 +156,13 @@ class {
 		return result
 	}
 
+	/**
+	 * Starts or stops the web server and worker processes together.
+	 *
+	 * @action  "start", "stop", or "restart"
+	 * @args    Optional named arguments forwarded to sub-commands
+	 * @return  Struct with success flag and nested web and worker result keys
+	 */
 	private struct function processAction( required string action, struct args = {} ) {
 		var manager = new "models.system.ProcessManager"()
 		var web = new "cli.commands.WebCommand"( manager )
@@ -120,29 +172,85 @@ class {
 		return { success: true, web: web.execute( "start", arguments.args ), worker: worker.execute( "start", arguments.args ) }
 	}
 
+	/**
+	 * Returns a diagnostic struct confirming core NanoBox components are reachable.
+	 *
+	 * @return Struct with config file existence, home path, datasource name, and required module names
+	 */
 	private struct function doctor() { return { success: true, config: fileExists( variables.config.getConfigPath() ), home: variables.home, datasource: "nanobox", modules: [ "bx-ai", "bx-sqlite" ] } }
+
+	/**
+	 * Delegates vault list, search, or index operations to VaultManager.
+	 *
+	 * @action  "search", "index", or default (list)
+	 * @args    Named arguments (query, category)
+	 * @return  Vault operation result
+	 */
 	private struct function vault( required string action, struct args = {} ) {
 		var manager = new "models.vault.VaultManager"()
 		if ( arguments.action == "search" ) { return { success: true, documents: manager.search( arguments.args.query ?: "" ) } }
 		if ( arguments.action == "index" ) { return manager.index() }
 		return { success: true, documents: manager.list( arguments.args.category ?: "" ) }
 	}
+
+	/**
+	 * Delegates security scan or status operations to SecurityCzar.
+	 *
+	 * @action  "scan" or default (status)
+	 * @args    Named arguments (type, path)
+	 * @return  Security operation result
+	 */
 	private struct function security( required string action, struct args = {} ) {
 		var czar = new "models.security.SecurityCzar"()
 		if ( arguments.action == "scan" ) { return { success: true, results: czar.scanFiles( arguments.args.type ?: "all", arguments.args.path ?: variables.home ) } }
 		return { success: true, report: czar.status() }
 	}
+
+	/**
+	 * Delegates model get/set operations to ConfigManager.
+	 *
+	 * @action  "set", "current", or default (list models)
+	 * @args    Named arguments (model, name)
+	 * @return  Model operation result
+	 */
 	private struct function model( required string action, struct args = {} ) {
 		if ( arguments.action == "set" ) { variables.config.set( "bx-ai.defaultModel", arguments.args.model ?: arguments.args.name ?: "" ); return { success: true, model: variables.config.get( "bx-ai.defaultModel" ) } }
 		if ( arguments.action == "current" ) { return { success: true, provider: variables.config.get( "bx-ai.defaultProvider" ), model: variables.config.get( "bx-ai.defaultModel" ) } }
 		return { success: true, models: variables.config.get( "bx-ai.models", [] ) }
 	}
+
+	/**
+	 * Returns a directory listing of the NanoBox home skills directory.
+	 *
+	 * @action  Ignored; reserved for future sub-commands
+	 * @args    Ignored
+	 * @return  Struct with success and skills listing
+	 */
 	private struct function skills( required string action, struct args = {} ) { var path = variables.home & "/skills"; var items = directoryExists( path ) ? directoryList( path, false, "query" ) : []; return { success: true, skills: items } }
+
+	/**
+	 * Executes a single-shot (non-interactive) chat query.
+	 *
+	 * @query     User prompt text
+	 * @args      Optional named arguments forwarded to ChatCommand
+	 * @textOnly  When true, strips all keys except success and text from the result
+	 * @return    ChatCommand result, optionally reduced to {success, text}
+	 */
 	private struct function chat( required string query, struct args = {}, boolean textOnly = false ) {
 		var result = new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ).execute( arguments.query, arguments.args )
 		if ( arguments.textOnly ) { return { success: result.success, text: result.content ?: "", error: result.error ?: "" } }
 		return result
 	}
+
+	/**
+	 * Starts the interactive REPL chat session.
+	 *
+	 * Creates an InteractiveChat session, renders the header, and enters the read–execute–print
+	 * loop until the user types /exit or /quit.
+	 *
+	 * @parsed  Full parsed CLI struct (used only to resolve the entry session title)
+	 * @return  Struct with success flag, interactive=true, and sessionId
+	 */
 	private struct function interactiveChat( struct parsed = {} ) {
 		var interactive = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ), new "models.sessions.SessionManager"(), variables.config )
 		var started = interactive.start( true )

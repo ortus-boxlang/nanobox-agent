@@ -1,4 +1,25 @@
+/**
+ * SlackGateway — Slack messaging platform implementation of IGateway.
+ *
+ * Stub implementation that inherits lifecycle management from BaseGateway.
+ * Full Slack Web API integration (events, blocks, interactive components)
+ * is planned for a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class extends="models.gateway.BaseGateway" {
+
+	/**
+	 * @config  Config struct; expected keys: botToken, appToken, signingSecret
+	 */
 	function init( struct config = {} ) { super.init( "slack", arguments.config ); return this }
+
+	/**
+	 * Returns the feature capabilities supported by the Slack platform.
+	 *
+	 * @return Capabilities struct with text, attachments, images, reactions, threads, and HITL support
+	 */
 	struct function capabilities() { return { text: true, attachments: true, images: true, audio: false, video: false, reactions: true, threads: true, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

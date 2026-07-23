@@ -1,3 +1,13 @@
+/**
+ * SessionTools — AI-callable tools for querying past conversation sessions.
+ *
+ * Exposes tools to the bx-ai tool registry that allow an LLM agent to search
+ * conversation history and retrieve session usage statistics.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Search past conversation sessions using full-text search. Returns matching sessions with excerpts and timestamps." )
 	public array function session_search( required string query, numeric limit = 5 ) {

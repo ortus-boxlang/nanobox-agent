@@ -1,6 +1,31 @@
+/**
+ * CoreLifecycleCommand — handles start, stop, restart, status, and doctor actions.
+ *
+ * Coordinates the web (BoxLang MiniServer) and worker (BoxLang Scheduler) sub-processes
+ * through their respective command classes and the shared ProcessManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property config;
+
+	/**
+	 * @configManager Loaded ConfigManager instance
+	 */
 	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+
+	/**
+	 * Dispatches a lifecycle action to the appropriate sub-commands.
+	 *
+	 * Supports start, stop, restart, status, and doctor.  start and stop accept
+	 * --web-only / --worker-only flags to limit which sub-process is affected.
+	 *
+	 * @action  Lifecycle action name
+	 * @args    Optional flags (webOnly, workerOnly, etc.)
+	 * @return  Result struct with success flag and per-process status
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var manager = new "models.system.ProcessManager"( variables.config.getNanoboxHome() & "/run/processes.json" )
 		var web = new "cli.commands.WebCommand"( manager, expandPath( "." ) )
@@ -25,6 +50,13 @@ class {
 		}
 		return { success: false, error: "Unknown lifecycle action: #arguments.action#" }
 	}
+
+	/**
+	 * Runs diagnostics and returns a health report.
+	 *
+	 * @manager ProcessManager used to retrieve current process states
+	 * @return  Struct with config, nanoboxHome, processState, modules, and processes keys
+	 */
 	private struct function doctor( required any manager ) {
 		variables.config.load()
 		var status = manager.all()

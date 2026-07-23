@@ -1,8 +1,23 @@
+/**
+ * SecurityCzar — content-scanning security layer for NanoBox.
+ *
+ * Scans text content for dangerous patterns (leaked API keys, prompt injection,
+ * dangerous Java class references) and writes findings to a JSON report file.
+ * Also exposes a scheduled tick for background scanning.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property quarantinePath;
 	property reportPath;
 	property patterns;
 
+	/**
+	 * @quarantinePath  Directory for quarantined files; defaults to ~/.nanobox/quarantine
+	 * @reportPath      Path to the JSON security report; defaults to ~/.nanobox/security-report.json
+	 */
 	function init( string quarantinePath = "", string reportPath = "" ) {
 		variables.quarantinePath = arguments.quarantinePath != "" ? arguments.quarantinePath : expandPath( "~/.nanobox/quarantine" )
 		variables.reportPath = arguments.reportPath != "" ? arguments.reportPath : expandPath( "~/.nanobox/security-report.json" )
@@ -11,6 +26,17 @@ class {
 		return this
 	}
 
+	/**
+	 * Scans a single content string against all registered threat patterns.
+	 *
+	 * Each matching pattern contributes a finding with a severity rating.
+	 * The result is written to the report file and returned to the caller.
+	 *
+	 * @type     Logical content type label (e.g. "skills", "vault")
+	 * @name     Display name for the scanned item
+	 * @content  Raw text content to scan
+	 * @return   Struct with type, name, findings array, scanned timestamp, and status ("clean"|"threat")
+	 */
 	struct function scan( required string type, required string name, required string content ) {
 		var findings = []
 		for ( var pattern in variables.patterns ) { if ( reFindNoCase( pattern, arguments.content ) ) { findings.append( { pattern: pattern, severity: pattern.findNoCase( "ignore" ) ? "high" : "critical" } ) } }
@@ -19,6 +45,13 @@ class {
 		return result
 	}
 
+	/**
+	 * Scans all .md files in a directory tree.
+	 *
+	 * @type       Logical content type label passed to scan()
+	 * @directory  Root directory to traverse
+	 * @return     Array of scan result structs, one per file
+	 */
 	array function scanFiles( required string type, required string directory ) {
 		var results = []
 		if ( !directoryExists( arguments.directory ) ) { return results }
@@ -26,8 +59,22 @@ class {
 		return results
 	}
 
+	/**
+	 * Returns the last written security report.
+	 *
+	 * @return Parsed report struct, or {status: "never-scanned"} when no report exists
+	 */
 	struct function status() { return fileExists( variables.reportPath ) ? jsonDeserialize( fileRead( variables.reportPath ) ) : { status: "never-scanned" } }
 
+	/**
+	 * Performs a background security scan tick (called by the scheduled worker).
+	 *
+	 * Scans all files under the given root directory and logs outcomes.
+	 *
+	 * @scope  Logical scope label for logging (default "skills")
+	 * @root   Override scan root; defaults to quarantinePath
+	 * @return Struct with success, scanned count, threats count, findings, scope, and duration keys
+	 */
 	struct function tick( string scope = "skills", string root = "" ) {
 		var scanRoot = len( arguments.root ) ? arguments.root : variables.quarantinePath
 		var start = now()
@@ -49,5 +96,10 @@ class {
 		}
 	}
 
+	/**
+	 * Writes a scan result struct to the JSON report file.
+	 *
+	 * @result  Scan result struct to serialise
+	 */
 	private void function writeReport( required struct result ) { fileWrite( variables.reportPath, jsonSerialize( arguments.result, true ) ) }
 }

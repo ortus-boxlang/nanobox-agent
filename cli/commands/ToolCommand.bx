@@ -1,6 +1,30 @@
+/**
+ * ToolCommand — CLI interface for managing NanoBox AI tools.
+ *
+ * Dispatches tool actions (list, show, enable, disable, status, refresh) to
+ * the injected ToolManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @toolManager ToolManager instance that owns tool registration and state
+	 */
 	function init( required any toolManager ) { variables.manager = arguments.toolManager; return this }
+
+	/**
+	 * Dispatches a tool action.
+	 *
+	 * Supported actions: list, show, enable, disable, status, refresh.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (key/name, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": {

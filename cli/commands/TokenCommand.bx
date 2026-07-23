@@ -1,6 +1,30 @@
+/**
+ * TokenCommand — CLI interface for viewing LLM token usage reports.
+ *
+ * Returns totals and optional breakdowns (by model, provider, operation, etc.)
+ * by delegating to the injected TokenTracker.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property tracker;
+
+	/**
+	 * @usageTracker TokenTracker instance that owns usage persistence
+	 */
 	function init( required any usageTracker ) { variables.tracker = arguments.usageTracker; return this }
+
+	/**
+	 * Returns token usage totals and optional dimension breakdowns.
+	 *
+	 * @period  Time window: "all" for lifetime totals, "today" for the current day
+	 * @by      Optional dimension to group by (e.g. "model", "provider")
+	 * @asJson  Reserved; callers control serialisation externally
+	 * @args    May override period and by via args.period and args.by
+	 * @return  Struct with success, period, totals, and optional breakdown keys
+	 */
 	struct function execute( string period = "all", string by = "", boolean asJson = false, struct args = {} ) {
 		var selectedPeriod = arguments.args.period ?: arguments.period
 		var dimension = arguments.args.by ?: arguments.by
@@ -9,5 +33,12 @@ class {
 		if ( len( dimension ) ) { result.breakdown = breakdown( dimension ) }
 		return result
 	}
+
+	/**
+	 * Aggregates token events grouped by an arbitrary dimension field.
+	 *
+	 * @dimension  Event field name to group by (e.g. "model", "provider", "operation")
+	 * @return     Array of structs with key and metrics sub-struct
+	 */
 	array function breakdown( required string dimension ) { var groups = {}; for ( var event in variables.tracker.events() ) { var key = event[ arguments.dimension ] ?: "unknown"; if ( !structKeyExists( groups, key ) ) { groups[ key ] = { promptTokens: 0, completionTokens: 0, totalTokens: 0, events: 0 } }; groups[ key ].promptTokens += event.promptTokens; groups[ key ].completionTokens += event.completionTokens; groups[ key ].totalTokens += event.totalTokens; groups[ key ].events++ }; var result = []; for ( var key in groups ) { result.append( { key: key, metrics: groups[ key ] } ) }; return result }
 }

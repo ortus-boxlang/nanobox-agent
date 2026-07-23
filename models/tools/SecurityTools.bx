@@ -1,3 +1,14 @@
+/**
+ * SecurityTools — AI-callable tools for content security scanning.
+ *
+ * Exposes a scanning tool to the bx-ai tool registry that allows an LLM agent to
+ * check arbitrary text content for prompt injection patterns, leaked secrets, and
+ * other dangerous payloads.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Scan content for security threats including prompt injection patterns, secrets, and dangerous code. Returns scan results with severity levels." )
 	public struct function security_scan( required string content, string type = "text" ) {

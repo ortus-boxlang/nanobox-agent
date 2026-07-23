@@ -1,6 +1,30 @@
+/**
+ * UpdateCommand — CLI interface for checking and applying NanoBox updates.
+ *
+ * Delegates all actions (list, status, update, rollback) to the injected
+ * UpdateManager's execute() method.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @updateManager UpdateManager instance that handles version checks and upgrades
+	 */
 	function init( required any updateManager ) { variables.manager = arguments.updateManager; return this }
+
+	/**
+	 * Dispatches an update action.
+	 *
+	 * Supported actions: list (available updates), status, update (apply), rollback.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments forwarded to UpdateManager
+	 * @return  Result struct from UpdateManager with success flag and payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return variables.manager.execute( "list", arguments.args )

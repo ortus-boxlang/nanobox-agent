@@ -1,17 +1,74 @@
+/**
+ * InteractiveChatRenderer — terminal rendering helper for the NanoBox REPL.
+ *
+ * Produces ANSI-coloured strings for the chat header, user turns, assistant turns,
+ * and slash command output.  Color can be disabled for plain-text environments.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property chat;
 	property colors;
 
+	/**
+	 * @interactiveChat  InteractiveChat instance (reserved for future context access)
+	 * @colorsEnabled    When true (default), ANSI escape codes are applied
+	 */
 	function init( required any interactiveChat, boolean colorsEnabled = true ) { variables.chat = arguments.interactiveChat; variables.colors = arguments.colorsEnabled; return this }
+
+	/**
+	 * Renders the session header box shown at the start of each interactive session.
+	 *
+	 * @state  Struct with title, provider, model (or namedModel) keys
+	 * @return Formatted box string with session title, provider/model, and hint text
+	 */
 	string function renderHeader( required struct state ) {
 		var title = arguments.state.title ?: "New chat"
 		var model = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
 		var provider = arguments.state.provider ?: "not configured"
 		return box( "NanoBox · #title#\n#provider# / #model#\n/help for commands · /exit to quit" )
 	}
+
+	/**
+	 * Renders a user turn with a coloured "You" prefix.
+	 *
+	 * @text  User's message text
+	 * @return Formatted string with ANSI cyan "You ›" prefix
+	 */
 	string function renderUser( required string text ) { return "\n" & style( "You", "cyan" ) & " › " & arguments.text }
+
+	/**
+	 * Renders an assistant turn with a coloured "NanoBox" prefix.
+	 *
+	 * @text  Assistant response content
+	 * @return Formatted string with ANSI green "NanoBox ›" prefix
+	 */
 	string function renderAssistant( required string text ) { return "\n" & style( "NanoBox", "green" ) & " ›\n" & arguments.text }
+
+	/**
+	 * Renders the output of a slash command for terminal display.
+	 *
+	 * @result  Action result struct from InteractiveChat.execute()
+	 * @return  Formatted string; for help, a newline-joined command list; otherwise JSON
+	 */
 	string function renderCommand( required struct result ) { if ( arguments.result.action == "help" ) { return arrayToList( arguments.result.commands, "\n" ) }; return jsonSerialize( arguments.result ) }
+
+	/**
+	 * Draws a Unicode box border around multi-line text content.
+	 *
+	 * @text  Content to wrap; newlines create additional rows
+	 * @return Box-bordered string using Unicode box-drawing characters
+	 */
 	private string function box( required string text ) { var lines = listToArray( replace( arguments.text, char( 13 ), "", "all" ), char( 10 ), true ); var width = 0; for ( var line in lines ) { width = max( width, len( line ) ) }; var output = "┌" & repeatString( "─", width + 2 ) & "┐"; for ( var line in lines ) { output &= char( 10 ) & "│ " & line & repeatString( " ", width - len( line ) ) & " │" }; return output & char( 10 ) & "└" & repeatString( "─", width + 2 ) & "┘" }
+
+	/**
+	 * Applies an ANSI color code to text when colors are enabled.
+	 *
+	 * @text   Text to style
+	 * @color  Named color: "cyan", "green", "yellow", "red", or "dim"
+	 * @return ANSI-wrapped text, or the original text if colors are disabled
+	 */
 	private string function style( required string text, required string color ) { if ( !variables.colors ) { return arguments.text }; var codes = { cyan: "36", green: "32", yellow: "33", red: "31", dim: "2" }; return char( 27 ) & "[" & codes[ arguments.color ] & "m" & arguments.text & char( 27 ) & "[0m" }
 }

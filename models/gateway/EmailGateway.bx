@@ -1,4 +1,24 @@
+/**
+ * EmailGateway — email messaging implementation of IGateway.
+ *
+ * Stub implementation that inherits lifecycle management from BaseGateway.
+ * Full SMTP/IMAP integration is planned for a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class extends="models.gateway.BaseGateway" {
+
+	/**
+	 * @config  Config struct; expected keys: host, port, username, password, from
+	 */
 	function init( struct config = {} ) { super.init( "email", arguments.config ); return this }
+
+	/**
+	 * Returns the feature capabilities supported by the email platform.
+	 *
+	 * @return Capabilities struct reflecting email's text and attachment support (no media/reactions/threads)
+	 */
 	struct function capabilities() { return { text: true, attachments: true, images: false, audio: false, video: false, reactions: false, threads: false, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

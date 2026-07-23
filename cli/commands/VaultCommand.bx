@@ -1,6 +1,30 @@
+/**
+ * VaultCommand — CLI interface for the NanoBox knowledge vault.
+ *
+ * Dispatches vault actions (list, import, search, index, show, remove, export)
+ * to the injected VaultManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @vaultManager VaultManager instance that owns document persistence
+	 */
 	function init( required any vaultManager ) { variables.manager = arguments.vaultManager; return this }
+
+	/**
+	 * Dispatches a vault action.
+	 *
+	 * Supported actions: list, import, search, index, show, remove, export.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (path/source, category, tags, query, id/name, output, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return { success: true, documents: variables.manager.list( arguments.args.category ?: "" ) }
@@ -17,5 +41,12 @@ class {
 			default: return { success: false, error: "Unknown vault action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Returns a single vault document by ID.
+	 *
+	 * @id  Document ID to retrieve
+	 * @return Struct with success flag and document struct
+	 */
 	private struct function show( required string id ) { if ( !len( arguments.id ) ) { return { success: false, error: "A vault document id is required" } }; var result = variables.manager.get( arguments.id ); return structIsEmpty( result ) ? { success: false, error: "Document not found: #arguments.id#" } : { success: true, document: result } }
 }

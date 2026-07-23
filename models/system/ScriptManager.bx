@@ -1,12 +1,31 @@
+/**
+ * ScriptManager — manages BoxLang script files stored under the NanoBox home directory.
+ *
+ * Scripts are {@code .bxs} files stored in {@code ~/.nanobox/scripts/}.  They can be
+ * listed, created, shown, and executed as child processes via the system {@code boxlang}
+ * binary.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property scriptsPath;
 
+	/**
+	 * @scriptsPath  Directory for script files; defaults to ~/.nanobox/scripts
+	 */
 	function init( string scriptsPath = "" ) {
 		variables.scriptsPath = arguments.scriptsPath != "" ? arguments.scriptsPath : expandPath( "~/.nanobox/scripts" )
 		if ( !directoryExists( variables.scriptsPath ) ) { directoryCreate( variables.scriptsPath, true ) }
 		return this
 	}
 
+	/**
+	 * Returns metadata for all {@code .bxs} script files in the scripts directory.
+	 *
+	 * @return Array of structs with name, path, and size keys
+	 */
 	array function list() {
 		var result = []
 		for ( var file in directoryList( variables.scriptsPath, false, "query", "*.bxs" ) ) {
@@ -15,17 +34,37 @@ class {
 		return result
 	}
 
+	/**
+	 * Returns the metadata and content of a single script by name.
+	 *
+	 * @name  Script name (without the .bxs extension)
+	 * @return Struct with name, path, and content keys, or empty struct if not found
+	 */
 	struct function show( required string name ) {
 		var path = variables.scriptsPath & "/" & arguments.name & ".bxs"
 		return fileExists( path ) ? { name: arguments.name, path: path, content: fileRead( path ) } : {}
 	}
 
+	/**
+	 * Creates or overwrites a script file with the given content.
+	 *
+	 * @name     Script name (without the .bxs extension)
+	 * @content  BoxLang script content to write
+	 * @return   Show result struct for the created script
+	 */
 	struct function create( required string name, string content = "" ) {
 		var path = variables.scriptsPath & "/" & arguments.name & ".bxs"
 		fileWrite( path, arguments.content )
 		return show( arguments.name )
 	}
 
+	/**
+	 * Executes a script as a child process using the {@code boxlang} binary.
+	 *
+	 * @name  Script name to run
+	 * @args  Additional command-line arguments passed to the script
+	 * @return Struct with success, output, and exitCode keys
+	 */
 	struct function run( required string name, array args = [] ) {
 		var script = show( arguments.name )
 		if ( structIsEmpty( script ) ) { return { success: false, error: "Script not found" } }

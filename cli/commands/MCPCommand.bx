@@ -1,6 +1,30 @@
+/**
+ * MCPCommand — CLI interface for managing Model Context Protocol (MCP) server connections.
+ *
+ * Dispatches MCP actions (list, add, add-stdio, start, stop, remove, test) to
+ * the injected McpManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @mcpManager McpManager instance that owns MCP server registration and lifecycle
+	 */
 	function init( required any mcpManager ) { variables.manager = arguments.mcpManager; return this }
+
+	/**
+	 * Dispatches an MCP action.
+	 *
+	 * Supported actions: list, add (HTTP), add-stdio, start, stop, remove, test.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, url, apiKey, command, commandArgs, env, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return { success: true, servers: variables.manager.list() }

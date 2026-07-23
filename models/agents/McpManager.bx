@@ -1,34 +1,140 @@
+/**
+ * McpManager — manages MCP (Model Context Protocol) server configuration and process lifecycle.
+ *
+ * Persists HTTP and stdio MCP server configurations as individual JSON files under
+ * {@code ~/.nanobox/mcp/} and delegates stdio process management to ProcessManager.
+ * API keys are redacted in all returned structs.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property serversPath;
 	property processes;
 
+	/**
+	 * @serversPath     Root directory for MCP server JSON configs; defaults to ~/.nanobox/mcp
+	 * @processManager  Optional ProcessManager for stdio process lifecycle; created internally if null
+	 */
 	function init( string serversPath = "", any processManager = null ) {
 		variables.serversPath = arguments.serversPath != "" ? arguments.serversPath : expandPath( "~/.nanobox/mcp" )
 		if ( !directoryExists( variables.serversPath ) ) { directoryCreate( variables.serversPath, true ) }
 		variables.processes = isNull( arguments.processManager ) ? new "models.system.ProcessManager"( variables.serversPath & "/processes.json" ) : arguments.processManager
 		return this
 	}
+
+	/**
+	 * Returns metadata for all registered MCP servers, with API keys redacted.
+	 *
+	 * @return Array of server config structs
+	 */
 	array function list() {
 		var result = []
 		for ( var file in directoryList( variables.serversPath, false, "query", "*.json" ) ) { result.append( readConfig( file.directory & "/" & file.name ) ) }
 		return result
 	}
+
+	/**
+	 * Registers an HTTP/SSE MCP server.
+	 *
+	 * @name    Unique server name
+	 * @url     HTTP endpoint URL of the MCP server
+	 * @apiKey  Optional API key for authentication
+	 * @return  Saved config struct with API key redacted
+	 */
 	struct function add( required string name, required string url, string apiKey = "" ) { return save( { name: arguments.name, transport: "http", url: arguments.url, apiKey: arguments.apiKey, enabled: true } ) }
+
+	/**
+	 * Registers a stdio MCP server that is launched as a local subprocess.
+	 *
+	 * @name     Unique server name
+	 * @command  Executable command to launch the server
+	 * @args     Command-line arguments passed to the executable
+	 * @env      Environment variables to inject into the subprocess
+	 * @return   Saved config struct
+	 */
 	struct function addStdio( required string name, required string command, array args = [], struct env = {} ) { return save( { name: arguments.name, transport: "stdio", command: arguments.command, args: arguments.args, env: arguments.env, enabled: true } ) }
+
+	/**
+	 * Starts the subprocess for a stdio MCP server via ProcessManager.
+	 *
+	 * @name  Server name to start
+	 * @return ProcessManager start result, or error if transport is not stdio
+	 */
 	struct function start( required string name ) {
 		var config = variables.find( arguments.name )
 		if ( structIsEmpty( config ) ) { return { success: false, error: "MCP server not found" } }
 		if ( ( config.transport ?: "http" ) != "stdio" ) { return { success: false, error: "Only stdio MCP servers have managed processes" } }
 		return variables.processes.start( processName( arguments.name ), config.command, config.args ?: [] )
 	}
+
+	/**
+	 * Stops the subprocess for a stdio MCP server.
+	 *
+	 * @name  Server name to stop
+	 * @return ProcessManager stop result
+	 */
 	struct function stop( required string name ) {
 		return variables.processes.stop( processName( arguments.name ) )
 	}
+
+	/**
+	 * Removes an MCP server's config file and stops its process if running.
+	 *
+	 * @name  Server name to remove
+	 * @return Struct with success flag and server name
+	 */
 	struct function remove( required string name ) { var stopped = stop( arguments.name ); var path = variables.serversPath & "/" & arguments.name & ".json"; if ( !fileExists( path ) ) { return { success: false, error: "MCP server not found" } }; fileDelete( path ); return { success: true, name: arguments.name } }
+
+	/**
+	 * Tests connectivity to an MCP server.
+	 *
+	 * For HTTP servers, performs a GET request to the configured URL.
+	 * For stdio servers, returns a {@code configured} status without starting the process.
+	 *
+	 * @name  Server name to test
+	 * @return Struct with success flag and connectivity details
+	 */
 	struct function test( required string name ) { var config = variables.find( arguments.name ); if ( structIsEmpty( config ) ) { return { success: false, error: "MCP server not found" } }; if ( ( config.transport ?: "http" ) == "stdio" ) { return { success: true, transport: "stdio", status: "configured" } }; try { var result = http( url=config.url, method="GET", timeout=5 ); return { success: true, statusCode: result.statusCode ?: 200 } } catch ( any exception ) { return { success: false, error: exception.message } } }
+
+	/**
+	 * Persists a server config struct to a JSON file named after the server.
+	 *
+	 * @config  Full config struct including name, transport, and credentials
+	 * @return  Config struct with API key redacted
+	 */
 	private struct function save( required struct config ) { fileWrite( variables.serversPath & "/" & arguments.config.name & ".json", jsonSerialize( arguments.config, true ) ); return mask( arguments.config ) }
+
+	/**
+	 * Reads and parses a server config JSON file, redacting the API key.
+	 *
+	 * @path  Absolute path to the JSON config file
+	 * @return Parsed config struct with API key redacted
+	 */
 	private struct function readConfig( required string path ) { var config = jsonDeserialize( fileRead( arguments.path ) ); return mask( config ) }
+
+	/**
+	 * Finds the raw (unmasked) config struct for a named server.
+	 *
+	 * @name  Server name to find
+	 * @return Raw config struct, or empty struct if not found
+	 */
 	private struct function find( required string name ) { for ( var file in directoryList( variables.serversPath, false, "query", "*.json" ) ) { if ( file.name == arguments.name & ".json" ) { return jsonDeserialize( fileRead( file.directory & "/" & file.name ) ) } }; return {} }
+
+	/**
+	 * Returns the ProcessManager process key for a given server name.
+	 *
+	 * @name  Server name
+	 * @return Prefixed process key (e.g. "mcp:myserver")
+	 */
 	private string function processName( required string name ) { return "mcp:" & arguments.name }
+
+	/**
+	 * Returns a copy of a config struct with the apiKey replaced by "[REDACTED]" if present.
+	 *
+	 * @config  Raw config struct potentially containing an API key
+	 * @return  Safe copy of the config with the credential redacted
+	 */
 	private struct function mask( required struct config ) { var result = duplicate( arguments.config ); if ( result.keyExists( "apiKey" ) && len( result.apiKey ) ) { result.apiKey = "[REDACTED]" }; return result }
 }

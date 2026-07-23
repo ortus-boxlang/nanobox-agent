@@ -1,9 +1,49 @@
+/**
+ * CuratorReportManager — persists SkillCurator run results and optionally delivers them via gateway.
+ *
+ * Each run produces a timestamped directory under {@code .agents/curator-reports/} containing a
+ * {@code run.json} (raw data) and a {@code REPORT.md} (human-readable Markdown summary).  The
+ * Markdown file is imported into the VaultManager under the {@code reports} category and,
+ * if a delivery gateway is configured, sent to the configured recipient.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property reportRoot;
 	property vault;
 	property config;
 	property gateways;
+
+	/**
+	 * @projectRoot      Repository root for report storage; defaults to current directory
+	 * @vaultManager     Optional VaultManager for importing reports; null disables vault import
+	 * @configManager    Optional ConfigManager for reading delivery settings; null disables delivery
+	 * @gatewayRegistry  Optional GatewayRegistry for message delivery; null disables delivery
+	 */
 	function init( string projectRoot = "", any vaultManager = null, any configManager = null, any gatewayRegistry = null ) { var root = len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." ); variables.reportRoot = root & "/.agents/curator-reports"; variables.vault = arguments.vaultManager; variables.config = arguments.configManager; variables.gateways = arguments.gatewayRegistry; if ( !directoryExists( variables.reportRoot ) ) { directoryCreate( variables.reportRoot, true ) }; return this }
+
+	/**
+	 * Writes a curator run result to disk, imports the Markdown report into the vault, and
+	 * delivers it via the configured gateway if delivery is enabled.
+	 *
+	 * @curatorResult  Result struct returned by SkillCurator.run()
+	 * @model          Optional model name to record in the report (empty for deterministic runs)
+	 * @return         Struct with success, id, path, vault, and delivery keys
+	 */
 	struct function write( required struct curatorResult, string model = "" ) { var id = dateFormat( now(), "yyyymmdd" ) & "-" & timeFormat( now(), "HHmmss" ) & "-" & left( replace( createUUID(), "-", "", "all" ), 6 ); var dir = variables.reportRoot & "/" & id; directoryCreate( dir, true ); var report = { id: id, createdAt: now(), model: arguments.model, result: arguments.curatorResult }; fileWrite( dir & "/run.json", jsonSerialize( report, true ) ); var markdown = "## NanoBox Skill Curator Report" & char( 10 ) & char( 10 ) & "- Run: " & dateTimeFormat( now(), "yyyy-mm-dd HH:nn:ss" ) & char( 10 ) & "- Model: " & ( arguments.model ?: "deterministic" ) & char( 10 ) & "- Checked: " & ( arguments.curatorResult.checked ?: 0 ) & char( 10 ) & "- Dry run: " & ( arguments.curatorResult.dryRun ?: false ) & char( 10 ) & char( 10 ) & "## Changes" & char( 10 ) & char( 10 ); for ( var change in arguments.curatorResult.changes ?: [] ) { markdown &= "- " & change.name & ": " & change.from & " → " & change.to & " (" & change.ageDays & " days)" & char( 10 ) }; fileWrite( dir & "/REPORT.md", markdown ); var vaultResult = {}; if ( !isNull( variables.vault ) ) { vaultResult = variables.vault.importFile( dir & "/REPORT.md", "reports", [ "curator", id ] ) }; var delivery = deliver( markdown, id ); return { success: true, id: id, path: dir, vault: vaultResult, delivery: delivery } }
+
+	/**
+	 * Delivers the report content via a configured gateway.
+	 *
+	 * Reads delivery settings from {@code curator.reportDelivery} in ConfigManager.
+	 * Requires {@code enabled=true}, a gateway name, and a recipient to deliver.
+	 * When {@code mode=full}, the full Markdown is sent; otherwise a short summary is sent.
+	 *
+	 * @content  Markdown report content
+	 * @id       Report ID used in the summary message
+	 * @return   Struct with enabled, delivered, and optional gateway/recipient/result/error keys
+	 */
 	private struct function deliver( required string content, required string id ) { var settings = variables.config != null ? variables.config.get( "curator.reportDelivery", {} ) : {}; if ( !( settings.enabled ?: false ) ) { return { enabled: false, delivered: false } }; if ( isNull( variables.gateways ) ) { return { enabled: true, delivered: false, error: "Gateway registry unavailable" } }; var target = settings.gateway ?: ""; var recipient = settings.recipient ?: ""; if ( !len( target ) || !len( recipient ) ) { return { enabled: true, delivered: false, error: "Gateway and recipient are required" } }; var message = settings.mode == "full" ? arguments.content : "NanoBox curator report #arguments.id#"; try { var gateway = variables.gateways.get( target ); if ( !isObject( gateway ) ) { return { enabled: true, delivered: false, error: "Gateway not found" } }; var result = gateway.send( recipient, message ); return { enabled: true, delivered: result.success ?: false, gateway: target, recipient: recipient, result: result } } catch ( any exception ) { return { enabled: true, delivered: false, error: exception.message ?: toString( exception ) } } }
 }

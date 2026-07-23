@@ -1,4 +1,24 @@
+/**
+ * SessionSchema — initialises the NanoBox SQLite database schema.
+ *
+ * Creates all required tables and indexes for sessions, messages, cron tasks, and
+ * token events if they do not already exist.  Run this once at bootstrap time via
+ * {@code boxlang models/sessions/SessionSchema.bx} or from an application startup hook.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
+
+	/**
+	 * Entry point invoked by the BoxLang runtime.
+	 *
+	 * Executes all {@code CREATE TABLE IF NOT EXISTS} and {@code CREATE INDEX IF NOT EXISTS}
+	 * DDL statements against the {@code nanobox} datasource.
+	 *
+	 * @args  Runtime positional arguments (unused)
+	 */
 	function main( array args = [] ) {
 		var schema = [
 			"CREATE TABLE IF NOT EXISTS nanobox_sessions (id VARCHAR(36) PRIMARY KEY, title VARCHAR(255), provider VARCHAR(100), model VARCHAR(255), created_at TIMESTAMP, updated_at TIMESTAMP)",

@@ -1,12 +1,39 @@
+/**
+ * TokenTracker — records and reports LLM token usage events.
+ *
+ * Persists every provider call to the {@code nanobox_token_events} SQLite table
+ * and exposes aggregation queries for totals, daily breakdowns, per-model
+ * summaries, and per-session summaries.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 
 	property datasource;
 
+	/**
+	 * Initialises the tracker and binds to the nanobox datasource.
+	 */
 	function init() {
 		variables.datasource = "nanobox"
 		return this
 	}
 
+	/**
+	 * Records a token-usage event from an LLM API response.
+	 *
+	 * Accepts multiple field-name variants (camelCase and snake_case) so the
+	 * method works with responses from any supported provider.
+	 *
+	 * @usage      Struct containing token counts from the provider response
+	 * @provider   Provider name (e.g. "anthropic", "openai")
+	 * @model      Model identifier used for the call
+	 * @operation  Operation type (default "chat")
+	 * @sessionId  Optional session ID to associate this event with a session
+	 * @return     Struct echoing the stored event fields
+	 */
 	struct function record( required struct usage, string provider = "", string model = "", string operation = "chat", string sessionId = "" ) {
 		var promptTokens = arguments.usage.promptTokens ?: arguments.usage.prompt_tokens ?: arguments.usage.inputTokens ?: arguments.usage.input_tokens ?: 0
 		var completionTokens = arguments.usage.completionTokens ?: arguments.usage.completion_tokens ?: arguments.usage.outputTokens ?: arguments.usage.output_tokens ?: 0
@@ -38,6 +65,12 @@ class {
 		}
 	}
 
+	/**
+	 * Returns aggregate token totals across all events or only today's events.
+	 *
+	 * @period  "all" for lifetime totals or "today" for the current calendar day
+	 * @return  Struct with promptTokens, completionTokens, totalTokens, and events keys
+	 */
 	struct function totals( string period = "all" ) {
 		var sql = "SELECT COALESCE(SUM(prompt_tokens), 0) AS promptTokens, COALESCE(SUM(completion_tokens), 0) AS completionTokens, COALESCE(SUM(total_tokens), 0) AS totalTokens, COUNT(*) AS events FROM nanobox_token_events"
 		if ( arguments.period == "today" ) {
@@ -53,6 +86,12 @@ class {
 		}
 	}
 
+	/**
+	 * Returns per-day token totals grouped by calendar date.
+	 *
+	 * @period  "all" for all days or "today" for the current calendar day only
+	 * @return  Array of structs with day, promptTokens, completionTokens, totalTokens, and events keys
+	 */
 	struct function dailyTotals( string period = "all" ) {
 		var sql = "SELECT date(timestamp) AS day, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens, COUNT(*) AS events FROM nanobox_token_events"
 		if ( arguments.period == "today" ) {
@@ -62,6 +101,12 @@ class {
 		return queryToArray( queryExecute( sql, {}, { datasource: variables.datasource } ) )
 	}
 
+	/**
+	 * Returns the most recent token events in reverse-chronological order.
+	 *
+	 * @limit  Maximum number of events to return; 0 returns all events
+	 * @return Array of event structs
+	 */
 	array function events( numeric limit = 0 ) {
 		var sql = "SELECT id, timestamp, provider, model, operation, session_id, prompt_tokens, completion_tokens, total_tokens FROM nanobox_token_events ORDER BY timestamp DESC"
 		if ( arguments.limit > 0 ) {
@@ -70,6 +115,11 @@ class {
 		return queryToArray( queryExecute( sql, {}, { datasource: variables.datasource } ) )
 	}
 
+	/**
+	 * Returns aggregated token usage broken down by model, sorted by total tokens descending.
+	 *
+	 * @return Array of structs with model, events, promptTokens, completionTokens, and totalTokens keys
+	 */
 	struct function byModel() {
 		var result = queryExecute(
 			"SELECT model, COUNT(*) AS events, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens FROM nanobox_token_events WHERE model != '' GROUP BY model ORDER BY totalTokens DESC",
@@ -79,6 +129,12 @@ class {
 		return queryToArray( result )
 	}
 
+	/**
+	 * Returns aggregated token usage for a specific session.
+	 *
+	 * @sessionId  Session ID to filter events by
+	 * @return     Struct with events, promptTokens, completionTokens, and totalTokens keys
+	 */
 	struct function bySession( required string sessionId ) {
 		var result = queryExecute(
 			"SELECT COUNT(*) AS events, SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, SUM(total_tokens) AS totalTokens FROM nanobox_token_events WHERE session_id = :sessionId",
@@ -88,6 +144,12 @@ class {
 		return queryToArray( result ).first()
 	}
 
+	/**
+	 * Converts a query object to an array of structs.
+	 *
+	 * @data  Query result to convert
+	 * @return Array where each element is a struct keyed by column name
+	 */
 	private array function queryToArray( required query data ) {
 		var rows = []
 		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {

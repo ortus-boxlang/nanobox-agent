@@ -1,10 +1,29 @@
 import models.util.PrettyCli
 import models.system.ConfigManager
 
+/**
+ * NanoBox CLI entry point.
+ *
+ * Parses command-line arguments via CLIGetArgs(), initialises core services,
+ * and delegates execution to CommandRuntime.  Exits with code 1 on failure.
+ * Pass -z (or --z) to emit plain-text chat output instead of JSON.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	static VERSION = "0.1.0"
 	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#"
 
+	/**
+	 * Application entry point invoked by the BoxLang runtime.
+	 *
+	 * Resolves --version/-v, --help/-h, and -z flags before dispatching to
+	 * CommandRuntime.  Prints JSON output by default; plain text when -z is set.
+	 *
+	 * @args Raw CLI positional arguments provided by the runtime
+	 */
 	function main( array args = [] ) {
 		var parsed = CLIGetArgs()
 		var options = parsed.options ?: {}

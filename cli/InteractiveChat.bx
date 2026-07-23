@@ -1,3 +1,14 @@
+/**
+ * InteractiveChat — REPL session manager for the NanoBox interactive chat loop.
+ *
+ * Maintains conversation history, session persistence via SessionManager, usage
+ * tracking, and a set of slash commands ({@code /help}, {@code /model}, {@code /new},
+ * etc.).  Each call to {@link #execute} processes one line of user input.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property chatCommand;
 	property sessions;
@@ -10,6 +21,12 @@ class {
 	property history;
 	property usage;
 
+	/**
+	 * @command         ChatCommand instance used to call the LLM
+	 * @sessionManager  SessionManager for persisting conversation turns
+	 * @configManager   ConfigManager for reading provider and model settings
+	 * @cliOutput       Optional PrettyCli instance (reserved for future use)
+	 */
 	function init( required any command, required any sessionManager, required any configManager, any cliOutput = null ) {
 		variables.chatCommand = arguments.command
 		variables.sessions = arguments.sessionManager
@@ -24,6 +41,15 @@ class {
 		return this
 	}
 
+	/**
+	 * Processes a single line of user input.
+	 *
+	 * Empty input is a no-op.  Lines starting with {@code /} are routed to the slash-command
+	 * handler; everything else is sent to the LLM.
+	 *
+	 * @input  Raw user input string
+	 * @return Action result struct with at least action and success keys
+	 */
 	struct function execute( required string input ) {
 		var line = trim( arguments.input )
 		if ( !len( line ) ) { return { success: true, action: "empty" } }
@@ -31,6 +57,12 @@ class {
 		return send( line )
 	}
 
+	/**
+	 * Starts the chat session, creating a new SQLite session record if one does not exist.
+	 *
+	 * @interactive  When true, the session was started from the interactive REPL (default true)
+	 * @return       Struct with success, sessionId, title, and interactive keys
+	 */
 	struct function start( boolean interactive = true ) {
 		if ( !len( variables.sessionId ) ) {
 			var created = variables.sessions.create( variables.title, variables.config.get( "bx-ai.defaultProvider", "" ), variables.config.get( "bx-ai.defaultModel", "" ) )
@@ -39,6 +71,15 @@ class {
 		return { success: true, sessionId: variables.sessionId, title: variables.title, interactive: arguments.interactive }
 	}
 
+	/**
+	 * Sends a user query to the LLM and appends both turns to the session.
+	 *
+	 * Auto-generates a session title from the first query when the title has not been
+	 * manually set.  Accumulates token usage across the conversation.
+	 *
+	 * @query  User prompt text
+	 * @return Struct with success, action, sessionId, content, model, namedModel, and usage keys
+	 */
 	private struct function send( required string query ) {
 		if ( !len( variables.sessionId ) ) { start() }
 		var result = variables.chatCommand.execute( arguments.query, { sessionId: variables.sessionId } )
@@ -62,6 +103,12 @@ class {
 		return { success: true, action: "response", sessionId: variables.sessionId, content: variables.lastResponse, model: result.model, namedModel: result.namedModel, usage: variables.usage }
 	}
 
+	/**
+	 * Routes a slash command to the appropriate private handler.
+	 *
+	 * @line  Full input line including the leading slash (e.g. "/model claude-3-5-sonnet")
+	 * @return Action result struct for the slash command
+	 */
 	private struct function command( required string line ) {
 		var parts = listToArray( mid( arguments.line, 2, len( arguments.line ) - 1 ), " " )
 		var name = lCase( parts.first() )
@@ -85,15 +132,62 @@ class {
 		}
 	}
 
+	/**
+	 * Returns the list of available slash commands.
+	 *
+	 * @return Struct with action="help" and a commands array
+	 */
 	private struct function help() { return { success: true, action: "help", commands: [ "/help", "/model [name]", "/new", "/clear", "/retry", "/undo", "/title <name>", "/usage", "/status", "/sessions", "/resume <id>", "/compress", "/quit", "/exit" ] } }
+
+	/**
+	 * Gets or sets the active model via ModelCommand.
+	 *
+	 * @name  Model name or named model alias; empty string returns the current model
+	 * @return ModelCommand result struct
+	 */
 	private struct function model( string name = "" ) {
 		var modelCommand = new "cli.commands.ModelCommand"( variables.config )
 		if ( !len( arguments.name ) ) { return modelCommand.execute( "current", {} ) }
 		return modelCommand.execute( "set", { namedModel: arguments.name, model: arguments.name } )
 	}
+
+	/**
+	 * Sets or returns the session title.
+	 *
+	 * When {@code value} is empty, returns the current title.  When non-empty, sets the
+	 * title, marks it as manually set, and renames the SQLite session record.
+	 *
+	 * @value  New title string; empty returns the current title
+	 * @return Struct with action="title" and title keys
+	 */
 	private struct function setTitle( required string value ) { if ( !len( arguments.value ) ) { return { success: true, action: "title", title: variables.title } }; if ( !len( variables.sessionId ) ) { start( false ) }; variables.title = arguments.value; variables.titleManual = true; variables.sessions.rename( variables.sessionId, variables.title ); return { success: true, action: "title", title: variables.title } }
+
+	/**
+	 * Returns the current session status.
+	 *
+	 * @return Struct with session ID, title, history length, provider, model, namedModel, and usage
+	 */
 	private struct function status() { return { success: true, action: "status", sessionId: variables.sessionId, title: variables.title, history: variables.history.len(), provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ), usage: variables.usage } }
+
+	/**
+	 * Starts a fresh session, resetting all conversation state.
+	 *
+	 * @return Struct with action="new" and the new sessionId
+	 */
 	private struct function newSession() { var created = variables.sessions.create( "New chat", variables.config.get( "bx-ai.defaultProvider", "" ), variables.config.get( "bx-ai.defaultModel", "" ) ); variables.sessionId = created.id; variables.title = "New chat"; variables.titleManual = false; variables.history = []; variables.lastQuery = ""; variables.lastResponse = ""; variables.usage = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }; return { success: true, action: "new", sessionId: variables.sessionId } }
+
+	/**
+	 * Removes the most recent user+assistant exchange from the in-memory history.
+	 *
+	 * @return Struct with action="undo" and remaining history length, or error if nothing to undo
+	 */
 	private struct function undo() { if ( variables.history.len() < 2 ) { return { success: false, error: "There is no exchange to undo" } }; variables.history.deleteAt( variables.history.len() ); variables.history.deleteAt( variables.history.len() ); return { success: true, action: "undo", history: variables.history.len() } }
+
+	/**
+	 * Resumes a previously saved session by ID.
+	 *
+	 * @id  Session UUID or alias to resume
+	 * @return Struct with action="resume", sessionId, and title keys
+	 */
 	private struct function resume( required string id ) { var existing = variables.sessions.get( arguments.id ); if ( structIsEmpty( existing ) ) { return { success: false, error: "Session not found: #arguments.id#" } }; variables.sessionId = existing.id; variables.title = existing.title; variables.titleManual = true; return { success: true, action: "resume", sessionId: variables.sessionId, title: variables.title } }
 }

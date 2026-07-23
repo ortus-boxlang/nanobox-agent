@@ -1,17 +1,32 @@
 /**
  * NanoBox Worker Scheduler
  *
- * Run with: boxlang schedule worker/nanobox-worker.bx
+ * BoxLang scheduler entry point.  Run with:
+ * {@code boxlang schedule worker/nanobox-worker.bx}
  *
  * Reads all enabled cron tasks from SQLite and registers them with the
  * BoxLang native scheduler.  Blocks until killed.  Restart the worker
- * process to pick up task changes:  nanobox worker restart
+ * process to pick up task changes:  {@code nanobox worker restart}
+ *
+ * The BoxLang runtime injects {@code scheduler} (BaseScheduler) and
+ * {@code logger} properties before calling configure().
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
  */
 class {
 
 	property name="scheduler";
 	property name="logger";
 
+	/**
+	 * Registers all enabled cron tasks with the BoxLang scheduler.
+	 *
+	 * Called automatically by the BoxLang schedule runner at startup.
+	 * Also registers a 5-minute heartbeat task for liveness monitoring.
+	 * Restart the worker process to reload task changes from the database.
+	 */
 	function configure() {
 		var config = new "models.system.ConfigManager"()
 		var cron   = new "models.scheduling.CronManager"()
@@ -37,11 +52,18 @@ class {
 			.everyMinutes( 5 )
 	}
 
+	/**
+	 * Lifecycle hook called when the scheduler finishes startup.
+	 * Logs the worker PID for operator reference.
+	 */
 	void function onStartup() {
 		var pid = createObject( "java", "java.lang.ProcessHandle" ).current().pid()
 		logger.info( "NanoBox Worker started (PID #pid#)" )
 	}
 
+	/**
+	 * Lifecycle hook called just before the scheduler shuts down.
+	 */
 	void function onShutdown() {
 		logger.info( "NanoBox Worker shut down" )
 	}
@@ -50,6 +72,17 @@ class {
 	// Private helpers
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Registers a single cron task with the BoxLang scheduler.
+	 *
+	 * The task closure captures taskName, taskPrompt, taskCron, taskConfig, and
+	 * taskDb by value so each firing uses the correct context even if the outer
+	 * loop variables have changed.
+	 *
+	 * @task   Struct containing name, prompt, and schedule fields from CronManager
+	 * @config ConfigManager instance for reading provider/model settings
+	 * @cron   CronManager instance for recording run/failure outcomes
+	 */
 	private void function registerTask(
 		required struct task,
 		required any    config,
@@ -66,6 +99,17 @@ class {
 			.cron( taskCron )
 	}
 
+	/**
+	 * Executes a cron task by sending its prompt to the configured AI provider.
+	 *
+	 * Records success via cron.run() or failure via cron.fail() so the database
+	 * reflects the actual outcome.
+	 *
+	 * @name   Cron task name used for result recording and log messages
+	 * @prompt AI prompt to send via aiChat()
+	 * @config ConfigManager instance for provider/model lookup
+	 * @cron   CronManager instance for recording run/failure outcomes
+	 */
 	private void function executeTask(
 		required string name,
 		required string prompt,
