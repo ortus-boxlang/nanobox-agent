@@ -2,7 +2,7 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "TokenCommand", () => {
 			it( "returns totals and provider breakdown", () => {
-				var tracker = new "cli.TokenTracker"( getTempDirectory() & "/tokens-#createUUID()#.json" )
+				var tracker = new "models.util.TokenTracker"( getTempDirectory() & "/tokens-#createUUID()#.json" )
 				tracker.record( { prompt_tokens: 10, completion_tokens: 5 }, "lmstudio", "model-a" )
 				var command = new "cli.commands.TokenCommand"( tracker )
 				var result = command.execute( "all", "provider" )

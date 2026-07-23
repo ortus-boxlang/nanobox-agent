@@ -2,7 +2,7 @@ class {
 	property datasource;
 
 	function init( string tasksPath = "" ) {
-		vars.datasource = "nanobox"
+		variables.datasource = "nanobox"
 		return this
 	}
 

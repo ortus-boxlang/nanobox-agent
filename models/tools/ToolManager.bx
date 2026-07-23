@@ -23,7 +23,7 @@ class {
 		if ( directoryExists( coreDir ) ) {
 			for ( var file in directoryList( coreDir, false, "query", "*.bx" ) ) {
 				try {
-					var className = "cli.tools." & file.name.replace( ".bx", "" )
+					var className = "models.tools." & file.name.replace( ".bx", "" )
 					registry.scanClass( new "#className#"(), "nanobox" )
 				} catch ( any e ) {
 					writeLog( text: "ToolManager: Failed to load core tool #file.name#: #e.message#", type: "warn", log: "ai" )
@@ -153,6 +153,6 @@ class {
 	}
 
 	private string function moduleToPackage( required string filename ) {
-		return "cli.tools." & filename.replace( ".bx", "" )
+		return "models.tools." & filename.replace( ".bx", "" )
 	}
 }

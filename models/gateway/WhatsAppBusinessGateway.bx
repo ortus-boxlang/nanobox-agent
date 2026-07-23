@@ -1,4 +1,4 @@
-class extends="cli.BaseGateway" {
+class extends="models.gateway.BaseGateway" {
 	function init( struct config = {} ) { super.init( "whatsapp-business", arguments.config ); return this }
 	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: false, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

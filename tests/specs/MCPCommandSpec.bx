@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "MCPCommand", () => {
 			it( "supports stdio configuration and start/stop lifecycle", () => {
 				var path = getTempDirectory() & "/mcp-#createUUID()#"
-				var manager = new "cli.McpManager"( path, new "cli.ProcessManager"( path & "/processes.json" ) )
+				var manager = new "models.agents.McpManager"( path, new "models.system.ProcessManager"( path & "/processes.json" ) )
 				var command = new "cli.commands.MCPCommand"( manager )
 				var added = command.execute( "add-stdio", { name: "local-server", command: "sleep", commandArgs: [ "60" ] } )
 				expect( added.server.transport ).toBe( "stdio" )

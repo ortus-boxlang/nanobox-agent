@@ -20,7 +20,7 @@ class {
 			bold: "1"
 		}
 		var code = codes[ lCase( arguments.colorName ) ] ?: "0"
-		return "ESC[" & code & "m" & arguments.text & "ESC[0m"
+		return chr( 27 ) & "[" & code & "m" & arguments.text & chr( 27 ) & "[0m"
 	}
 
 	string function red( required string text ) { return color( arguments.text, "red" ) }

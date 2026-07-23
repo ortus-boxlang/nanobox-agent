@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Core lifecycle CLI namespace", () => {
 			it( "reports status and doctor checks", () => {
 				var home = getTempDirectory() & "/lifecycle-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
+				var config = new "models.system.ConfigManager"( home )
 				var command = new "cli.CoreLifecycleCommand"( config )
 				expect( command.execute( "status" ).success ).toBeTrue()
 				expect( command.execute( "doctor" ).checks ).toHaveKey( "modules" )
@@ -11,7 +11,7 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "starts, reports, and stops only the web process", () => {
 				var home = getTempDirectory() & "/lifecycle-process-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
+				var config = new "models.system.ConfigManager"( home )
 				var command = new "cli.CoreLifecycleCommand"( config )
 				var started = command.execute( "start", { "web-only": true, port: 18991 } )
 				expect( started.success ).toBeTrue()
@@ -22,7 +22,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( stopped.web.success ).toBeTrue()
 			} )
 			it( "rejects an unknown lifecycle action", () => {
-				var command = new "cli.CoreLifecycleCommand"( new "cli.util.ConfigManager"( getTempDirectory() & "/lifecycle-#createUUID()#" ) )
+				var command = new "cli.CoreLifecycleCommand"( new "models.system.ConfigManager"( getTempDirectory() & "/lifecycle-#createUUID()#" ) )
 				expect( command.execute( "unknown" ).success ).toBeFalse()
 			} )
 		} )

@@ -1,5 +1,5 @@
-import nanobox_cli.PrettyCli
-import nanobox_cli.util.ConfigManager
+import models.util.PrettyCli
+import models.system.ConfigManager
 
 class {
 	static VERSION = "0.1.0"
@@ -12,8 +12,8 @@ class {
 		if ( options.version ?: options.v ?: false ) { println( "NanoBox v#static.VERSION#" ); return }
 		if ( options.help ?: options.h ?: false || positionals.len() == 0 ) { print( static.HELP_TEXT ); return }
 		if ( options.z ?: options[ "z" ] ?: false ) { positionals = [ "chat" ]; if ( parsed.positionals.len() > 1 ) { for ( var positional in parsed.positionals.slice( 1 ) ) { positionals.append( positional ) } }; parsed.positionals = positionals }
-		var config = new "cli.util.ConfigManager"()
-		var result = new "cli.CommandRuntime"( new "cli.PrettyCli"( true ), config ).execute( parsed )
+		var config = new "models.system.ConfigManager"()
+		var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), config ).execute( parsed )
 		if ( options.z ?: options[ "z" ] ?: false ) { if ( isStruct( result ) && result.success ) { println( result.text ?: "" ) } else { println( jsonSerialize( result, true ) ) } } else { println( jsonSerialize( result, true ) ) }
 		if ( isStruct( result ) && result.keyExists( "success" ) && !result.success ) { CLIExit( 1 ) }
 	}

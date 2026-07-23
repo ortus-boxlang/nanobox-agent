@@ -2,7 +2,7 @@ class {
 	property curator;
 	property reports;
 	property config;
-	function init( required any skillCurator, any reportManager = null, any configManager = null ) { variables.curator = arguments.skillCurator; variables.reports = arguments.reportManager ?: new "cli.CuratorReportManager"( expandPath( "." ) ); variables.config = arguments.configManager; return this }
+	function init( required any skillCurator, any reportManager = null, any configManager = null ) { variables.curator = arguments.skillCurator; variables.reports = arguments.reportManager ?: new "models.skills.CuratorReportManager"( expandPath( "." ) ); variables.config = arguments.configManager; return this }
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "status": return variables.curator.status()

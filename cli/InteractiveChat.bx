@@ -87,7 +87,7 @@ class {
 
 	private struct function help() { return { success: true, action: "help", commands: [ "/help", "/model [name]", "/new", "/clear", "/retry", "/undo", "/title <name>", "/usage", "/status", "/sessions", "/resume <id>", "/compress", "/quit", "/exit" ] } }
 	private struct function model( string name = "" ) {
-		var modelCommand = new "cli.ModelCommand"( variables.config )
+		var modelCommand = new "cli.commands.ModelCommand"( variables.config )
 		if ( !len( arguments.name ) ) { return modelCommand.execute( "current", {} ) }
 		return modelCommand.execute( "set", { namedModel: arguments.name, model: arguments.name } )
 	}

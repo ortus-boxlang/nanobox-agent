@@ -3,7 +3,7 @@ class {
 	property datasource;
 
 	function init() {
-		vars.datasource = "nanobox"
+		variables.datasource = "nanobox"
 		return this
 	}
 

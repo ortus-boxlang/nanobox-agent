@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "CronCommand", () => {
 			it( "creates, pauses, resumes, runs, lists, and deletes tasks", () => {
 				var path = getTempDirectory() & "/cron-#createUUID()#.json"
-				var manager = new "cli.CronManager"( path )
+				var manager = new "models.scheduling.CronManager"( path )
 				var command = new "cli.commands.CronCommand"( manager )
 				expect( command.execute( "create", { name: "daily", schedule: "0 9 * * *", prompt: "Run report" } ).success ).toBeTrue()
 				expect( command.execute( "list" ).tasks ).toHaveLength( 1 )

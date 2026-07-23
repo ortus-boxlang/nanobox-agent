@@ -1,10 +1,10 @@
-import nanobox_cli.util.ConfigManager
+import models.system.ConfigManager
 
 class {
 	function main( array args = [] ) {
 		var home = getTempDirectory() & "/nanobox-config-test-#createUUID()#"
 		directoryCreate( home, true )
-		var manager = new "cli.util.ConfigManager"( home )
+		var manager = new "models.system.ConfigManager"( home )
 		var configData = manager.load()
 		if ( manager.get( "nanobox.web.port" ) != 8080 ) { throw( "defaults should load" ) }
 		manager.set( "bx-ai.defaultProvider", "lmstudio" )

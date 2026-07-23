@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skills and vault namespaces", () => {
 			it( "manages local custom skills", () => {
 				var root = getTempDirectory() & "/skills-#createUUID()#"
-				var manager = new "cli.SkillManager"( root & "/skills", "https://skills.boxlang.io" )
+				var manager = new "models.skills.SkillManager"( root & "/skills", "https://skills.boxlang.io" )
 				var command = new "cli.commands.SkillCommand"( manager )
 				expect( command.execute( "create", { name: "boxlang-style", description: "Style", content: "Use tabs." } ).success ).toBeTrue()
 				expect( command.execute( "list", {} ).skills ).toHaveLength( 1 )
@@ -14,7 +14,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "manages vault documents", () => {
 				var root = getTempDirectory() & "/vault-#createUUID()#"
 				var source = root & "/source.md"; directoryCreate( root, true ); fileWrite( source, "Vault searchable content" )
-				var command = new "cli.commands.VaultCommand"( new "cli.VaultManager"( root & "/vault" ) )
+				var command = new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( root & "/vault" ) )
 				var imported = command.execute( "import", { source: source, category: "research", tags: [ "test" ] } )
 				expect( imported.success ).toBeTrue()
 				var id = imported.document.id

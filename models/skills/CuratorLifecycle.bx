@@ -9,8 +9,8 @@ class {
 		variables.config = arguments.configManager
 		variables.curator = arguments.skillCurator
 		variables.reports = arguments.reportManager
-		variables.cron = arguments.cronManager ?: new "cli.CronManager"()
-		variables.agents = arguments.agentManager ?: new "cli.AgentManager"()
+		variables.cron = arguments.cronManager ?: new "models.scheduling.CronManager"()
+		variables.agents = arguments.agentManager ?: new "models.agents.AgentManager"()
 		return this
 	}
 
@@ -33,7 +33,7 @@ class {
 	private void function securityTick() {
 		try {
 			var skillsDir = variables.config.getNanoboxHome() & "/skills"
-			var czar = new "cli.SecurityCzar"()
+			var czar = new "models.security.SecurityCzar"()
 			czar.tick( "skills", skillsDir )
 		} catch ( any ignored ) { /* security tick is best-effort */ }
 	}

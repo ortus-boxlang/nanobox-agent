@@ -2,7 +2,7 @@ class {
 	property config;
 	function init( required any configManager ) { variables.config = arguments.configManager; return this }
 	struct function execute( required string action, struct args = {} ) {
-		var manager = new "cli.ProcessManager"( variables.config.getNanoboxHome() & "/run/processes.json" )
+		var manager = new "models.system.ProcessManager"( variables.config.getNanoboxHome() & "/run/processes.json" )
 		var web = new "cli.commands.WebCommand"( manager, expandPath( "." ) )
 		var worker = new "cli.commands.WorkerCommand"( manager )
 		var webOnly = arguments.args.webOnly ?: arguments.args[ "web-only" ] ?: false

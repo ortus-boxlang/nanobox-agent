@@ -1,6 +1,6 @@
 class {
 	function main() {
-		var manager = new "cli.SkillManager"()
+		var manager = new "models.skills.SkillManager"()
 		var tempDir = getTempDirectory() & "test-skill-" & createUUID()
 		directoryCreate(tempDir, true)
 

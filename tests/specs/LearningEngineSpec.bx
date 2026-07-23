@@ -2,7 +2,7 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "LearningEngine", () => {
 			it( "records observations and consolidates highest-confidence facts", () => {
-				var engine = new "cli.LearningEngine"( getTempDirectory() & "/learning-#createUUID()#.json" )
+				var engine = new "models.skills.LearningEngine"( getTempDirectory() & "/learning-#createUUID()#.json" )
 				engine.observe( "chat", "BoxLang is the runtime", "knowledge", 0.6 )
 				engine.observe( "chat", "BoxLang is the runtime", "knowledge", 0.9 )
 				var result = engine.consolidate()

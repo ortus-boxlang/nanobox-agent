@@ -17,12 +17,12 @@ class {
 	}
 
 	private string function classFor( required string name ) {
-		var classes = { telegram: "cli.TelegramGateway", email: "cli.EmailGateway", discord: "cli.DiscordGateway", slack: "cli.SlackGateway", whatsapp: "cli.WhatsAppGateway", "whatsapp-business": "cli.WhatsAppBusinessGateway", signal: "cli.SignalGateway", sms: "cli.SMSGateway" }
+		var classes = { telegram: "models.gateway.TelegramGateway", email: "models.gateway.EmailGateway", discord: "models.gateway.DiscordGateway", slack: "models.gateway.SlackGateway", whatsapp: "models.gateway.WhatsAppGateway", "whatsapp-business": "models.gateway.WhatsAppBusinessGateway", signal: "models.gateway.SignalGateway", sms: "models.gateway.SMSGateway" }
 		return classes[ lCase( arguments.name ) ] ?: ""
 	}
 
 	struct function register( required any gateway ) {
-		if ( !isInstanceOf( arguments.gateway, "cli.IGateway" ) ) { return { success: false, error: "Gateway must implement IGateway" } }
+		if ( !isInstanceOf( arguments.gateway, "models.gateway.IGateway" ) ) { return { success: false, error: "Gateway must implement IGateway" } }
 		variables.gateways[ gateway.getName() ] = gateway
 		return { success: true, name: gateway.getName() }
 	}

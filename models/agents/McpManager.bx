@@ -5,7 +5,7 @@ class {
 	function init( string serversPath = "", any processManager = null ) {
 		variables.serversPath = arguments.serversPath != "" ? arguments.serversPath : expandPath( "~/.nanobox/mcp" )
 		if ( !directoryExists( variables.serversPath ) ) { directoryCreate( variables.serversPath, true ) }
-		variables.processes = isNull( arguments.processManager ) ? new "cli.ProcessManager"( variables.serversPath & "/processes.json" ) : arguments.processManager
+		variables.processes = isNull( arguments.processManager ) ? new "models.system.ProcessManager"( variables.serversPath & "/processes.json" ) : arguments.processManager
 		return this
 	}
 	array function list() {

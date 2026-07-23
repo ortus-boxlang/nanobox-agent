@@ -2,9 +2,9 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "SessionCommand", () => {
 			it( "persists and searches sessions through the nanobox datasource", () => {
-				var schema = new "cli.SessionSchema"()
+				var schema = new "models.sessions.SessionSchema"()
 				schema.main()
-				var sessions = new "cli.SessionManager"()
+				var sessions = new "models.sessions.SessionManager"()
 				var command = new "cli.commands.SessionCommand"( sessions )
 				var created = command.execute( "create", { title: "BoxLang scheduling" } )
 				expect( created.success ).toBeTrue()

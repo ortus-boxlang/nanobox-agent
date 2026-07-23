@@ -3,7 +3,7 @@ class {
 	property configManager;
 	property logger;
 
-	function init( required any gatewayRegistry, any configManager = null, any gatewayLogger = null ) { variables.registry = arguments.gatewayRegistry; variables.configManager = arguments.configManager; variables.logger = arguments.gatewayLogger ?: new "cli.GatewayLogger"(); return this }
+	function init( required any gatewayRegistry, any configManager = null, any gatewayLogger = null ) { variables.registry = arguments.gatewayRegistry; variables.configManager = arguments.configManager; variables.logger = arguments.gatewayLogger ?: new "models.gateway.GatewayLogger"(); return this }
 
 	struct function execute( required string action, struct args = {} ) {
 		var operation = lCase( arguments.action )

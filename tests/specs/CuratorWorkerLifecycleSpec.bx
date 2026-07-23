@@ -3,10 +3,10 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Curator worker lifecycle", () => {
 			it( "skips repeated ticks inside the configured interval", () => {
 				var root = getTempDirectory() & "/tick-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( root & "/config" )
+				var config = new "models.system.ConfigManager"( root & "/config" )
 				config.set( "curator.intervalHours", 168 )
-				var curator = new "cli.SkillCurator"( root )
-				var lifecycle = new "cli.CuratorLifecycle"( config, curator, new "cli.CuratorReportManager"( root ) )
+				var curator = new "models.skills.SkillCurator"( root )
+				var lifecycle = new "models.skills.CuratorLifecycle"( config, curator, new "models.skills.CuratorReportManager"( root ) )
 				var first = lifecycle.tick( true, false )
 				expect( first.success ).toBeTrue()
 				var second = lifecycle.tick()
@@ -16,10 +16,10 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "skips when paused", () => {
 				var root = getTempDirectory() & "/paused-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( root & "/config" )
-				var curator = new "cli.SkillCurator"( root )
+				var config = new "models.system.ConfigManager"( root & "/config" )
+				var curator = new "models.skills.SkillCurator"( root )
 				curator.pause()
-				var result = new "cli.CuratorLifecycle"( config, curator, new "cli.CuratorReportManager"( root ) ).tick()
+				var result = new "models.skills.CuratorLifecycle"( config, curator, new "models.skills.CuratorReportManager"( root ) ).tick()
 				expect( result.skipped ).toBeTrue()
 				expect( result.reason ).toBe( "paused" )
 			} )

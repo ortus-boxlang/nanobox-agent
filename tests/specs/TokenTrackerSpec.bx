@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "TokenTracker", () => {
 			it( "normalizes usage and records totals", () => {
 				var path = getTempDirectory() & "/token-tracker-#createUUID()#.json"
-				var tracker = new "cli.TokenTracker"( path )
+				var tracker = new "models.util.TokenTracker"( path )
 				tracker.record( { prompt_tokens: 10, completion_tokens: 4 }, "lmstudio", "local-model", "chat", "session-1" )
 				expect( tracker.totals( "all" ).promptTokens ).toBe( 10 )
 				expect( tracker.totals( "all" ).completionTokens ).toBe( 4 )

@@ -2,13 +2,13 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "Skills registry operations", () => {
 			it( "queries the live skills.boxlang.io catalog", () => {
-				var manager = new "cli.SkillManager"( getTempDirectory() & "/remote-skills-#createUUID()#/skills" )
+				var manager = new "models.skills.SkillManager"( getTempDirectory() & "/remote-skills-#createUUID()#/skills" )
 		var results = manager.findRemote( "async" )
 				expect( results ).notToBeEmpty()
 				expect( results.first() ).toHaveKey( "name" )
 			} )
 			it( "returns a structured error for malformed install slugs", () => {
-				var result = new "cli.SkillManager"( getTempDirectory() & "/bad-install-#createUUID()#/skills" ).install( "invalid" )
+				var result = new "models.skills.SkillManager"( getTempDirectory() & "/bad-install-#createUUID()#/skills" ).install( "invalid" )
 				expect( result.success ).toBeFalse()
 			} )
 		} )

@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Gateway management", () => {
 			it( "supports enable, disable, restart, health, log, and clear-log", () => {
 				var home = getTempDirectory() & "/gateway-mgmt-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
-				var registry = new "cli.GatewayRegistry"( config )
+				var config = new "models.system.ConfigManager"( home )
+				var registry = new "models.gateway.GatewayRegistry"( config )
 				registry.create( "telegram", { botToken: "" } )
 				var command = new "cli.commands.GatewayCommand"( registry, config )
 				expect( command.execute( "disable", { name: "telegram" } ).enabled ).toBeFalse()

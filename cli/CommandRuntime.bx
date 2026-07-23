@@ -16,34 +16,34 @@ class {
 		var args = positionalArguments( command, action, arguments.parsed.positionals, arguments.parsed.options ?: {} )
 		switch ( command ) {
 			case "config":
-				if ( action == "provider" ) { return new "cli.ProviderCommand"( variables.config ).execute( args.action ?: "list", args ) }
-				if ( action == "model" ) { return new "cli.ModelCommand"( variables.config ).execute( args.action ?: "current", args ) }
+				if ( action == "provider" ) { return new "models.providers.ProviderCommand"( variables.config ).execute( args.action ?: "list", args ) }
+				if ( action == "model" ) { return new "cli.commands.ModelCommand"( variables.config ).execute( args.action ?: "current", args ) }
 				return new "cli.commands.ConfigCommand"( variables.config ).execute( action ?: "show", args )
-			case "session": return new "cli.commands.SessionCommand"( new "cli.SessionManager"() ).execute( action ?: "list", args )
+			case "session": return new "cli.commands.SessionCommand"( new "models.sessions.SessionManager"() ).execute( action ?: "list", args )
 			case "tokens":
-			case "token": return new "cli.commands.TokenCommand"( new "cli.TokenTracker"() ).execute( action ?: "all", "", false, args )
-			case "agent": return new "cli.commands.AgentCommand"( new "cli.AgentManager"( variables.home & "/agents", variables.config ) ).execute( action ?: "list", args )
-			case "tool": return new "cli.commands.ToolCommand"( new "cli.ToolManager"( variables.home, variables.config ) ).execute( action ?: "list", args )
-			case "mcp": return new "cli.commands.MCPCommand"( new "cli.McpManager"() ).execute( action ?: "list", args )
-			case "script": return new "cli.commands.ScriptCommand"( new "cli.ScriptManager"() ).execute( action ?: "list", args )
-			case "cron": return new "cli.commands.CronCommand"( new "cli.CronManager"() ).execute( action ?: "list", args )
-			case "backup": return new "cli.commands.BackupCommand"( new "cli.BackupManager"() ).execute( action ?: "status", args )
-			case "update": return new "cli.commands.UpdateCommand"( new "cli.UpdateManager"() ).execute( action ?: "status", args )
-			case "vault": return new "cli.commands.VaultCommand"( new "cli.VaultManager"( variables.home & "/vault" ) ).execute( action ?: "list", args )
+			case "token": return new "cli.commands.TokenCommand"( new "models.util.TokenTracker"() ).execute( action ?: "all", "", false, args )
+			case "agent": return new "cli.commands.AgentCommand"( new "models.agents.AgentManager"( variables.home & "/agents", variables.config ) ).execute( action ?: "list", args )
+			case "tool": return new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( variables.home, variables.config ) ).execute( action ?: "list", args )
+			case "mcp": return new "cli.commands.MCPCommand"( new "models.agents.McpManager"() ).execute( action ?: "list", args )
+			case "script": return new "cli.commands.ScriptCommand"( new "models.system.ScriptManager"() ).execute( action ?: "list", args )
+			case "cron": return new "cli.commands.CronCommand"( new "models.scheduling.CronManager"() ).execute( action ?: "list", args )
+			case "backup": return new "cli.commands.BackupCommand"( new "models.system.BackupManager"() ).execute( action ?: "status", args )
+			case "update": return new "cli.commands.UpdateCommand"( new "models.system.UpdateManager"() ).execute( action ?: "status", args )
+			case "vault": return new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( variables.home & "/vault" ) ).execute( action ?: "list", args )
 			case "security": return security( action ?: "status", args )
-			case "web": return wrapProcessResult( new "cli.commands.WebCommand"( new "cli.ProcessManager"() ).execute( action ?: "status", args ) )
-			case "worker": return wrapProcessResult( new "cli.commands.WorkerCommand"( new "cli.ProcessManager"() ).execute( action ?: "status", args ) )
+			case "web": return wrapProcessResult( new "cli.commands.WebCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
+			case "worker": return wrapProcessResult( new "cli.commands.WorkerCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
 			case "start":
 			case "stop":
 			case "restart":
 			case "status":
 			case "doctor": return new "cli.CoreLifecycleCommand"( variables.config ).execute( command, args )
-			case "gateway": return new "cli.commands.GatewayCommand"( new "cli.GatewayRegistry"( variables.config ), variables.config ).execute( action ?: "status", args )
-			case "model": return new "cli.ModelCommand"( variables.config ).execute( action ?: "current", args )
+			case "gateway": return new "cli.commands.GatewayCommand"( new "models.gateway.GatewayRegistry"( variables.config ), variables.config ).execute( action ?: "status", args )
+			case "model": return new "cli.commands.ModelCommand"( variables.config ).execute( action ?: "current", args )
 			case "skill":
-				if ( action == "curator" ) { return new "cli.commands.SkillCuratorCommand"( new "cli.SkillCurator"( expandPath( "." ) ), new "cli.CuratorReportManager"( expandPath( "." ), new "cli.VaultManager"( expandPath( ".nanobox/vault" ) ), variables.config ), variables.config ).execute( args.action ?: "status", args ) }
-				if ( action == "activate" ) { return new "cli.commands.SkillActivationCommand"( new "cli.SkillCurator"( expandPath( "." ) ) ).execute( args.action ?: "status", args ) }
-				return new "cli.commands.SkillCommand"( new "cli.SkillManager"( expandPath( "." ) & "/.agents/skills" ) ).execute( action ?: "list", args )
+				if ( action == "curator" ) { return new "cli.commands.SkillCuratorCommand"( new "models.skills.SkillCurator"( expandPath( "." ) ), new "models.skills.CuratorReportManager"( expandPath( "." ), new "models.vault.VaultManager"( expandPath( ".nanobox/vault" ) ), variables.config ), variables.config ).execute( args.action ?: "status", args ) }
+				if ( action == "activate" ) { return new "cli.commands.SkillActivationCommand"( new "models.skills.SkillCurator"( expandPath( "." ) ) ).execute( args.action ?: "status", args ) }
+				return new "cli.commands.SkillCommand"( new "models.skills.SkillManager"( expandPath( "." ) & "/.agents/skills" ) ).execute( action ?: "list", args )
 			case "chat":
 				if ( args.z ?: args[ "z" ] ?: false ) { return chat( args.query ?: args.q ?: arrayToList( parsed.positionals.slice( 2 ), " " ), args, true ) }
 				if ( !len( args.query ?: args.q ?: "" ) ) { return interactiveChat( parsed ) }
@@ -112,7 +112,7 @@ class {
 	}
 
 	private struct function processAction( required string action, struct args = {} ) {
-		var manager = new "cli.ProcessManager"()
+		var manager = new "models.system.ProcessManager"()
 		var web = new "cli.commands.WebCommand"( manager )
 		var worker = new "cli.commands.WorkerCommand"( manager )
 		if ( arguments.action == "stop" ) { return { success: true, web: web.execute( "stop", arguments.args ), worker: worker.execute( "stop", arguments.args ) } }
@@ -122,13 +122,13 @@ class {
 
 	private struct function doctor() { return { success: true, config: fileExists( variables.config.getConfigPath() ), home: variables.home, datasource: "nanobox", modules: [ "bx-ai", "bx-sqlite" ] } }
 	private struct function vault( required string action, struct args = {} ) {
-		var manager = new "cli.VaultManager"()
+		var manager = new "models.vault.VaultManager"()
 		if ( arguments.action == "search" ) { return { success: true, documents: manager.search( arguments.args.query ?: "" ) } }
 		if ( arguments.action == "index" ) { return manager.index() }
 		return { success: true, documents: manager.list( arguments.args.category ?: "" ) }
 	}
 	private struct function security( required string action, struct args = {} ) {
-		var czar = new "cli.SecurityCzar"()
+		var czar = new "models.security.SecurityCzar"()
 		if ( arguments.action == "scan" ) { return { success: true, results: czar.scanFiles( arguments.args.type ?: "all", arguments.args.path ?: variables.home ) } }
 		return { success: true, report: czar.status() }
 	}
@@ -139,12 +139,12 @@ class {
 	}
 	private struct function skills( required string action, struct args = {} ) { var path = variables.home & "/skills"; var items = directoryExists( path ) ? directoryList( path, false, "query" ) : []; return { success: true, skills: items } }
 	private struct function chat( required string query, struct args = {}, boolean textOnly = false ) {
-		var result = new "cli.commands.ChatCommand"( variables.config, new "cli.TokenTracker"() ).execute( arguments.query, arguments.args )
+		var result = new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ).execute( arguments.query, arguments.args )
 		if ( arguments.textOnly ) { return { success: result.success, text: result.content ?: "", error: result.error ?: "" } }
 		return result
 	}
 	private struct function interactiveChat( struct parsed = {} ) {
-		var interactive = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( variables.config, new "cli.TokenTracker"() ), new "cli.SessionManager"(), variables.config )
+		var interactive = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ), new "models.sessions.SessionManager"(), variables.config )
 		var started = interactive.start( true )
 		var renderer = new "cli.InteractiveChatRenderer"( interactive, true )
 		println( renderer.renderHeader( { title: started.title, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } ) )

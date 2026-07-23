@@ -2,8 +2,8 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "Complete session namespace", () => {
 			it( "supports create, show, rename, search, export, stats, and delete", () => {
-				var schema = new "cli.SessionSchema"(); schema.main()
-				var manager = new "cli.SessionManager"()
+				var schema = new "models.sessions.SessionSchema"(); schema.main()
+				var manager = new "models.sessions.SessionManager"()
 				var command = new "cli.commands.SessionCommand"( manager )
 				var created = command.execute( "create", { title: "Session lifecycle", provider: "lmstudio", model: "local" } )
 				var id = created.session.id
@@ -18,7 +18,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( command.execute( "show", { id: id } ).success ).toBeFalse()
 			} )
 			it( "supports dry-run prune and validates failures", () => {
-				var command = new "cli.commands.SessionCommand"( new "cli.SessionManager"() )
+				var command = new "cli.commands.SessionCommand"( new "models.sessions.SessionManager"() )
 				expect( command.execute( "prune", { olderThanDays: 0, dryRun: true } ).result.dryRun ).toBeTrue()
 				expect( command.execute( "show", {} ).success ).toBeFalse()
 				expect( command.execute( "search", {} ).success ).toBeFalse()

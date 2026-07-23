@@ -2,7 +2,7 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "CommandDispatcher gateway wiring", () => {
 			it( "parses gateway actions and options", () => {
-				var dispatcher = new "cli.CommandDispatcher"( new "cli.PrettyCli"( false ), new "cli.util.ConfigManager"( getTempDirectory() & "/dispatch-#createUUID()#" ) )
+				var dispatcher = new "cli.CommandDispatcher"( new "models.util.PrettyCli"( false ), new "models.system.ConfigManager"( getTempDirectory() & "/dispatch-#createUUID()#" ) )
 				var result = dispatcher.dispatch( { positionals: [ "gateway", "send", "telegram", "42", "hello" ], options: {} } )
 				expect( result.handler ).toBe( "GatewayCommand" )
 				expect( result.action ).toBe( "send" )
