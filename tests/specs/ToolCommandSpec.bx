@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "ToolManager", () => {
 			it( "lists all tools from the registry with enabled/disabled state", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var index = manager.list()
 				expect( index ).notToBeEmpty()
 				for ( var key in index ) {
@@ -16,8 +16,8 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "shows a specific tool by key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var index = manager.list()
 				var keys = index.keyArray()
 				if ( keys.len() ) {
@@ -29,15 +29,15 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "returns empty struct for nonexistent tool key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var tool = manager.show( "nonexistent_tool_xyz" )
 				expect( tool ).toBeEmpty()
 			} )
 
 			it( "enables and disables a tool", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var index = manager.list()
 				var keys = index.keyArray()
 				if ( keys.len() ) {
@@ -53,15 +53,15 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "enable returns error for nonexistent key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var result = manager.enable( "nonexistent_tool_xyz" )
 				expect( result.success ).toBeFalse()
 			} )
 
 			it( "status returns total, enabled, and disabled counts", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var status = manager.status()
 				expect( status ).toHaveKey( "total" )
 				expect( status ).toHaveKey( "enabled" )
@@ -71,8 +71,8 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "refresh re-scans sources and rebuilds the index", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var manager = new "/cli/ToolManager"( config.getNanoboxHome(), config )
+				var config = new "models.system.ConfigManager"()
+				var manager = new "models.tools.ToolManager"( config.getNanoboxHome(), config )
 				var index = manager.refresh()
 				expect( index ).notToBeEmpty()
 			} )
@@ -80,8 +80,8 @@ class extends="testbox.system.BaseSpec" {
 
 		describe( "ToolCommand", () => {
 			it( "list returns tools array with total", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "list" )
 				expect( result.success ).toBeTrue()
 				expect( result ).toHaveKey( "tools" )
@@ -90,8 +90,8 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "show returns tool details for valid key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var listResult = cmd.execute( "list" )
 				if ( listResult.total > 0 ) {
 					var key = listResult.tools[ 1 ].key
@@ -102,15 +102,15 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "show returns error for invalid key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "show", { key: "does_not_exist" } )
 				expect( result.success ).toBeFalse()
 			} )
 
 			it( "enable and disable toggle tool state", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var list = cmd.execute( "list" )
 				if ( list.total > 0 ) {
 					var key = list.tools[ 1 ].key
@@ -125,30 +125,30 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 			it( "enable returns error for nonexistent key", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "enable", { key: "does_not_exist" } )
 				expect( result.success ).toBeFalse()
 			} )
 
 			it( "status returns total/enabled/disabled", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "status" )
 				expect( result.total ).toBeGTE( 0 )
 				expect( result.enabled + result.disabled ).toBe( result.total )
 			} )
 
 			it( "refresh rebuilds the index", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "refresh" )
 				expect( result.success ).toBeTrue()
 			} )
 
 			it( "unknown action returns error", () => {
-				var config = new "/cli/util/ConfigManager"()
-				var cmd = new "/cli/commands/ToolCommand"( new "/cli/ToolManager"( config.getNanoboxHome(), config ) )
+				var config = new "models.system.ConfigManager"()
+				var cmd = new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( config.getNanoboxHome(), config ) )
 				var result = cmd.execute( "blargh" )
 				expect( result.success ).toBeFalse()
 			} )
