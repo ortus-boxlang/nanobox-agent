@@ -1,9 +1,35 @@
+/**
+ * Scheduler — thin façade over WorkerSupervisor for use by domain code.
+ *
+ * The real scheduling work is done by the BoxLang native scheduler running
+ * worker/nanobox-worker.bx.  This class lets other domain models start,
+ * stop, and query the worker process without coupling to WorkerCommand.
+ */
 class {
-	property name="name" default="nanobox-scheduler";
-	property name="running" default=false;
 
-	function configure() { variables.running = false; return this }
-	function start() { variables.running = true; return { success: true, name: variables.name, status: "running" } }
-	function stop() { variables.running = false; return { success: true, name: variables.name, status: "stopped" } }
-	struct function stats() { return { name: variables.name, status: variables.running ? "running" : "stopped", tasks: [ { name: "process-health", schedule: "every 30 seconds" } ] } }
+	property supervisor;
+
+	function init( required any processManager, string projectRoot = "" ) {
+		variables.supervisor = new "worker.core.WorkerSupervisor"(
+			arguments.processManager,
+			len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
+		)
+		return this
+	}
+
+	struct function start()   { return variables.supervisor.start() }
+	struct function stop()    { return variables.supervisor.stop() }
+	struct function restart() { return variables.supervisor.restart() }
+	struct function status()  { return variables.supervisor.status() }
+
+	struct function stats() {
+		var proc = variables.supervisor.status()
+		return {
+			name:    "nanobox-worker",
+			status:  proc.status ?: "stopped",
+			pid:     proc.pid ?: "",
+			started: proc.started ?: ""
+		}
+	}
+
 }

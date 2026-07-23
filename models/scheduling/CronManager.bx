@@ -79,6 +79,19 @@ class {
 		return { success: true, task: show( arguments.name ), note: "Run recorded; worker executes enabled tasks" }
 	}
 
+	struct function fail( required string name ) {
+		var task = show( arguments.name )
+		if ( !structKeyExists( task, "name" ) ) {
+			return { success: false, error: "Cron task not found" }
+		}
+		queryExecute(
+			"UPDATE nanobox_cron_tasks SET failures = failures + 1, lastRun = CURRENT_TIMESTAMP WHERE name = :name",
+			{ name: arguments.name },
+			{ datasource: variables.datasource }
+		)
+		return { success: true, task: show( arguments.name ) }
+	}
+
 	struct function remove( required string name ) {
 		var task = show( arguments.name )
 		if ( !structKeyExists( task, "name" ) ) {

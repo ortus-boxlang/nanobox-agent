@@ -1,0 +1,88 @@
+/**
+ * NanoBox Worker Scheduler
+ *
+ * Run with: boxlang schedule worker/nanobox-worker.bx
+ *
+ * Reads all enabled cron tasks from SQLite and registers them with the
+ * BoxLang native scheduler.  Blocks until killed.  Restart the worker
+ * process to pick up task changes:  nanobox worker restart
+ */
+class {
+
+	property name="scheduler";
+	property name="logger";
+
+	function configure() {
+		var config = new "models.system.ConfigManager"()
+		var cron   = new "models.scheduling.CronManager"()
+
+		scheduler.setSchedulerName( "nanobox-worker" )
+		scheduler.setTimezone( config.get( "worker.timezone", "UTC" ) )
+
+		var tasks    = cron.list()
+		var registered = 0
+
+		for ( var task in tasks ) {
+			if ( !( task.enabled ?: false ) ) { continue }
+			if ( !len( task.schedule ?: "" ) || !len( task.prompt ?: "" ) ) { continue }
+			registerTask( task, config, cron )
+			registered++
+		}
+
+		logger.info( "NanoBox Worker: registered #registered# cron task(s)" )
+
+		// Heartbeat — confirms the worker is alive every 5 minutes
+		scheduler.task( "nanobox-heartbeat" )
+			.call( () => logger.info( "NanoBox Worker heartbeat" ) )
+			.everyMinutes( 5 )
+	}
+
+	void function onStartup() {
+		var pid = createObject( "java", "java.lang.ProcessHandle" ).current().pid()
+		logger.info( "NanoBox Worker started (PID #pid#)" )
+	}
+
+	void function onShutdown() {
+		logger.info( "NanoBox Worker shut down" )
+	}
+
+	// -------------------------------------------------------------------------
+	// Private helpers
+	// -------------------------------------------------------------------------
+
+	private void function registerTask(
+		required struct task,
+		required any    config,
+		required any    cron
+	) {
+		var taskName   = arguments.task.name
+		var taskPrompt = arguments.task.prompt
+		var taskCron   = arguments.task.schedule
+		var taskConfig = arguments.config
+		var taskDb     = arguments.cron
+
+		scheduler.task( "cron-#taskName#" )
+			.call( () => executeTask( taskName, taskPrompt, taskConfig, taskDb ) )
+			.cron( taskCron )
+	}
+
+	private void function executeTask(
+		required string name,
+		required string prompt,
+		required any    config,
+		required any    cron
+	) {
+		try {
+			var provider = arguments.config.get( "bx-ai.defaultProvider", "" )
+			var model    = arguments.config.get( "bx-ai.defaultModel", "" )
+			var params   = len( model ) ? { model: model } : {}
+			aiChat( arguments.prompt, provider: provider, params: params )
+			arguments.cron.run( arguments.name )
+			logger.info( "Cron task '#arguments.name#' completed" )
+		} catch ( any e ) {
+			arguments.cron.fail( arguments.name )
+			logger.error( "Cron task '#arguments.name#' failed: #e.message#" )
+		}
+	}
+
+}

@@ -1,0 +1,53 @@
+/**
+ * WorkerSupervisor — manages the lifecycle of the NanoBox worker process.
+ *
+ * Locates the BoxLang binary, builds the `boxlang schedule` command, and
+ * delegates process start/stop/status to ProcessManager.
+ */
+class {
+
+	property processes;
+	property projectRoot;
+
+	function init( required any processManager, string projectRoot = "" ) {
+		variables.processes   = arguments.processManager
+		variables.projectRoot = len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
+		return this
+	}
+
+	struct function start( struct args = {} ) {
+		var schedulerFile = variables.projectRoot & "/worker/nanobox-worker.bx"
+		if ( !fileExists( schedulerFile ) ) {
+			return { success: false, error: "Worker scheduler not found at: #schedulerFile#" }
+		}
+		var executable = findBoxLangBin()
+		var cmdArgs    = [ "schedule", schedulerFile ]
+		return variables.processes.start( "worker", executable, cmdArgs )
+	}
+
+	struct function stop()   { return variables.processes.stop( "worker" ) }
+	struct function status() { return variables.processes.status( "worker" ) }
+	struct function restart( struct args = {} ) { stop(); return start( arguments.args ) }
+
+	// -------------------------------------------------------------------------
+	// Private helpers
+	// -------------------------------------------------------------------------
+
+	private string function findBoxLangBin() {
+		var candidates = [
+			// BVM (BoxLang Version Manager) — most common on dev machines
+			expandPath( "~/.bvm/current/bin/boxlang" ),
+			// Common system-wide install locations
+			"/usr/local/bin/boxlang",
+			"/usr/bin/boxlang",
+			// Windows (via PATH, no extension needed on Windows too)
+			"boxlang"
+		]
+		for ( var path in candidates ) {
+			if ( fileExists( path ) ) { return path }
+		}
+		// Fall back to bare name and let the OS resolve via PATH
+		return "boxlang"
+	}
+
+}
