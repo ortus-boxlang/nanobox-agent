@@ -2,18 +2,18 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "ModelCommand", () => {
 			it( "returns current configuration without contacting a provider", () => {
-				var config = new "cli.util.ConfigManager"( getTempDirectory() & "/model-#createUUID()#" )
+				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-#createUUID()#" )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
-				var result = new "cli.ModelCommand"( config ).execute( "current", {} )
+				var result = new "cli.commands.ModelCommand"( config ).execute( "current", {} )
 				expect( result.success ).toBeTrue()
 				expect( result.model ).toBe( "qwen/qwen3.6-35b-a3b" )
 			} )
 			it( "discovers LM Studio models through openai-compatible service", () => {
-				var config = new "cli.util.ConfigManager"( getTempDirectory() & "/model-lmstudio-#createUUID()#" )
+				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-lmstudio-#createUUID()#" )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var result = new "cli.ModelCommand"( config ).execute( "refresh", {} )
+				var result = new "cli.commands.ModelCommand"( config ).execute( "refresh", {} )
 				expect( result.success ).toBeTrue()
 				expect( result.serviceProvider ).toBe( "openai-compatible" )
 				expect( result.models ).notToBeEmpty()

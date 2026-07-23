@@ -1,10 +1,29 @@
-import nanobox_cli.PrettyCli
-import nanobox_cli.util.ConfigManager
+import models.util.PrettyCli
+import models.system.ConfigManager
 
+/**
+ * NanoBox CLI entry point.
+ *
+ * Parses command-line arguments via CLIGetArgs(), initialises core services,
+ * and delegates execution to CommandRuntime.  Exits with code 1 on failure.
+ * Pass -z (or --z) to emit plain-text chat output instead of JSON.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	static VERSION = "0.1.0"
 	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#"
 
+	/**
+	 * Application entry point invoked by the BoxLang runtime.
+	 *
+	 * Resolves --version/-v, --help/-h, and -z flags before dispatching to
+	 * CommandRuntime.  Prints JSON output by default; plain text when -z is set.
+	 *
+	 * @args Raw CLI positional arguments provided by the runtime
+	 */
 	function main( array args = [] ) {
 		var parsed = CLIGetArgs()
 		var options = parsed.options ?: {}
@@ -12,8 +31,8 @@ class {
 		if ( options.version ?: options.v ?: false ) { println( "NanoBox v#static.VERSION#" ); return }
 		if ( options.help ?: options.h ?: false || positionals.len() == 0 ) { print( static.HELP_TEXT ); return }
 		if ( options.z ?: options[ "z" ] ?: false ) { positionals = [ "chat" ]; if ( parsed.positionals.len() > 1 ) { for ( var positional in parsed.positionals.slice( 1 ) ) { positionals.append( positional ) } }; parsed.positionals = positionals }
-		var config = new "cli.util.ConfigManager"()
-		var result = new "cli.CommandRuntime"( new "cli.PrettyCli"( true ), config ).execute( parsed )
+		var config = new "models.system.ConfigManager"()
+		var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), config ).execute( parsed )
 		if ( options.z ?: options[ "z" ] ?: false ) { if ( isStruct( result ) && result.success ) { println( result.text ?: "" ) } else { println( jsonSerialize( result, true ) ) } } else { println( jsonSerialize( result, true ) ) }
 		if ( isStruct( result ) && result.keyExists( "success" ) && !result.success ) { CLIExit( 1 ) }
 	}

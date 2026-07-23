@@ -1,3 +1,13 @@
+/**
+ * ConfigTools — AI-callable tools for reading and writing NanoBox configuration values.
+ *
+ * Exposes two tools to the bx-ai tool registry that allow an LLM agent to inspect
+ * and modify the NanoBox configuration file at runtime.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Read a NanoBox configuration value by key. Returns the current value or empty string if not set." )
 	public string function config_get( required string key ) {

@@ -6,7 +6,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/note-#createUUID()#.md"
 				fileWrite( source, "NanoBox architecture notes" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var imported = manager.importFile( source, "research", [ "architecture" ] )
 				expect( imported.success ).toBeTrue()
 				expect( imported.document.name ).toBe( getFileFromPath( source ) )
@@ -18,7 +18,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "returns error for nonexistent source file", () => {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var result = manager.importFile( "/nonexistent/path.md", "imported", [] )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "File not found" )
@@ -28,7 +28,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/doc-#createUUID()#.md"
 				fileWrite( source, "specific-search-token-xyz" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var imported = manager.importFile( source, "research", [ "test" ] )
 
 				var results = manager.search( "specific-search-token-xyz" )
@@ -40,7 +40,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/d-#createUUID()#.md"
 				fileWrite( source, "some content here" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				manager.importFile( source, "imported", [] )
 				var results = manager.search( "nonexistent-token-xyz" )
 				expect( results ).toHaveLength( 0 )
@@ -48,7 +48,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "index rebuilds the manifest from disk", () => {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var source = getTempDirectory() & "/idx-#createUUID()#.md"
 				fileWrite( source, "index content" )
 				manager.importFile( source, "reports", [] )
@@ -61,7 +61,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/get-#createUUID()#.md"
 				fileWrite( source, "get content" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var imported = manager.importFile( source, "research", [] )
 				var doc = manager.get( imported.document.id )
 				expect( doc ).notToBeEmpty()
@@ -70,7 +70,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "returns empty for nonexistent document id", () => {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var doc = manager.get( "nonexistent-id" )
 				expect( doc ).toBeEmpty()
 			} )
@@ -79,7 +79,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/rm-#createUUID()#.md"
 				fileWrite( source, "remove content" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var imported = manager.importFile( source, "imported", [] )
 				var result = manager.remove( imported.document.id )
 				expect( result.success ).toBeTrue()
@@ -88,7 +88,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "remove returns error for nonexistent id", () => {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var result = manager.remove( "nonexistent-id" )
 				expect( result.success ).toBeFalse()
 			} )
@@ -97,7 +97,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
 				var source = getTempDirectory() & "/exp-#createUUID()#.md"
 				fileWrite( source, "export content" )
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var imported = manager.importFile( source, "research", [] )
 				var result = manager.export( imported.document.id )
 				expect( result.success ).toBeTrue()
@@ -106,7 +106,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "export returns error for nonexistent id", () => {
 				var vault = getTempDirectory() & "/vault-#createUUID()#"
-				var manager = new "cli.VaultManager"( vault )
+				var manager = new "models.vault.VaultManager"( vault )
 				var result = manager.export( "nonexistent-id" )
 				expect( result.success ).toBeFalse()
 			} )
@@ -117,7 +117,7 @@ class extends="testbox.system.BaseSpec" {
 				var vault = getTempDirectory() & "/vcmd-#createUUID()#"
 				var source = getTempDirectory() & "/vcmd-#createUUID()#.md"
 				fileWrite( source, "vault command test" )
-				var cmd = new "cli.commands.VaultCommand"( new "cli.VaultManager"( vault ) )
+				var cmd = new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( vault ) )
 
 				// Import
 				var result = cmd.execute( "import", { path: source, category: "research", tags: "test" } )

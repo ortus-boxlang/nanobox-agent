@@ -1,6 +1,30 @@
+/**
+ * SkillActivationCommand — CLI interface for toggling skill activation state.
+ *
+ * Dispatches enable/disable/status actions to the injected SkillCurator.
+ * Activation state controls whether an agent loads the skill at runtime.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property curator;
+
+	/**
+	 * @skillCurator SkillCurator instance that manages skill activation metadata
+	 */
 	function init( required any skillCurator ) { variables.curator = arguments.skillCurator; return this }
+
+	/**
+	 * Dispatches a skill activation action.
+	 *
+	 * Supported actions: enable, disable, status.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name — the skill to enable or disable)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "enable": return variables.curator.setEnabled( arguments.args.name ?: "", true )

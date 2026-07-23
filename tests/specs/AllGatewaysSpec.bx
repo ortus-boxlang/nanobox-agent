@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "all concrete gateways expose the standard contract and capabilities", () => {
 				var classes = [ "EmailGateway", "DiscordGateway", "SlackGateway", "WhatsAppGateway", "WhatsAppBusinessGateway", "SignalGateway", "SMSGateway" ]
 				for ( var className in classes ) {
-					var gateway = new "cli.#className#"( {} )
+					var gateway = new "models.gateway.#className#"( {} )
 					expect( gateway.getName() ).notToBeEmpty()
 					expect( gateway.capabilities() ).toHaveKey( "hitlModes" )
 					expect( gateway.capabilities().hitl ).toBeTrue()

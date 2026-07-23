@@ -1,6 +1,20 @@
+/**
+ * LearningEngine — lightweight observation and fact-consolidation store for NanoBox.
+ *
+ * Records discrete observations from any source, then consolidates them into a deduplicated
+ * facts list by taking the highest-confidence observation per content key.  The store is
+ * backed by a single JSON file so facts survive across sessions.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property storePath;
 
+	/**
+	 * @storePath  Absolute path to the JSON learning store; defaults to ~/.nanobox/learning.json
+	 */
 	function init( string storePath = "" ) {
 		variables.storePath = arguments.storePath != "" ? arguments.storePath : expandPath( "~/.nanobox/learning.json" )
 		var parent = getDirectoryFromPath( variables.storePath )
@@ -8,6 +22,16 @@ class {
 		if ( !fileExists( variables.storePath ) ) { fileWrite( variables.storePath, jsonSerialize( { observations: [], facts: [] }, true ) ) }
 		return this
 	}
+
+	/**
+	 * Records a new observation in the store.
+	 *
+	 * @source      Identifier for the system or session that generated the observation
+	 * @content     The observed text or data
+	 * @category    Logical category for grouping (default "general")
+	 * @confidence  Float 0–1 indicating certainty (default 0.5)
+	 * @return      Struct with success flag and the stored observation
+	 */
 	struct function observe( required string source, required string content, string category = "general", numeric confidence = 0.5 ) {
 		var data = readData()
 		var item = { id: createUUID(), source: arguments.source, content: arguments.content, category: arguments.category, confidence: arguments.confidence, created: now(), consolidated: false }
@@ -15,6 +39,15 @@ class {
 		writeData( data )
 		return { success: true, observation: item }
 	}
+
+	/**
+	 * Consolidates all observations into a deduplicated facts list.
+	 *
+	 * For each unique category+content key, only the observation with the highest
+	 * confidence score is kept as a fact.
+	 *
+	 * @return Struct with success flag and counts of observations and resulting facts
+	 */
 	struct function consolidate() {
 		var data = readData()
 		var grouped = {}
@@ -27,12 +60,37 @@ class {
 		writeData( data )
 		return { success: true, observations: data.observations.len(), facts: data.facts.len() }
 	}
+
+	/**
+	 * Returns all consolidated facts, optionally filtered by category.
+	 *
+	 * @category  Category to filter by; empty string returns all categories
+	 * @return    Array of fact structs
+	 */
 	array function facts( string category = "" ) {
 		var result = []
 		for ( var fact in readData().facts ) { if ( !len( arguments.category ) || fact.category == arguments.category ) { result.append( fact ) } }
 		return result
 	}
+
+	/**
+	 * Returns summary counts for observations and consolidated facts.
+	 *
+	 * @return Struct with observations and facts numeric counts
+	 */
 	struct function stats() { var data = readData(); return { observations: data.observations.len(), facts: data.facts.len() } }
+
+	/**
+	 * Reads and deserialises the JSON learning store file.
+	 *
+	 * @return Struct with observations and facts arrays
+	 */
 	private struct function readData() { return jsonDeserialize( fileRead( variables.storePath ) ) }
+
+	/**
+	 * Serialises and writes the data struct back to the JSON learning store file.
+	 *
+	 * @data  Struct with observations and facts arrays to persist
+	 */
 	private void function writeData( required struct data ) { fileWrite( variables.storePath, jsonSerialize( arguments.data, true ) ) }
 }

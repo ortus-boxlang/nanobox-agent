@@ -1,3 +1,15 @@
+/**
+ * CuratorLifecycle — scheduled tick coordinator for the NanoBox skill curator.
+ *
+ * Orchestrates a full curator cycle: reads the interval from config, checks the
+ * skill usage against protected lists from CronManager and AgentManager, delegates
+ * to SkillCurator for state transitions, writes a report via CuratorReportManager,
+ * and triggers a background security scan on the skills directory.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property config;
 	property curator;
@@ -5,15 +17,33 @@ class {
 	property cron;
 	property agents;
 
+	/**
+	 * @configManager  ConfigManager for reading curator settings
+	 * @skillCurator   SkillCurator that performs state transitions
+	 * @reportManager  CuratorReportManager that persists and delivers run reports
+	 * @cronManager    Optional CronManager for building the protected-skills list; created internally if null
+	 * @agentManager   Optional AgentManager for building the protected-skills list; created internally if null
+	 */
 	function init( required any configManager, required any skillCurator, required any reportManager, any cronManager = null, any agentManager = null ) {
 		variables.config = arguments.configManager
 		variables.curator = arguments.skillCurator
 		variables.reports = arguments.reportManager
-		variables.cron = arguments.cronManager ?: new "cli.CronManager"()
-		variables.agents = arguments.agentManager ?: new "cli.AgentManager"()
+		variables.cron = arguments.cronManager ?: new "models.scheduling.CronManager"()
+		variables.agents = arguments.agentManager ?: new "models.agents.AgentManager"()
 		return this
 	}
 
+	/**
+	 * Executes one curator lifecycle tick.
+	 *
+	 * Skips the run when the curator is paused or disabled, or when the configured
+	 * interval has not yet elapsed (unless {@code force=true}).  Protected skills
+	 * (those referenced by active cron tasks or named agents) are never transitioned.
+	 *
+	 * @force   When true, bypasses the interval check and runs immediately
+	 * @dryRun  When true, computes changes but does not apply them
+	 * @return  Struct with success, skipped, protectedSkills, curator result, and report keys
+	 */
 	struct function tick( boolean force = false, boolean dryRun = false ) {
 		var state = variables.curator.status()
 		if ( state.paused ?: false || !( state.enabled ?: true ) ) { return { success: true, skipped: true, reason: state.paused ? "paused" : "disabled" } }
@@ -25,15 +55,19 @@ class {
 		for ( var skill in variables.agents.referencedSkills() ) { if ( !protected.contains( skill ) ) { protected.append( skill ) } }
 		var result = variables.curator.run( arguments.dryRun, val( variables.config.get( "curator.staleAfterDays", 30 ) ), val( variables.config.get( "curator.archiveAfterDays", 90 ) ), protected )
 		var report = variables.reports.write( result, variables.config.get( "bx-ai.curatorModel", "" ) )
-		// Run periodic security scan on skills directory
 		securityTick()
 		return { success: true, skipped: false, protectedSkills: protected, curator: result, report: report }
 	}
 
+	/**
+	 * Runs a best-effort background security scan on the configured skills directory.
+	 *
+	 * Failures are silently ignored to keep the security scan from blocking curator output.
+	 */
 	private void function securityTick() {
 		try {
 			var skillsDir = variables.config.getNanoboxHome() & "/skills"
-			var czar = new "cli.SecurityCzar"()
+			var czar = new "models.security.SecurityCzar"()
 			czar.tick( "skills", skillsDir )
 		} catch ( any ignored ) { /* security tick is best-effort */ }
 	}

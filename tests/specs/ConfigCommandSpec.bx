@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "ConfigCommand", () => {
 			it( "reads, writes, and removes configuration values", () => {
 				var home = getTempDirectory() & "/config-command-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
+				var config = new "models.system.ConfigManager"( home )
 				var command = new "cli.commands.ConfigCommand"( config )
 				expect( command.execute( "set", { key: "nanobox.web.port", value: 8181 } ).success ).toBeTrue()
 				expect( command.execute( "get", { key: "nanobox.web.port" } ).value ).toBe( 8181 )

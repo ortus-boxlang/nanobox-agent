@@ -1,4 +1,24 @@
-class extends="cli.BaseGateway" {
+/**
+ * SMSGateway — SMS/MMS messaging implementation of IGateway.
+ *
+ * Stub implementation that inherits lifecycle management from BaseGateway.
+ * Provider integration (Twilio, AWS SNS, etc.) is planned for a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class extends="models.gateway.BaseGateway" {
+
+	/**
+	 * @config  Config struct; expected keys: accountSid, authToken, fromNumber (provider-specific)
+	 */
 	function init( struct config = {} ) { super.init( "sms", arguments.config ); return this }
+
+	/**
+	 * Returns the feature capabilities supported by SMS.
+	 *
+	 * @return Capabilities struct reflecting SMS text-only constraints (no media, reactions, threads, or buttons)
+	 */
 	struct function capabilities() { return { text: true, attachments: false, images: false, audio: false, video: false, reactions: false, threads: false, buttons: false, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

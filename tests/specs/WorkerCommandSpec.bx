@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "WorkerCommand", () => {
 			it( "starts, reports, and stops the worker through ProcessManager", () => {
 				var state = getTempDirectory() & "/worker-processes-#createUUID()#.json"
-				var manager = new "cli.ProcessManager"( state )
+				var manager = new "models.system.ProcessManager"( state )
 				var command = new "cli.commands.WorkerCommand"( manager, expandPath( "/tmp/test-worker.bx" ) )
 				var started = command.execute( "start" )
 				expect( started.success ).toBeTrue()

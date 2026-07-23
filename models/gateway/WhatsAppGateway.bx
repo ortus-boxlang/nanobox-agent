@@ -1,4 +1,25 @@
-class extends="cli.BaseGateway" {
+/**
+ * WhatsAppGateway — WhatsApp Cloud API implementation of IGateway.
+ *
+ * Stub implementation that inherits lifecycle management from BaseGateway.
+ * Full WhatsApp Cloud API integration (messages, media, templates) is planned
+ * for a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class extends="models.gateway.BaseGateway" {
+
+	/**
+	 * @config  Config struct; expected keys: phoneNumberId, accessToken, webhookVerifyToken
+	 */
 	function init( struct config = {} ) { super.init( "whatsapp", arguments.config ); return this }
+
+	/**
+	 * Returns the feature capabilities supported by the WhatsApp platform.
+	 *
+	 * @return Capabilities struct with full media and reaction support (no threads)
+	 */
 	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: false, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

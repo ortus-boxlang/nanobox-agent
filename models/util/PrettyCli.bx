@@ -1,12 +1,36 @@
+/**
+ * PrettyCli — ANSI terminal formatting utilities.
+ *
+ * Provides colour-coded output, ASCII/Unicode table rendering, word-wrap,
+ * and other formatting helpers for the NanoBox CLI.  When colorsEnabled is
+ * false all colour methods return plain text so output is safe to pipe.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 
 	property colorsEnabled;
 
+	/**
+	 * @colorsEnabled Set to false to strip ANSI escape codes from all output
+	 */
 	function init( boolean colorsEnabled = true ) {
 		variables.colorsEnabled = arguments.colorsEnabled
 		return this
 	}
 
+	/**
+	 * Wraps text in an ANSI colour sequence.
+	 *
+	 * Supported colour names: red, green, yellow, blue, dim, bold.
+	 * Returns plain text when colorsEnabled is false or the name is unknown.
+	 *
+	 * @text       Text to colourise
+	 * @colorName  Named colour (case-insensitive)
+	 * @return     Coloured string, or the original text when colours are disabled
+	 */
 	string function color( required string text, required string colorName ) {
 		if ( !variables.colorsEnabled ) {
 			return arguments.text
@@ -20,22 +44,95 @@ class {
 			bold: "1"
 		}
 		var code = codes[ lCase( arguments.colorName ) ] ?: "0"
-		return "ESC[" & code & "m" & arguments.text & "ESC[0m"
+		return chr( 27 ) & "[" & code & "m" & arguments.text & chr( 27 ) & "[0m"
 	}
 
+	/**
+	 * @text Text to render in red
+	 * @return Red-coloured string
+	 */
 	string function red( required string text ) { return color( arguments.text, "red" ) }
+
+	/**
+	 * @text Text to render in green
+	 * @return Green-coloured string
+	 */
 	string function green( required string text ) { return color( arguments.text, "green" ) }
+
+	/**
+	 * @text Text to render in yellow
+	 * @return Yellow-coloured string
+	 */
 	string function yellow( required string text ) { return color( arguments.text, "yellow" ) }
+
+	/**
+	 * @text Text to render in blue
+	 * @return Blue-coloured string
+	 */
 	string function blue( required string text ) { return color( arguments.text, "blue" ) }
+
+	/**
+	 * @text Text to render dimmed
+	 * @return Dimmed string
+	 */
 	string function dim( required string text ) { return color( arguments.text, "dim" ) }
+
+	/**
+	 * @text Text to render bold
+	 * @return Bold string
+	 */
 	string function bold( required string text ) { return color( arguments.text, "bold" ) }
 
+	/**
+	 * Formats a success message with a green check-mark prefix.
+	 *
+	 * @message Message text
+	 * @return  Green "✓ message" string
+	 */
 	string function success( required string message ) { return green( "✓ " & arguments.message ) }
+
+	/**
+	 * Formats an error message with a red cross prefix.
+	 *
+	 * @message Message text
+	 * @return  Red "✗ message" string
+	 */
 	string function error( required string message ) { return red( "✗ " & arguments.message ) }
+
+	/**
+	 * Formats a warning message with a yellow warning-sign prefix.
+	 *
+	 * @message Message text
+	 * @return  Yellow "⚠ message" string
+	 */
 	string function warn( required string message ) { return yellow( "⚠ " & arguments.message ) }
+
+	/**
+	 * Formats an informational message with a blue info-symbol prefix.
+	 *
+	 * @message Message text
+	 * @return  Blue "ℹ message" string
+	 */
 	string function info( required string message ) { return blue( "ℹ " & arguments.message ) }
+
+	/**
+	 * Formats a message as dimmed/muted text.
+	 *
+	 * @message Message text
+	 * @return  Dimmed string
+	 */
 	string function muted( required string message ) { return dim( arguments.message ) }
 
+	/**
+	 * Renders an array of rows as a bordered ASCII table.
+	 *
+	 * Column widths are computed automatically to fit the widest cell.
+	 *
+	 * @headers Column header labels
+	 * @rows    Array of arrays; each inner array must have one element per header
+	 * @options Reserved for future rendering options
+	 * @return  Multi-line string containing the rendered table
+	 */
 	string function table( required array headers, required array rows, struct options = {} ) {
 		var widths = []
 		var normalizedRows = []
@@ -59,6 +156,13 @@ class {
 		return output & "\n" & border
 	}
 
+	/**
+	 * Renders a single table row with pipe separators.
+	 *
+	 * @values Cell values for this row
+	 * @widths Column widths used to pad each cell
+	 * @return Pipe-delimited row string
+	 */
 	private string function renderRow( required array values, required array widths ) {
 		var output = "|"
 		for ( var i = 1; i <= arguments.widths.len(); i++ ) {
@@ -68,12 +172,26 @@ class {
 		return output
 	}
 
+	/**
+	 * Renders a struct as a two-column Key/Value ASCII table.
+	 *
+	 * @data    Struct of key-value pairs to display
+	 * @options Passed through to table()
+	 * @return  Multi-line table string
+	 */
 	string function kvTable( required struct data, struct options = {} ) {
 		var rows = []
 		for ( var key in arguments.data ) { rows.append( [ key, arguments.data[ key ] ] ) }
 		return table( [ "Key", "Value" ], rows, arguments.options )
 	}
 
+	/**
+	 * Renders text inside a Unicode box border.
+	 *
+	 * @text    Text to enclose; newlines create multiple lines inside the box
+	 * @options Reserved for future rendering options
+	 * @return  Multi-line box string
+	 */
 	string function box( required string text, struct options = {} ) {
 		var lines = listToArray( replace( arguments.text, "\r", "", "all" ), "\n" )
 		var width = 0
@@ -83,13 +201,46 @@ class {
 		return output & "\n" & "└" & repeatString( "─", width + 2 ) & "┘"
 	}
 
+	/**
+	 * Renders a bold section title followed by a divider line.
+	 *
+	 * @title Section heading text
+	 * @return Multi-line header string
+	 */
 	string function section( required string title ) { return "\n" & bold( arguments.title ) & "\n" & divider() }
+
+	/**
+	 * Returns a horizontal divider line.
+	 *
+	 * @character Repeated character (default "─")
+	 * @length    Total line length (default 60)
+	 * @return    Divider string
+	 */
 	string function divider( string character = "─", numeric length = 60 ) { return repeatString( arguments.character, arguments.length ) }
+
+	/**
+	 * Truncates text to maxWidth characters, appending "…" when cut.
+	 *
+	 * @text     Input text
+	 * @maxWidth Maximum character length of the returned string
+	 * @return   Original text or truncated text ending with "…"
+	 */
 	string function truncate( required string text, required numeric maxWidth ) {
 		if ( len( arguments.text ) <= arguments.maxWidth ) { return arguments.text }
 		if ( arguments.maxWidth <= 1 ) { return left( arguments.text, arguments.maxWidth ) }
 		return left( arguments.text, arguments.maxWidth - 1 ) & "…"
 	}
+
+	/**
+	 * Word-wraps text into lines no longer than maxWidth characters.
+	 *
+	 * Words are split on spaces; a single word longer than maxWidth is kept
+	 * on its own line without truncation.
+	 *
+	 * @text     Input text to wrap
+	 * @maxWidth Maximum characters per line
+	 * @return   Array of wrapped line strings
+	 */
 	array function wrap( required string text, required numeric maxWidth ) {
 		var lines = []
 		var current = ""
@@ -100,6 +251,18 @@ class {
 		if ( current != "" ) { lines.append( current ) }
 		return lines
 	}
+
+	/**
+	 * Prepends spaces to indent text by the given number of levels (4 spaces each).
+	 *
+	 * @text  Text to indent
+	 * @level Number of indent levels (default 1)
+	 * @return Indented string
+	 */
 	string function indent( required string text, numeric level = 1 ) { return repeatString( "    ", arguments.level ) & arguments.text }
+
+	/**
+	 * Clears the terminal screen.
+	 */
 	void function clear() { CLIClear() }
 }

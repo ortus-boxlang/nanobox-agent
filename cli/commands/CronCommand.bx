@@ -1,6 +1,30 @@
+/**
+ * CronCommand — CLI interface for managing NanoBox scheduled tasks.
+ *
+ * Dispatches cron task actions (list, create, show, pause, resume, run,
+ * delete, stats) to the injected CronManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @cronManager CronManager instance that owns task persistence
+	 */
 	function init( required any cronManager ) { variables.manager = arguments.cronManager; return this }
+
+	/**
+	 * Dispatches a cron task action.
+	 *
+	 * Supported actions: list, create, show, pause, resume, run, delete, stats.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, schedule, prompt, group, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return { success: true, tasks: variables.manager.list( arguments.args.group ?: "" ) }

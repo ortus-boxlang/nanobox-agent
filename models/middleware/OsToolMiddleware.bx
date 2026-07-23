@@ -1,11 +1,28 @@
 import bxModules.bxai.models.middleware.BaseAiMiddleware
 import bxModules.bxai.models.middleware.AiMiddlewareResult
 
+/**
+ * OsToolMiddleware — HITL (Human-in-the-Loop) middleware that intercepts dangerous OS tool calls.
+ *
+ * Before any tool call, scans the tool name and serialised arguments against a list of
+ * dangerous patterns (e.g. {@code rm -rf}, {@code systemExecute}).  Matching calls are
+ * suspended and routed through the HITL approval flow unless {@code requireApproval} is
+ * {@code false}.  Allowed commands are persisted to a JSON allowlist file.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 	property allowlistPath;
 	property requireApproval;
 	property dangerousPatterns;
 
+	/**
+	 * @allowlistPath      Path to the JSON allowlist file; defaults to ~/.nanobox/config/allowlist.json
+	 * @requireApproval    When true (default), dangerous calls are suspended for user approval
+	 * @dangerousPatterns  Regex patterns marking dangerous tool names or arguments; defaults to a built-in set
+	 */
 	function init( string allowlistPath = "", boolean requireApproval = true, array dangerousPatterns = [] ) {
 		variables.allowlistPath = arguments.allowlistPath != "" ? arguments.allowlistPath : expandPath( "~/.nanobox/config/allowlist.json" )
 		variables.requireApproval = arguments.requireApproval
@@ -14,6 +31,12 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		return this
 	}
 
+	/**
+	 * Intercepts tool calls and suspends execution for any that match a dangerous pattern.
+	 *
+	 * @context  Middleware context struct with toolName and toolArgs keys
+	 * @return   AiMiddlewareResult — continue() if safe, suspend() if approval is required
+	 */
 	AiMiddlewareResult function beforeToolCall( required struct context ) {
 		var toolName = arguments.context.toolName ?: arguments.context.name ?: ""
 		var toolArgs = arguments.context.toolArgs ?: arguments.context.arguments ?: {}
@@ -31,11 +54,24 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		return AiMiddlewareResult.continue()
 	}
 
+	/**
+	 * Checks whether a command is in the given allowlist scope.
+	 *
+	 * @command  Command string to check
+	 * @scope    Allowlist scope to check against (default "once")
+	 * @return   true if the command is allowed in the given scope
+	 */
 	boolean function isAllowed( required string command, string scope = "once" ) {
 		var allowlist = readAllowlist()
 		return structKeyExists( allowlist, arguments.scope ) && allowlist[ arguments.scope ].contains( arguments.command )
 	}
 
+	/**
+	 * Adds a command to the named allowlist scope and persists the updated allowlist.
+	 *
+	 * @command  Command string to allow
+	 * @scope    Allowlist scope (default "always")
+	 */
 	void function allow( required string command, string scope = "always" ) {
 		var allowlist = readAllowlist()
 		if ( !structKeyExists( allowlist, arguments.scope ) ) { allowlist[ arguments.scope ] = [] }
@@ -43,10 +79,19 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		fileWrite( variables.allowlistPath, jsonSerialize( allowlist, true ) )
 	}
 
+	/**
+	 * Creates the allowlist file and its parent directory if they do not exist.
+	 */
 	private void function ensureAllowlist() {
 		var parent = getDirectoryFromPath( variables.allowlistPath )
 		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
 		if ( !fileExists( variables.allowlistPath ) ) { fileWrite( variables.allowlistPath, jsonSerialize( { always: [], session: [], once: [] }, true ) ) }
 	}
+
+	/**
+	 * Reads and deserialises the JSON allowlist file.
+	 *
+	 * @return Allowlist struct with always, session, and once scope arrays
+	 */
 	private struct function readAllowlist() { return jsonDeserialize( fileRead( variables.allowlistPath ) ) }
 }

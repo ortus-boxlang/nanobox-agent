@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Content and security CLI namespace", () => {
 			it( "executes skill list/show/search and security status/scan", () => {
 				var home = getTempDirectory() & "/content-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "cli.PrettyCli"( false ), config )
+				var config = new "models.system.ConfigManager"( home )
+				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "skill", "list" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "security", "status" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "security", "scan" ], options: { path: home } } ).success ).toBeTrue()

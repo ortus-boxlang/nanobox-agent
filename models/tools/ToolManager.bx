@@ -1,7 +1,22 @@
+/**
+ * ToolManager — registers, indexes, enables, and disables AI tools for NanoBox.
+ *
+ * On construction, scans core tool classes from {@code models/tools/} and registers them
+ * with the bx-ai tool registry.  Also registers FileSystemTools with path guards.
+ * The enabled set is persisted to config so it survives restarts.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property homePath;
 	property configManager;
 
+	/**
+	 * @homePath       NanoBox home directory; defaults to ~/.nanobox
+	 * @configManager  ConfigManager for persisting enabled tool keys; created internally if null
+	 */
 	function init( string homePath = "", any configManager = null ) {
 		if ( !isNull( arguments.configManager ) ) {
 			variables.configManager = arguments.configManager
@@ -13,6 +28,14 @@ class {
 		return this
 	}
 
+	/**
+	 * Re-scans all core tool classes and rebuilds the tool index.
+	 *
+	 * Registers each {@code *.bx} file from {@code models/tools/} with the bx-ai registry,
+	 * appends user-installed tools from the home tools directory, and persists the index.
+	 *
+	 * @return Struct index of all known tools keyed by registry key
+	 */
 	function refresh() {
 		var registry = aiToolRegistry()
 		var coreDir = expandPath( "/cli/tools" )
@@ -23,7 +46,7 @@ class {
 		if ( directoryExists( coreDir ) ) {
 			for ( var file in directoryList( coreDir, false, "query", "*.bx" ) ) {
 				try {
-					var className = "cli.tools." & file.name.replace( ".bx", "" )
+					var className = "models.tools." & file.name.replace( ".bx", "" )
 					registry.scanClass( new "#className#"(), "nanobox" )
 				} catch ( any e ) {
 					writeLog( text: "ToolManager: Failed to load core tool #file.name#: #e.message#", type: "warn", log: "ai" )
@@ -44,7 +67,6 @@ class {
 
 		// Build index from registry + user tools
 		var index = buildIndex()
-		// Merge user tool metadata (for tracking, not runtime registration)
 		if ( directoryExists( userDir ) ) {
 			for ( var file in directoryList( userDir, false, "query", "*.bx" ) ) {
 				var key = file.name.replace( ".bx", "" ) & "@user"
@@ -58,20 +80,36 @@ class {
 				}
 			}
 		}
-		// Persist disk manifest
 		writeIndex( index )
 		return index
 	}
 
+	/**
+	 * Returns the current tool index built from the live registry state.
+	 *
+	 * @return Struct of tool metadata keyed by registry key
+	 */
 	function list() {
 		return buildIndex()
 	}
 
+	/**
+	 * Returns the metadata struct for a single tool by its registry key.
+	 *
+	 * @key  Registry key to look up
+	 * @return Tool metadata struct, or empty struct if not found
+	 */
 	function show( required string key ) {
 		var index = buildIndex()
 		return index.keyExists( arguments.key ) ? index[ arguments.key ] : {}
 	}
 
+	/**
+	 * Adds a tool key to the enabled set and persists the change to config.
+	 *
+	 * @key  Registry key to enable
+	 * @return Struct with success flag and current enabled state
+	 */
 	function enable( required string key ) {
 		var registry = aiToolRegistry()
 		if ( !registry.has( arguments.key ) ) { return { success: false, error: "Tool not found in registry: " & arguments.key } }
@@ -84,6 +122,12 @@ class {
 		return { success: true, key: arguments.key, enabled: true }
 	}
 
+	/**
+	 * Removes a tool key from the enabled set and persists the change to config.
+	 *
+	 * @key  Registry key to disable
+	 * @return Struct with success flag and current enabled state
+	 */
 	function disable( required string key ) {
 		var registry = aiToolRegistry()
 		if ( !registry.has( arguments.key ) ) { return { success: false, error: "Tool not found in registry: " & arguments.key } }
@@ -96,6 +140,11 @@ class {
 		return { success: true, key: arguments.key, enabled: false }
 	}
 
+	/**
+	 * Returns a summary count of total, enabled, and disabled tools.
+	 *
+	 * @return Struct with total, enabled, and disabled numeric keys
+	 */
 	function status() {
 		var index = buildIndex()
 		var enabledCount = 0
@@ -106,22 +155,41 @@ class {
 		return { total: structCount( index ), enabled: enabledCount, disabled: disabledCount }
 	}
 
+	/**
+	 * Returns the array of currently enabled tool registry keys from config.
+	 *
+	 * @return Array of enabled tool key strings
+	 */
 	function getEnabledKeys() {
 		var stored = variables.configManager.get( "bx-ai.enabledTools", "" )
 		return len( stored ) ? listToArray( stored, "," ) : []
 	}
 
+	/**
+	 * Persists the enabled tool keys array to the config as a comma-separated string.
+	 *
+	 * @keys  Array of tool registry key strings to save
+	 */
 	function saveEnabledKeys( required array keys ) {
 		variables.configManager.set( "bx-ai.enabledTools", arrayToList( arguments.keys, "," ) )
 	}
 
+	/**
+	 * Resolves the currently enabled tool registry keys into live tool instances.
+	 *
+	 * @return Array of tool instances ready for injection into an AI agent
+	 */
 	function resolveActiveTools() {
 		var keys = getEnabledKeys()
 		if ( !keys.len() ) { return [] }
 		return aiToolRegistry().resolveTools( keys )
 	}
 
-	// --- Private ---
+	/**
+	 * Builds a struct index of all tools from the bx-ai registry, annotated with enabled state.
+	 *
+	 * @return Struct of tool metadata keyed by registry key
+	 */
 	private struct function buildIndex() {
 		var registry = aiToolRegistry()
 		var all = registry.listTools()
@@ -138,6 +206,11 @@ class {
 		return result
 	}
 
+	/**
+	 * Writes the current tool index to the {@code tools-index.json} file in the NanoBox home.
+	 *
+	 * @index  Tool index struct to serialise
+	 */
 	private void function writeIndex( required struct index ) {
 		var indexPath = variables.homePath & "/tools-index.json"
 		try {
@@ -152,7 +225,13 @@ class {
 		}
 	}
 
+	/**
+	 * Converts a core tool filename to its models.tools class path.
+	 *
+	 * @filename  Filename (e.g. "ConfigTools.bx")
+	 * @return    Fully-qualified class path (e.g. "models.tools.ConfigTools")
+	 */
 	private string function moduleToPackage( required string filename ) {
-		return "cli.tools." & filename.replace( ".bx", "" )
+		return "models.tools." & filename.replace( ".bx", "" )
 	}
 }

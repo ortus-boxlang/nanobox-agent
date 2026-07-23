@@ -1,12 +1,35 @@
+/**
+ * UpdateManager — checks for and applies NanoBox version updates.
+ *
+ * Queries the GitHub releases API to list available versions, reports the currently active
+ * installation, and provides stubs for update and rollback operations that will be wired to
+ * a release artifact downloader in a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property installRoot;
 	property versionSource;
 
+	/**
+	 * @installRoot    Root directory containing NanoBox version directories; defaults to ~/.nanobox
+	 * @versionSource  GitHub releases API URL; defaults to the ortus-solutions/nanobox releases endpoint
+	 */
 	function init( string installRoot = "", string versionSource = "" ) {
 		variables.installRoot = arguments.installRoot != "" ? arguments.installRoot : expandPath( "~/.nanobox" )
 		variables.versionSource = arguments.versionSource != "" ? arguments.versionSource : "https://api.github.com/repos/ortus-solutions/nanobox/releases"
 		return this
 	}
+
+	/**
+	 * Routes an update sub-command to the appropriate private method.
+	 *
+	 * @action  Sub-command name: "list", "status", "update", or "rollback"
+	 * @args    Optional named arguments (e.g. version for "update")
+	 * @return  Sub-command result struct
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return listRemote()
@@ -16,11 +39,23 @@ class {
 			default: return { success: false, error: "Unknown update action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Returns the current active version path and a list of locally installed versions.
+	 *
+	 * @return Struct with success, current path, and versions array keys
+	 */
 	struct function status() {
 		var current = variables.installRoot & "/current"
 		var versions = listLocal()
 		return { success: true, current: fileExists( current ) ? getFileInfo( current ).path : "", versions: versions }
 	}
+
+	/**
+	 * Returns all locally installed NanoBox version directories.
+	 *
+	 * @return Array of structs with name and path keys
+	 */
 	array function listLocal() {
 		var result = []
 		var path = variables.installRoot & "/versions"
@@ -28,16 +63,35 @@ class {
 		for ( var item in directoryList( path, false, "query" ) ) { if ( item.type == "Dir" ) { result.append( { name: item.name, path: item.directory & "/" & item.name } ) } }
 		return result
 	}
+
+	/**
+	 * Fetches available release metadata from the GitHub releases API.
+	 *
+	 * @return Struct with success flag and releases array (raw GitHub API objects)
+	 */
 	struct function listRemote() {
 		try {
 			var response = http( url=variables.versionSource, method="GET", timeout=10 )
 			return { success: true, releases: jsonDeserialize( response.fileContent ?: response.content ?: "[]" ) }
 		} catch ( any exception ) { return { success: false, releases: [], error: exception.message } }
 	}
+
+	/**
+	 * Applies an update to the specified version.
+	 *
+	 * @version  Target version string to install
+	 * @return   Struct with success flag and version; always fails until the installer is wired
+	 */
 	struct function update( string version = "" ) {
 		if ( !len( arguments.version ) ) { return { success: false, error: "A target version is required" } }
 		return { success: false, error: "Update installation is not yet connected to a release artifact", version: arguments.version }
 	}
+
+	/**
+	 * Rolls back to the previous locally installed version.
+	 *
+	 * @return Struct with success flag; always fails until the installer is wired
+	 */
 	struct function rollback() {
 		var versions = listLocal()
 		if ( versions.len() < 2 ) { return { success: false, error: "No previous version is available" } }

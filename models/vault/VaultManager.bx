@@ -1,7 +1,22 @@
+/**
+ * VaultManager — file-and-SQLite knowledge vault for NanoBox.
+ *
+ * Documents are stored as files under category sub-directories (reports,
+ * research, imported, manual) and indexed in the {@code nanobox_vault_documents}
+ * SQLite table.  The index() method syncs the filesystem into SQLite so
+ * AI tools can query content via full-text search.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property datasource;
 	property vaultPath;
 
+	/**
+	 * @vaultPath  Root directory for vault storage; defaults to ~/.nanobox/vault
+	 */
 	function init( string vaultPath = "" ) {
 		variables.datasource = "nanobox"
 		variables.vaultPath = len( arguments.vaultPath ) ? arguments.vaultPath : expandPath( "~/.nanobox/vault" )
@@ -10,6 +25,16 @@ class {
 		return this
 	}
 
+	/**
+	 * Imports a file into the vault by copying it and recording the metadata in SQLite.
+	 *
+	 * The category is normalised to one of: reports, research, imported, manual.
+	 *
+	 * @sourcePath  Absolute path to the file to import
+	 * @category    Target category (default "imported")
+	 * @tags        Optional array of tag strings
+	 * @return      Struct with success flag and document metadata
+	 */
 	struct function importFile( required string sourcePath, string category = "imported", array tags = [] ) {
 		if ( !fileExists( arguments.sourcePath ) ) {
 			return { success: false, error: "File not found: #arguments.sourcePath#" }
@@ -33,6 +58,12 @@ class {
 		return { success: true, document: { id: id, name: name, path: destination, category: safe, tags: arguments.tags, content: content } }
 	}
 
+	/**
+	 * Returns all vault documents, optionally filtered by category.
+	 *
+	 * @category  Category to filter by; empty string returns all categories
+	 * @return    Array of document metadata structs (without content)
+	 */
 	array function list( string category = "" ) {
 		var sql = "SELECT id, name, path, category, tags, created_at, modified_at FROM nanobox_vault_documents"
 		var params = {}
@@ -42,6 +73,13 @@ class {
 		return rowsToArray( query )
 	}
 
+	/**
+	 * Returns a single document by ID or name, including its full content.
+	 *
+	 * @id  Document UUID or name
+	 * @return Document struct with id, name, path, category, tags, content, and timestamps,
+	 *         or empty struct if not found
+	 */
 	struct function get( required string id ) {
 		var query = queryExecute(
 			"SELECT id, name, path, category, tags, content, created_at, modified_at FROM nanobox_vault_documents WHERE id = :id OR name = :id",
@@ -51,6 +89,13 @@ class {
 		return query.recordCount ? rowsToArray( query ).first() : {}
 	}
 
+	/**
+	 * Full-text search across name, category, tags, and content.
+	 *
+	 * @query  Search string (wrapped in SQL wildcards)
+	 * @limit  Maximum number of results (clamped to 1–500)
+	 * @return Array of matching document structs with full content
+	 */
 	array function search( required string query, numeric limit = 20 ) {
 		var safe = max( 1, min( 500, int( arguments.limit ) ) )
 		var result = queryExecute(
@@ -61,6 +106,15 @@ class {
 		return rowsToArray( result )
 	}
 
+	/**
+	 * Synchronises the filesystem vault directories into the SQLite index.
+	 *
+	 * Scans all files under the four category directories and upserts each one
+	 * into the database.  New files are inserted; existing files are updated
+	 * with their current content.
+	 *
+	 * @return Struct with success, total (indexed count), and imported (files found) keys
+	 */
 	struct function index() {
 		var manifest = { documents: [] }
 		for ( var category in [ "reports", "research", "imported", "manual" ] ) {
@@ -104,6 +158,12 @@ class {
 		return { success: true, total: total.cnt[ 1 ] ?: 0, imported: manifest.documents.len() }
 	}
 
+	/**
+	 * Deletes a document from both the filesystem and the SQLite index.
+	 *
+	 * @id  Document UUID or name
+	 * @return Struct with success flag and deleted document ID
+	 */
 	struct function remove( required string id ) {
 		var doc = get( arguments.id )
 		if ( structIsEmpty( doc ) ) { return { success: false, error: "Document not found: #arguments.id#" } }
@@ -112,6 +172,13 @@ class {
 		return { success: true, id: doc.id }
 	}
 
+	/**
+	 * Exports a document's content, optionally writing it to a file.
+	 *
+	 * @id      Document UUID or name
+	 * @output  Optional file path to write the content to
+	 * @return  Struct with success, id, output path, and content keys
+	 */
 	struct function export( required string id, string output = "" ) {
 		var doc = get( arguments.id )
 		if ( structIsEmpty( doc ) ) { return { success: false, error: "Document not found: #arguments.id#" } }
@@ -120,8 +187,16 @@ class {
 		return { success: true, id: doc.id, output: arguments.output, content: content }
 	}
 
+	/**
+	 * Returns the root vault directory path.
+	 *
+	 * @return Absolute path string
+	 */
 	string function getVaultPath() { return variables.vaultPath }
 
+	/**
+	 * Creates the nanobox_vault_documents table if it does not already exist.
+	 */
 	private void function ensureTable() {
 		queryExecute( "
 			CREATE TABLE IF NOT EXISTS nanobox_vault_documents (
@@ -137,6 +212,9 @@ class {
 		", {}, { datasource: variables.datasource } )
 	}
 
+	/**
+	 * Creates the four category sub-directories under vaultPath if missing.
+	 */
 	private void function ensureDirectories() {
 		for ( var category in [ "reports", "research", "imported", "manual" ] ) {
 			var dir = variables.vaultPath & "/" & category
@@ -144,6 +222,12 @@ class {
 		}
 	}
 
+	/**
+	 * Converts a query result to an array of structs, splitting the tags column into an array.
+	 *
+	 * @data  Query result to convert
+	 * @return Array of document structs with tags as an array
+	 */
 	private array function rowsToArray( required query data ) {
 		var rows = []
 		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {

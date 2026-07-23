@@ -1,7 +1,22 @@
-class extends="cli.BaseGateway" {
+/**
+ * TelegramGateway — Telegram Bot API implementation of IGateway.
+ *
+ * Authenticates via the Bot Token stored in config.botToken, supports sending
+ * messages, and polls for incoming updates using long-polling (getUpdates).
+ * Maintains an update offset so each poll returns only new messages.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class extends="models.gateway.BaseGateway" {
 	property apiBase;
 	property updateOffset;
 
+	/**
+	 * @config  Config struct; expected keys: botToken (required), apiBase (optional),
+	 *          timeout (default 15 seconds for HTTP calls)
+	 */
 	function init( struct config = {} ) {
 		super.init( "telegram", arguments.config )
 		variables.apiBase = arguments.config.apiBase ?: "https://api.telegram.org"
@@ -9,6 +24,14 @@ class extends="cli.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * Authenticates with the Telegram Bot API using getMe.
+	 *
+	 * Sets connected=true on success and records connectedSince.
+	 * On failure, sets lastError and returns the current status.
+	 *
+	 * @return Status struct from status()
+	 */
 	struct function connect() {
 		if ( !len( variables.config.botToken ?: "" ) ) {
 			variables.lastError = "Telegram bot token is not configured"
@@ -27,6 +50,13 @@ class extends="cli.BaseGateway" {
 		}
 	}
 
+	/**
+	 * Sends a text message to a Telegram chat.
+	 *
+	 * @recipient  Telegram chat ID or username
+	 * @message    Text to send
+	 * @return     Struct with success flag, messageId, and recipient keys
+	 */
 	struct function send( required string recipient, required string message ) {
 		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected" } }
 		try {
@@ -36,6 +66,15 @@ class extends="cli.BaseGateway" {
 		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram send failed" } }
 	}
 
+	/**
+	 * Long-polls for pending updates from Telegram.
+	 *
+	 * Updates the internal offset after each batch so subsequent calls return
+	 * only new messages.
+	 *
+	 * @timeout  Long-poll timeout in seconds (default 10)
+	 * @return   Struct with success flag and a normalised updates array
+	 */
 	struct function poll( numeric timeout = 10 ) {
 		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected", updates: [] } }
 		try {
@@ -50,8 +89,19 @@ class extends="cli.BaseGateway" {
 		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram polling failed", updates: [] } }
 	}
 
+	/**
+	 * Returns the full capability set supported by the Telegram platform.
+	 *
+	 * @return Capabilities struct with all features enabled including HITL support
+	 */
 	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: true, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 
+	/**
+	 * Normalises a raw Telegram update into a platform-agnostic message struct.
+	 *
+	 * @update  Raw Telegram update object from the getUpdates response
+	 * @return  Struct with id, gateway, kind, chatId, userId, username, text, and raw keys
+	 */
 	private struct function normalizeUpdate( required struct update ) {
 		var message = arguments.update.message ?: arguments.update.callback_query?.message ?: {}
 		var sender = message.from ?: arguments.update.callback_query?.from ?: {}
@@ -67,6 +117,13 @@ class extends="cli.BaseGateway" {
 		}
 	}
 
+	/**
+	 * Makes an authenticated POST request to the Telegram Bot API.
+	 *
+	 * @method      Telegram API method name (e.g. "sendMessage", "getUpdates")
+	 * @parameters  Request body parameters
+	 * @return      Parsed JSON response struct
+	 */
 	private struct function callApi( required string method, struct parameters = {} ) {
 		var token = variables.config.botToken ?: ""
 		var response = http(

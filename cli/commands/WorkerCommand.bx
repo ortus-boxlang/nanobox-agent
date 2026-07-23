@@ -1,21 +1,46 @@
+/**
+ * WorkerCommand — CLI interface for managing the NanoBox worker scheduler process.
+ *
+ * Delegates start, stop, restart, and status actions to WorkerSupervisor, which
+ * launches the BoxLang scheduler ({@code boxlang schedule worker/nanobox-worker.bx})
+ * and tracks its PID via ProcessManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
-	property processes;
-	property workerScript;
-	function init( required any processManager, string workerScript = "" ) { variables.processes = arguments.processManager; variables.workerScript = arguments.workerScript != "" ? arguments.workerScript : expandPath( "./nanobox-worker.bx" ); return this }
+
+	property supervisor;
+
+	/**
+	 * @processManager ProcessManager instance used to spawn and track the worker
+	 * @projectRoot    Absolute path to the project root; defaults to current directory
+	 */
+	function init( required any processManager, string projectRoot = "" ) {
+		variables.supervisor = new "worker.core.WorkerSupervisor"(
+			arguments.processManager,
+			len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
+		)
+	}
+
+	/**
+	 * Dispatches a worker action.
+	 *
+	 * Supported actions: start, stop, restart, status.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Optional args forwarded to WorkerSupervisor.start()
+	 * @return  Result struct with success flag and process status information
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
-			case "start": return start( arguments.args )
-			case "stop": return variables.processes.stop( "worker" )
-			case "status": return variables.processes.status( "worker" )
-			default: return { success: false, error: "Unknown worker action: #arguments.action#" }
+			case "start":   return variables.supervisor.start( arguments.args )
+			case "stop":    return variables.supervisor.stop()
+			case "restart": return variables.supervisor.restart( arguments.args )
+			case "status":  return variables.supervisor.status()
+			default:        return { success: false, error: "Unknown worker action: #arguments.action#" }
 		}
 	}
-	private struct function start( struct args ) {
-		if ( !fileExists( variables.workerScript ) ) { return { success: false, error: "Worker script not found", path: variables.workerScript } }
-		var commandArgs = [ variables.workerScript, "--worker" ]
-		if ( arguments.args.debug ?: false ) { commandArgs.append( "--debug" ) }
-		var executable = "/Users/lmajano/.bvm/current/bin/boxlang"
-		if ( !fileExists( executable ) ) { executable = "boxlang" }
-		return variables.processes.start( "worker", executable, commandArgs )
-	}
+
 }

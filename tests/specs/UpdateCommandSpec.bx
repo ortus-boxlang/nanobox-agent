@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "reports local installed versions and protects incomplete updates", () => {
 				var root = getTempDirectory() & "/updates-#createUUID()#"
 				directoryCreate( root & "/versions/v0.1.0", true )
-				var manager = new "cli.UpdateManager"( root, "http://127.0.0.1:1/releases" )
+				var manager = new "models.system.UpdateManager"( root, "http://127.0.0.1:1/releases" )
 				var command = new "cli.commands.UpdateCommand"( manager )
 				expect( command.execute( "status" ).versions ).toHaveLength( 1 )
 				expect( command.execute( "update", { version: "0.2.0" } ).success ).toBeFalse()

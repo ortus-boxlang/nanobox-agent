@@ -3,8 +3,8 @@ class extends="testbox.system.BaseSpec" {
 		describe( "ChatCommand", () => {
 			it( "reports missing provider without calling AI", () => {
 				var home = getTempDirectory() & "/chat-command-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
-				var tracker = new "cli.TokenTracker"( home & "/tokens.json" )
+				var config = new "models.system.ConfigManager"( home )
+				var tracker = new "models.util.TokenTracker"( home & "/tokens.json" )
 				var command = new "cli.commands.ChatCommand"( config, tracker )
 				var result = command.execute( "hello" )
 				expect( result.success ).toBeFalse()
@@ -12,12 +12,12 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "normalizes an OpenAI-compatible provider and preserves its base URL", () => {
 				var home = getTempDirectory() & "/chat-command-compatible-#createUUID()#"
-				var config = new "cli.util.ConfigManager"( home )
+				var config = new "models.system.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
 				config.set( "bx-ai.providers.lmstudio.type", "openai-compatible" )
 				config.set( "bx-ai.providers.lmstudio.baseURL", "http://localhost:1234/v1" )
-				var tracker = new "cli.TokenTracker"( home & "/tokens.json" )
+				var tracker = new "models.util.TokenTracker"( home & "/tokens.json" )
 				var command = new "cli.commands.ChatCommand"( config, tracker )
 				var result = command.execute( "hello", { model: "qwen/qwen3.6-35b-a3b" } )
 				expect( result.success ).toBeTrue()

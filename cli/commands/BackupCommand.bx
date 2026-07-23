@@ -1,6 +1,29 @@
+/**
+ * BackupCommand — CLI interface for NanoBox configuration backup and restore.
+ *
+ * Dispatches backup actions (run, list, status, restore) to the injected BackupManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @backupManager BackupManager instance that owns backup persistence and restore
+	 */
 	function init( required any backupManager ) { variables.manager = arguments.backupManager; return this }
+
+	/**
+	 * Dispatches a backup action.
+	 *
+	 * Supported actions: run (create backup), list, status, restore.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (backup — name/path of backup to restore)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "run": return variables.manager.run()

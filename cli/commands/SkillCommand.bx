@@ -1,6 +1,31 @@
+/**
+ * SkillCommand — CLI interface for managing NanoBox skills.
+ *
+ * Dispatches skill actions (list, show, search, create, install, find, refresh,
+ * remove) to the injected SkillManager.  The install action also records usage
+ * telemetry via recordUse() after a successful install.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @skillManager SkillManager instance that owns skill persistence and registry access
+	 */
 	function init( required any skillManager ) { variables.manager = arguments.skillManager; return this }
+
+	/**
+	 * Dispatches a skill action.
+	 *
+	 * Supported actions: list, show, search, create, install, find, refresh, remove.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, query, slug, description, content, force, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return { success: true, skills: variables.manager.list() }
@@ -16,5 +41,12 @@ class {
 			default: return { success: false, error: "Unknown skill action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Returns a single skill definition by name.
+	 *
+	 * @name  Skill name to look up
+	 * @return Struct with success flag and skill struct
+	 */
 	private struct function show( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A skill name is required" } }; var result = variables.manager.show( arguments.name ); return structIsEmpty( result ) ? { success: false, error: "Skill not found: #arguments.name#" } : { success: true, skill: result } }
 }

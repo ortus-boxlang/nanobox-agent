@@ -3,13 +3,13 @@ class extends="testbox.system.BaseSpec" {
 		describe( "OsToolMiddleware", () => {
 			it( "suspends dangerous tool calls", () => {
 				var path = getTempDirectory() & "/allowlist-#createUUID()#.json"
-				var middleware = new "cli.middleware.OsToolMiddleware"( path )
+				var middleware = new "models.middleware.OsToolMiddleware"( path )
 				var result = middleware.beforeToolCall( { toolName: "systemExecute", toolArgs: { command: "rm -rf /tmp/test" } } )
 				expect( result.isSuspended() ).toBeTrue()
 			} )
 			it( "continues safe tool calls", () => {
 				var path = getTempDirectory() & "/allowlist-#createUUID()#.json"
-				var middleware = new "cli.middleware.OsToolMiddleware"( path )
+				var middleware = new "models.middleware.OsToolMiddleware"( path )
 				var result = middleware.beforeToolCall( { toolName: "read_file", toolArgs: { path: "README.md" } } )
 				expect( result.isContinue() ).toBeTrue()
 			} )

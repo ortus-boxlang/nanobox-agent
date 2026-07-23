@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "ProcessManager", () => {
 			it( "starts, reports, and stops a managed process", () => {
 				var path = getTempDirectory() & "/processes-#createUUID()#.json"
-				var manager = new "cli.ProcessManager"( path )
+				var manager = new "models.system.ProcessManager"( path )
 				var started = manager.start( "probe", "sleep", [ "30" ] )
 				expect( started.success ).toBeTrue()
 				expect( manager.status( "probe" ).status ).toBe( "running" )

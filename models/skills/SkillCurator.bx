@@ -1,3 +1,16 @@
+/**
+ * SkillCurator — automated lifecycle manager for custom NanoBox skills.
+ *
+ * Tracks skill age against configurable thresholds and transitions custom (non-registry)
+ * skills through the active → stale → archived state machine.  Archived skills are moved
+ * to a separate directory and can be restored or rolled back from backup.
+ *
+ * Pinned skills are never transitioned, and registry skills are not curator-managed.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property skillsRoot;
 	property customRoot;
@@ -5,6 +18,10 @@ class {
 	property backupRoot;
 	property statePath;
 
+	/**
+	 * @projectRoot  Repository root used to derive all skill sub-directories;
+	 *               defaults to the directory of the current template
+	 */
 	function init( string projectRoot = "" ) {
 		var root = len( arguments.projectRoot ) ? arguments.projectRoot : getDirectoryFromPath( getCurrentTemplatePath() )
 		variables.skillsRoot = root & "/.agents/skills"
@@ -16,6 +33,11 @@ class {
 		return this
 	}
 
+	/**
+	 * Returns an overview of curator state and per-skill counts.
+	 *
+	 * @return Struct with enabled, paused, runs, lastRunAt, counts, and skills array keys
+	 */
 	struct function status() {
 		var state = readJSON( variables.statePath, { enabled: true, paused: false, runs: 0, lastRunAt: "" } )
 		var rows = entries()
@@ -29,6 +51,17 @@ class {
 		return { success: true, enabled: state.enabled ?: true, paused: state.paused ?: false, runs: state.runs ?: 0, lastRunAt: state.lastRunAt ?: "", counts: counts, skills: rows }
 	}
 
+	/**
+	 * Runs the curator lifecycle pass, transitioning skills based on age thresholds.
+	 *
+	 * Only custom, non-pinned, non-protected skills are evaluated.
+	 *
+	 * @dryRun            When true, computes changes but does not apply them
+	 * @staleAfterDays    Days of inactivity before a skill becomes stale (default 30)
+	 * @archiveAfterDays  Days of inactivity before a skill is archived (default 90)
+	 * @protectedSkills   Array of skill names that must not be transitioned
+	 * @return            Struct with success, dryRun, changes array, and checked count keys
+	 */
 	struct function run( boolean dryRun = false, numeric staleAfterDays = 30, numeric archiveAfterDays = 90, array protectedSkills = [] ) {
 		var current = now()
 		var changes = []
@@ -56,9 +89,32 @@ class {
 		return { success: true, dryRun: arguments.dryRun, changes: changes, checked: rows.len() }
 	}
 
+	/**
+	 * Pins or unpins a skill so it is never transitioned by the curator.
+	 *
+	 * @name   Skill name
+	 * @value  true to pin, false to unpin (default true)
+	 * @return Struct with success flag and updated metadata
+	 */
 	struct function pin( required string name, boolean value = true ) { return setMetadata( arguments.name, { pinned: arguments.value } ) }
+
+	/**
+	 * Sets the load mode for a skill.
+	 *
+	 * @name  Skill name
+	 * @mode  "lazy" (default) or "always-on"
+	 * @return Struct with success flag and updated metadata
+	 */
 	struct function setMode( required string name, required string mode ) { if ( ![ "lazy", "always-on" ].contains( arguments.mode ) ) { return { success: false, error: "Mode must be lazy or always-on" } }; return setMetadata( arguments.name, { mode: arguments.mode } ) }
 
+	/**
+	 * Archives a custom skill by moving it from the custom root to the archive root.
+	 *
+	 * Pinned and registry skills are not eligible for archiving.
+	 *
+	 * @name  Skill name to archive
+	 * @return Struct with success flag and updated metadata
+	 */
 	struct function archive( required string name ) {
 		var item = findSkill( arguments.name )
 		if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }
@@ -73,6 +129,12 @@ class {
 		return setMetadataAt( target, arguments.name, { state: "archived", archivedAt: now() } )
 	}
 
+	/**
+	 * Restores an archived skill back to the custom skills root.
+	 *
+	 * @name  Skill name to restore
+	 * @return Struct with success flag and updated metadata
+	 */
 	struct function restore( required string name ) {
 		var source = variables.archiveRoot & "/" & arguments.name
 		if ( !directoryExists( source ) ) { return { success: false, error: "Archived skill not found: #arguments.name#" } }
@@ -83,6 +145,12 @@ class {
 		return setMetadataAt( target, arguments.name, { state: "active", archivedAt: "" } )
 	}
 
+	/**
+	 * Creates a timestamped backup of all custom skills.
+	 *
+	 * @reason  Human-readable reason for the backup (default "manual")
+	 * @return  Struct with success flag, backup ID, and backup directory path
+	 */
 	struct function backup( string reason = "manual" ) {
 		var id = dateFormat( now(), "yyyymmdd" ) & "-" & timeFormat( now(), "HHmmss" )
 		var target = variables.backupRoot & "/" & id
@@ -92,6 +160,11 @@ class {
 		return { success: true, id: id, path: target }
 	}
 
+	/**
+	 * Lists all available skill backups.
+	 *
+	 * @return Array of structs with id and path keys
+	 */
 	array function backups() {
 		var result = []
 		if ( !directoryExists( variables.backupRoot ) ) { return result }
@@ -99,6 +172,14 @@ class {
 		return result
 	}
 
+	/**
+	 * Rolls back the custom skills directory to a previous backup.
+	 *
+	 * When no ID is supplied, the most recent backup is used.
+	 *
+	 * @id  Backup ID to restore; defaults to the latest backup
+	 * @return Struct with success flag and restored backup ID
+	 */
 	struct function rollback( string id = "" ) {
 		var rows = backups()
 		if ( !len( arguments.id ) && rows.len() ) { arguments.id = rows.last().id }
@@ -110,8 +191,28 @@ class {
 		return { success: true, id: arguments.id }
 	}
 
+	/**
+	 * Pauses or resumes the curator, preventing the next {@link #run} call from making changes.
+	 *
+	 * @value  true to pause, false to resume (default true)
+	 * @return Struct with success flag and current paused state
+	 */
 	struct function pause( boolean value = true ) { var state = readJSON( variables.statePath, {} ); state.paused = arguments.value; writeJSON( variables.statePath, state ); return { success: true, paused: arguments.value } }
 
+	/**
+	 * Enables or disables a skill's active flag in its metadata file.
+	 *
+	 * @name     Skill name
+	 * @enabled  true to enable, false to disable
+	 * @return   Struct with success flag and updated metadata
+	 */
+	struct function setEnabled( required string name, required boolean enabled ) { return setMetadata( arguments.name, { enabled: arguments.enabled } ) }
+
+	/**
+	 * Scans all active and custom skill directories and returns their current metadata.
+	 *
+	 * @return Array of skill entry structs including state, pinned, mode, and usage data
+	 */
 	private array function entries() {
 		var result = []
 		for ( var root in [ variables.skillsRoot, variables.customRoot ] ) {
@@ -127,11 +228,52 @@ class {
 		return result
 	}
 
+	/**
+	 * Finds a skill entry by name across all roots.
+	 *
+	 * @name  Skill name to find
+	 * @return Skill entry struct, or empty struct if not found
+	 */
 	private struct function findSkill( required string name ) { for ( var item in entries() ) { if ( item.name == arguments.name ) { return item } }; return {} }
-	struct function setEnabled( required string name, required boolean enabled ) { return setMetadata( arguments.name, { enabled: arguments.enabled } ) }
+
+	/**
+	 * Merges new metadata values into a skill's {@code .nanobox-skill.json} file using its name.
+	 *
+	 * @name    Skill name to locate
+	 * @values  Struct of key-value pairs to merge into the metadata
+	 * @return  Struct with success flag, skill name, and updated metadata
+	 */
 	private struct function setMetadata( required string name, required struct values ) { var item = findSkill( arguments.name ); if ( structIsEmpty( item ) ) { return { success: false, error: "Skill not found: #arguments.name#" } }; return setMetadataAt( getDirectoryFromPath( item.path ), arguments.name, arguments.values ) }
+
+	/**
+	 * Merges metadata values into the {@code .nanobox-skill.json} at a specific directory path.
+	 *
+	 * @path    Absolute directory path containing the metadata file
+	 * @name    Skill name used as the metadata name field
+	 * @values  Struct of key-value pairs to merge
+	 * @return  Struct with success flag, skill name, and updated metadata
+	 */
 	private struct function setMetadataAt( required string path, required string name, required struct values ) { var meta = readJSON( arguments.path & "/.nanobox-skill.json", { name: arguments.name, createdAt: now() } ); for ( var key in arguments.values ) { meta[ key ] = arguments.values[ key ] }; writeJSON( arguments.path & "/.nanobox-skill.json", meta ); return { success: true, skill: arguments.name, metadata: meta } }
+
+	/**
+	 * Creates all required skill directories and the initial curator state file if missing.
+	 */
 	private void function ensureDirectories() { for ( var path in [ variables.skillsRoot, variables.customRoot, variables.archiveRoot, variables.backupRoot ] ) { if ( !directoryExists( path ) ) { directoryCreate( path, true ) } }; if ( !fileExists( variables.statePath ) ) { writeJSON( variables.statePath, { enabled: true, paused: false, runs: 0, lastRunAt: "" } ) } }
+
+	/**
+	 * Reads and deserialises a JSON file, returning the fallback struct if the file is missing.
+	 *
+	 * @path      Absolute path to the JSON file
+	 * @fallback  Default struct returned when the file does not exist
+	 * @return    Parsed struct or the fallback
+	 */
 	private struct function readJSON( required string path, struct fallback = {} ) { return fileExists( arguments.path ) ? jsonDeserialize( fileRead( arguments.path ) ) : arguments.fallback }
+
+	/**
+	 * Serialises and writes a struct to a JSON file.
+	 *
+	 * @path  Absolute path to write to
+	 * @data  Struct to serialise
+	 */
 	private void function writeJSON( required string path, required struct data ) { fileWrite( arguments.path, jsonSerialize( arguments.data, true ) ) }
 }

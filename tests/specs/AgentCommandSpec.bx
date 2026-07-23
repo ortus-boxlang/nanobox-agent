@@ -3,7 +3,7 @@ class extends="testbox.system.BaseSpec" {
 		describe( "AgentCommand", () => {
 			it( "creates, lists, and shows markdown agent definitions", () => {
 				var path = getTempDirectory() & "/agents-#createUUID()#"
-				var manager = new "cli.AgentManager"( path )
+				var manager = new "models.agents.AgentManager"( path )
 				var command = new "cli.commands.AgentCommand"( manager )
 				var created = command.execute( "create", { name: "tester", description: "A test agent", model: "local", instructions: "Be concise." } )
 				expect( created.success ).toBeTrue()

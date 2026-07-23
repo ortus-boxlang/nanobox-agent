@@ -1,3 +1,14 @@
+/**
+ * SystemTools — AI-callable tools for executing system commands.
+ *
+ * Exposes a sandboxed command execution tool to the bx-ai tool registry that allows
+ * an LLM agent to run scripts in external interpreters (shell, Python, Node.js, etc.).
+ * A built-in blocklist rejects the most dangerous shell patterns before execution.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Execute a command in any available language interpreter (Python, Node.js, Lua, shell, etc.). Returns stdout, stderr, and exit code. Use this when you need to run code or scripts that BoxLang cannot directly execute." )
 	public struct function system_exec(

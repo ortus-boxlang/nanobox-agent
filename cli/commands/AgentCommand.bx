@@ -1,6 +1,30 @@
+/**
+ * AgentCommand — CLI interface for managing and running NanoBox agents.
+ *
+ * Dispatches agent actions (list, show, create, update, delete, run) to the
+ * injected AgentManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @agentManager AgentManager instance that owns agent persistence and execution
+	 */
 	function init( required any agentManager ) { variables.manager = arguments.agentManager; return this }
+
+	/**
+	 * Dispatches an agent action.
+	 *
+	 * Supported actions: list, show, create, update, delete, run.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, description, model, instructions, query, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var op = lCase( arguments.action )
 		switch ( op ) {
@@ -13,7 +37,28 @@ class {
 			default: return { success: false, error: "Unknown agent action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Returns a single agent definition by name.
+	 *
+	 * @name  Agent name to look up
+	 * @return Struct with success flag and agent struct
+	 */
 	private struct function show( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "An agent name is required" } }; var found = variables.manager.show( arguments.name ); return structIsEmpty( found ) ? { success: false, error: "Agent not found: #arguments.name#" } : { success: true, agent: found } }
+
+	/**
+	 * Creates a new agent definition.
+	 *
+	 * @args  Struct with name (required), description, model, instructions, and options keys
+	 * @return Struct with success flag and created agent struct
+	 */
 	private struct function create( required struct args ) { if ( !len( arguments.args.name ?: "" ) ) { return { success: false, error: "An agent name is required" } }; var result = variables.manager.create( arguments.args.name, arguments.args.description ?: "", arguments.args.model ?: "", arguments.args.instructions ?: "", arguments.args.options ?: {} ); return structKeyExists( result, "success" ) && result.success == false ? result : { success: true, agent: result } }
+
+	/**
+	 * Updates an existing agent definition.
+	 *
+	 * @args  Struct with name (required) and any fields to update
+	 * @return Struct with success flag and updated agent struct
+	 */
 	private struct function update( required struct args ) { var result = variables.manager.update( arguments.args.name ?: "", arguments.args.description ?: "", arguments.args.model ?: "", arguments.args.instructions ?: "", arguments.args.options ?: {} ); return structKeyExists( result, "success" ) && result.success == false ? result : { success: true, agent: result } }
 }

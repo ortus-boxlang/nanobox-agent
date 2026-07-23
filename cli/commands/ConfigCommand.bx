@@ -1,6 +1,31 @@
+/**
+ * ConfigCommand — CLI interface for reading and writing NanoBox configuration.
+ *
+ * Dispatches config actions (show, get, set, unset, path) to the injected
+ * ConfigManager.  The show action redacts sensitive keys (apikey, token,
+ * password, secret) before returning the config struct.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property config;
+
+	/**
+	 * @configManager ConfigManager instance used for all config operations
+	 */
 	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+
+	/**
+	 * Dispatches a config action.
+	 *
+	 * Supported actions: show, get, set, unset, path.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments: key (get/set/unset), value (set)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var operation = lCase( arguments.action )
 		switch ( operation ) {
@@ -12,9 +37,41 @@ class {
 			default: return { success: false, error: "Unknown config action: #arguments.action#" }
 		}
 	}
+
+	/**
+	 * Reads a single config key.
+	 *
+	 * @key  Dot-separated config key path
+	 * @return Struct with success flag, key, and value
+	 */
 	private struct function get( required string key ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; return { success: true, key: arguments.key, value: variables.config.get( arguments.key ) } }
+
+	/**
+	 * Writes a single config key.
+	 *
+	 * @key    Dot-separated config key path
+	 * @value  Value to store
+	 * @return Struct with success flag, key, and the stored value
+	 */
 	private struct function set( required string key, required any value ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; variables.config.set( arguments.key, arguments.value ); return { success: true, key: arguments.key, value: variables.config.get( arguments.key ) } }
+
+	/**
+	 * Removes a single config key.
+	 *
+	 * @key  Dot-separated config key path to remove
+	 * @return Struct with success flag and deleted key name
+	 */
 	private struct function unset( required string key ) { if ( !len( arguments.key ) ) { return { success: false, error: "A config key is required" } }; variables.config.unset( arguments.key ); return { success: true, key: arguments.key } }
+
+	/**
+	 * Recursively redacts sensitive keys in a config struct.
+	 *
+	 * Keys whose lowercase name matches apikey, token, password, or secret
+	 * are replaced with "[REDACTED]".
+	 *
+	 * @value  Config struct to sanitise (modified in place on a deep copy)
+	 * @return Sanitised config struct
+	 */
 	private struct function sanitize( required struct value ) {
 		var result = duplicate( arguments.value )
 		for ( var key in result ) {

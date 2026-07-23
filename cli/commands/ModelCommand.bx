@@ -1,6 +1,32 @@
+/**
+ * ModelCommand — CLI interface for configuring AI providers and models.
+ *
+ * Supports viewing and changing the active provider/model, running interactive
+ * setup for new providers, managing named model aliases, and setting the curator
+ * model.  Stores all selections in the NanoBox JSON config via ConfigManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property config;
+
+	/**
+	 * @configManager ConfigManager instance for reading and writing provider/model settings
+	 */
 	function init( required any configManager ) { variables.config = arguments.configManager; return this }
+
+	/**
+	 * Dispatches a model action.
+	 *
+	 * Supported actions: current, status, setup/configure, set, list/refresh,
+	 * add/save, remove, curator.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (provider, model, name, namedModel, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var operation = lCase( arguments.action )
 		if ( operation == "current" ) { return current() }
@@ -13,12 +39,71 @@ class {
 		if ( operation == "curator" ) { return setCurator( arguments.args ) }
 		return { success: false, error: "Unknown model action: #arguments.action#" }
 	}
+
+	/**
+	 * Returns the currently active provider, model, named model, and curator model.
+	 *
+	 * @return Struct with provider, model, namedModel, and curatorModel keys
+	 */
 	private struct function current() { return { success: true, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ), curatorModel: variables.config.get( "bx-ai.curatorModel", "" ) } }
+
+	/**
+	 * Returns a full status report: configured providers, all cached models, and named models.
+	 *
+	 * @return Struct with default, providers, models, and namedModels keys
+	 */
 	private struct function status() { var providers = variables.config.get( "bx-ai.providers", {} ); var named = variables.config.get( "bx-ai.namedModels", {} ); var configured = []; for ( var provider in providers ) { var models = providers[ provider ].models ?: []; for ( var model in models ) { configured.append( { provider: provider, model: isStruct( model ) ? ( model.id ?: model.name ?: "" ) : toString( model ) } ) } }; return { success: true, default: current(), providers: providers, models: configured, namedModels: named } }
+
+	/**
+	 * Saves a named model alias that can be referenced by name in chat and agents.
+	 *
+	 * @args  Struct with name, provider, model, and optional options and default keys
+	 * @return Struct with success, namedModel entry, and current default
+	 */
 	private struct function addNamed( struct args ) { var name = arguments.args.name ?: arguments.args.modelName ?: ""; var provider = arguments.args.provider ?: variables.config.get( "bx-ai.defaultProvider", "" ); var model = arguments.args.model ?: variables.config.get( "bx-ai.defaultModel", "" ); if ( !len( name ) || !len( provider ) || !len( model ) ) { return { success: false, error: "Named model requires name, provider, and model" } }; var entry = { name: name, provider: provider, model: model, options: arguments.args.options ?: {} }; variables.config.set( "bx-ai.namedModels.#name#", entry ); if ( arguments.args.default ?: false ) { variables.config.set( "bx-ai.defaultNamedModel", name ); variables.config.set( "bx-ai.defaultProvider", provider ); variables.config.set( "bx-ai.defaultModel", model ) }; return { success: true, namedModel: entry, current: current() } }
+
+	/**
+	 * Removes a named model alias.
+	 *
+	 * @name  Named model alias to delete
+	 * @return Struct with success flag and deleted alias name
+	 */
 	private struct function removeNamed( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A named model is required" } }; variables.config.unset( "bx-ai.namedModels.#arguments.name#" ); return { success: true, name: arguments.name } }
+
+	/**
+	 * Sets the default provider and/or model, optionally via a named model alias.
+	 *
+	 * @args  Struct with provider, model, and/or namedModel keys
+	 * @return Result of current() after applying the change
+	 */
 	private struct function setDefault( struct args ) { var provider = arguments.args.provider ?: variables.config.get( "bx-ai.defaultProvider", "" ); var model = arguments.args.model ?: arguments.args.name ?: ""; var named = arguments.args.namedModel ?: arguments.args[ "named-model" ] ?: ""; if ( len( named ) ) { var entry = variables.config.get( "bx-ai.namedModels.#named#", {} ); if ( structIsEmpty( entry ) ) { return { success: false, error: "Named model not found" } }; provider = entry.provider; model = entry.model; variables.config.set( "bx-ai.defaultNamedModel", named ) }; if ( !len( provider ) || !len( model ) ) { return { success: false, error: "Both provider and model are required" } }; variables.config.set( "bx-ai.defaultProvider", provider ); variables.config.set( "bx-ai.defaultModel", model ); return current() }
+
+	/**
+	 * Designates a named model alias as the curator model.
+	 *
+	 * The curator model is used by SkillCurator for lifecycle decisions.
+	 *
+	 * @args  Struct with namedModel/name key identifying an existing named model alias
+	 * @return Struct with success, curatorModel, provider, and model keys
+	 */
 	private struct function setCurator( struct args ) { var named = arguments.args.namedModel ?: arguments.args[ "named-model" ] ?: arguments.args.name ?: ""; if ( !len( named ) ) { return { success: false, error: "A named model is required for curator" } }; var entry = variables.config.get( "bx-ai.namedModels.#named#", {} ); if ( structIsEmpty( entry ) ) { return { success: false, error: "Named model not found: #named#" } }; variables.config.set( "bx-ai.curatorModel", named ); return { success: true, curatorModel: named, provider: entry.provider, model: entry.model } }
+
+	/**
+	 * Runs interactive provider setup or re-discovers models for the active provider.
+	 *
+	 * Prompts for provider type, base URL (for openai-compatible), and model selection
+	 * when running interactively.  Persists provider config and discovered models.
+	 *
+	 * @args  Struct with optional provider, type, baseURL, tokenEnv, model, and nonInteractive keys
+	 * @return Struct with success, provider, model, models array, and current default
+	 */
 	private struct function setup( struct args ) { var provider = arguments.args.provider ?: ""; if ( !len( provider ) ) { provider = cliRead( "Provider (lmstudio/openai/anthropic/ollama/openai-compatible): " ).trim() }; if ( !len( provider ) ) { return { success: false, error: "A provider is required" } }; var type = arguments.args.type ?: ( provider == "lmstudio" ? "openai-compatible" : provider ); var baseURL = arguments.args.baseURL ?: arguments.args.baseUrl ?: ""; if ( !len( baseURL ) && type == "openai-compatible" ) { baseURL = cliRead( "Base URL [http://localhost:1234/v1]: " ).trim(); if ( !len( baseURL ) ) { baseURL = "http://localhost:1234/v1" } }; var providerData = { type: type }; if ( len( baseURL ) ) { providerData.baseURL = baseURL }; if ( len( arguments.args.tokenEnv ?: arguments.args[ "token-env" ] ?: "" ) ) { providerData.apiKey = "${" & ( arguments.args.tokenEnv ?: arguments.args[ "token-env" ] ) & "}" }; variables.config.set( "bx-ai.providers.#provider#", providerData ); variables.config.set( "bx-ai.defaultProvider", provider ); var discovered = discover( { provider: provider } ); if ( !discovered.success ) { return discovered }; var selected = arguments.args.model ?: ( discovered.models.len() ? discovered.models.first().id ?: discovered.models.first().name : "" ); if ( len( selected ) && !arguments.args.nonInteractive && !arguments.args[ "non-interactive" ] ) { var selection = cliRead( "Model [#selected#]: " ).trim(); if ( len( selection ) ) { selected = selection } }; if ( len( selected ) ) { variables.config.set( "bx-ai.defaultModel", selected ) }; return { success: true, provider: provider, model: selected, models: discovered.models, current: current() } }
+
+	/**
+	 * Queries the provider API for available models and caches them in config.
+	 *
+	 * @args  Struct with optional provider key to override the active provider
+	 * @return Struct with success, provider, serviceProvider, models, and refreshed keys
+	 */
 	private struct function discover( struct args ) { var logical = arguments.args.provider ?: variables.config.get( "bx-ai.defaultProvider", "" ); if ( !len( logical ) ) { return { success: false, provider: "", models: [], error: "No AI provider configured. Run nanobox model setup." } }; var providerConfig = variables.config.get( "bx-ai.providers.#logical#", {} ); var serviceProvider = isStruct( providerConfig ) && lCase( providerConfig.type ?: "" ) == "openai-compatible" ? "openai-compatible" : logical; var options = duplicate( providerConfig.options ?: {} ); if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { options.baseURL = providerConfig.baseURL }; if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { options.apiKey = providerConfig.apiKey }; try { var models = aiService( serviceProvider, options ).listModels(); variables.config.set( "bx-ai.providers.#logical#.models", models ); variables.config.set( "bx-ai.providers.#logical#.modelsRefreshed", now() ); return { success: true, provider: logical, serviceProvider: serviceProvider, models: models, refreshed: true } } catch ( any exception ) { return { success: false, provider: logical, serviceProvider: serviceProvider, models: [], error: exception.message ?: toString( exception ) } } }
 }

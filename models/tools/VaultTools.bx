@@ -1,3 +1,14 @@
+/**
+ * VaultTools — AI-callable tools for searching and importing vault documents.
+ *
+ * Exposes tools to the bx-ai tool registry that allow an LLM agent to perform
+ * full-text searches across the NanoBox knowledge vault and import new documents
+ * into it by file path or URL.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	@AITool( "Search the vault knowledge base for documents matching a query. Returns ranked results with document IDs and excerpts." )
 	public array function vault_search( required string query, numeric limit = 10 ) {

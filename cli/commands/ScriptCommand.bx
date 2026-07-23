@@ -1,6 +1,29 @@
+/**
+ * ScriptCommand — CLI interface for managing and running NanoBox automation scripts.
+ *
+ * Dispatches script actions (list, show, create, run) to the injected ScriptManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property manager;
+
+	/**
+	 * @scriptManager ScriptManager instance that owns script persistence and execution
+	 */
 	function init( required any scriptManager ) { variables.manager = arguments.scriptManager; return this }
+
+	/**
+	 * Dispatches a script action.
+	 *
+	 * Supported actions: list, show, create, run.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (name, content, scriptArgs, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		switch ( lCase( arguments.action ) ) {
 			case "list": return { success: true, scripts: variables.manager.list() }

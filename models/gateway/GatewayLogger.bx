@@ -1,7 +1,21 @@
+/**
+ * GatewayLogger — structured logging facade for NanoBox messaging gateways.
+ *
+ * Wraps the BoxLang logging service to write all gateway activity to a dedicated log file.
+ * The {@link #tail} method allows callers to retrieve recent log entries without reading
+ * the entire file.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property logger;
 	property logPath;
 
+	/**
+	 * @logPath  Absolute path to the gateway log file; defaults to ~/.nanobox/logs/gateways.log
+	 */
 	function init( string logPath = "" ) {
 		variables.logPath = arguments.logPath != "" ? arguments.logPath : expandPath( "~/.nanobox/logs/gateways.log" )
 		var parent = getDirectoryFromPath( variables.logPath )
@@ -10,12 +24,47 @@ class {
 		return this
 	}
 
+	/**
+	 * Writes a DEBUG-level log entry.
+	 *
+	 * @message  Message text to log
+	 */
 	void function debug( required string message ) { variables.logger.debug( arguments.message ) }
+
+	/**
+	 * Writes an INFO-level log entry.
+	 *
+	 * @message  Message text to log
+	 */
 	void function info( required string message ) { variables.logger.info( arguments.message ) }
+
+	/**
+	 * Writes a WARN-level log entry.
+	 *
+	 * @message  Message text to log
+	 */
 	void function warn( required string message ) { variables.logger.warn( arguments.message ) }
+
+	/**
+	 * Writes an ERROR-level log entry.
+	 *
+	 * @message  Message text to log
+	 */
 	void function error( required string message ) { variables.logger.error( arguments.message ) }
+
+	/**
+	 * Returns the absolute path to the log file.
+	 *
+	 * @return Absolute log file path string
+	 */
 	string function getPath() { return variables.logPath }
 
+	/**
+	 * Returns the last N lines of the log file as a newline-separated string.
+	 *
+	 * @lines  Number of trailing lines to return (default 50)
+	 * @return Log tail as a single string, or empty string if the file does not exist
+	 */
 	string function tail( numeric lines = 50 ) {
 		if ( !fileExists( variables.logPath ) ) { return "" }
 		var content = fileRead( variables.logPath )

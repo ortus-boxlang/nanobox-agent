@@ -1,4 +1,24 @@
-class extends="cli.BaseGateway" {
+/**
+ * SignalGateway — Signal private messenger implementation of IGateway.
+ *
+ * Stub implementation that inherits lifecycle management from BaseGateway.
+ * Full Signal integration via the signal-cli REST API is planned for a future release.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class extends="models.gateway.BaseGateway" {
+
+	/**
+	 * @config  Config struct; expected keys: phoneNumber, signalCliUrl
+	 */
 	function init( struct config = {} ) { super.init( "signal", arguments.config ); return this }
+
+	/**
+	 * Returns the feature capabilities supported by the Signal platform.
+	 *
+	 * @return Capabilities struct with media and reaction support (no threads or buttons)
+	 */
 	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: false, buttons: false, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
 }

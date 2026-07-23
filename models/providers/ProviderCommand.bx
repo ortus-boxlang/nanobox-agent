@@ -1,8 +1,29 @@
+/**
+ * ProviderCommand — manages bx-ai provider configuration for NanoBox.
+ *
+ * Supports listing, adding, removing, and switching the active LLM provider,
+ * all backed by the NanoBox ConfigManager.  Sensitive fields (API keys, tokens,
+ * passwords, secrets) are redacted in all returned structs.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property config;
 
+	/**
+	 * @configManager  ConfigManager used to read and write provider settings
+	 */
 	function init( required any configManager ) { variables.config = arguments.configManager; return this }
 
+	/**
+	 * Routes a provider sub-command to the appropriate handler method.
+	 *
+	 * @action  Sub-command: "list", "current", "add", "remove", "set", or "status"
+	 * @args    Named arguments struct for the sub-command
+	 * @return  Sub-command result struct
+	 */
 	struct function execute( required string action, struct args = {} ) {
 		var op = lCase( arguments.action )
 		switch ( op ) {
@@ -16,10 +37,20 @@ class {
 		}
 	}
 
+	/**
+	 * Returns the canonical list of all supported provider names.
+	 *
+	 * @return Array of lowercase provider name strings
+	 */
 	private array function providerCatalog() {
 		return [ "openrouter", "openai", "anthropic", "gemini", "deepseek", "grok", "groq", "mistral", "minimax", "ollama", "openai-compatible", "huggingface", "cohere", "perplexity", "bedrock", "voyage", "docker", "elevenlabs" ]
 	}
 
+	/**
+	 * Returns all configured providers with credentials redacted, plus the full supported catalog.
+	 *
+	 * @return Struct with success, supported catalog array, and providers array keys
+	 */
 	private struct function listProviders() {
 		var providers = variables.config.get( "bx-ai.providers", {} )
 		var result = []
@@ -33,8 +64,22 @@ class {
 		return { success: true, supported: providerCatalog(), providers: result }
 	}
 
+	/**
+	 * Returns the currently active provider, model, and named model from config.
+	 *
+	 * @return Struct with success, provider, model, and namedModel keys
+	 */
 	private struct function current() { return { success: true, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } }
 
+	/**
+	 * Adds or updates a provider configuration entry in config.
+	 *
+	 * Credentials can be supplied directly or by referencing an environment variable
+	 * via the {@code credentialEnv} / {@code --credential-env} argument.
+	 *
+	 * @args  Named arguments including provider, type, baseURL, credentialEnv, and options
+	 * @return Struct with success, provider name, sanitised config, and credential status
+	 */
 	private struct function addProvider( struct args ) {
 		var name = lCase( arguments.args.provider ?: arguments.args.name ?: "" )
 		if ( !len( name ) ) { return { success: false, error: "A provider name is required" } }
@@ -48,19 +93,50 @@ class {
 		return { success: true, provider: name, config: sanitize( providerData ), credential: credentialStatus( providerData ) }
 	}
 
+	/**
+	 * Removes a provider configuration entry from config.
+	 *
+	 * @name  Provider name to remove
+	 * @return Struct with success flag and provider name
+	 */
 	private struct function removeProvider( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A provider name is required" } }; variables.config.unset( "bx-ai.providers.#lCase( arguments.name )#" ); return { success: true, provider: lCase( arguments.name ) } }
+
+	/**
+	 * Sets the named provider as the default active provider.
+	 *
+	 * @name  Provider name to activate
+	 * @return current() result reflecting the new default
+	 */
 	private struct function setProvider( required string name ) { if ( !len( arguments.name ) ) { return { success: false, error: "A provider name is required" } }; if ( structIsEmpty( variables.config.get( "bx-ai.providers.#lCase( arguments.name )#", {} ) ) ) { return { success: false, error: "Provider is not configured" } }; variables.config.set( "bx-ai.defaultProvider", lCase( arguments.name ) ); return current() }
 
+	/**
+	 * Returns a full status summary including the default provider and all configured providers.
+	 *
+	 * @return Struct with success, default, supportedCount, configuredCount, and providers keys
+	 */
 	private struct function status() {
 		var providers = listProviders()
 		return { success: true, default: current(), supportedCount: providerCatalog().len(), configuredCount: providers.providers.len(), providers: providers.providers }
 	}
+
+	/**
+	 * Returns a deep copy of a config struct with all credential keys replaced by "[REDACTED]".
+	 *
+	 * @source  Raw config struct
+	 * @return  Safe copy with apiKey, token, password, and secret redacted
+	 */
 	private struct function sanitize( required struct source ) {
 		var result = duplicate( arguments.source )
 		for ( var key in [ "apiKey", "token", "password", "secret" ] ) { if ( structKeyExists( result, key ) ) { result[ key ] = "[REDACTED]" } }
 		return result
 	}
 
+	/**
+	 * Returns metadata describing how the provider's credential is configured.
+	 *
+	 * @data  Raw provider config struct
+	 * @return Struct with configured and source keys
+	 */
 	private struct function credentialStatus( required struct data ) {
 		var reference = arguments.data.apiKey ?: arguments.data.credentialEnv ?: ""
 		if ( !len( reference ) ) { return { configured: false, source: "none" } }

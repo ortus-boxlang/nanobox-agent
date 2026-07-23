@@ -6,7 +6,7 @@ class extends="testbox.system.BaseSpec" {
 				var backups = getTempDirectory() & "/backup-files-#createUUID()#"
 				directoryCreate( source, true )
 				fileWrite( source & "/note.txt", "backup content" )
-				var manager = new "cli.BackupManager"( source, backups )
+				var manager = new "models.system.BackupManager"( source, backups )
 				var command = new "cli.commands.BackupCommand"( manager )
 				var created = command.execute( "run" )
 				expect( created.success ).toBeTrue()

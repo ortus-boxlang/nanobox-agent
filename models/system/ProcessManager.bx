@@ -1,6 +1,20 @@
+/**
+ * ProcessManager — spawns and tracks external child processes.
+ *
+ * Uses Java's {@code ProcessBuilder} to start processes and {@code ProcessHandle}
+ * to check liveness.  Process state (PID, command, start time) is persisted in a
+ * JSON file so restarts of the agent do not lose track of running children.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
 class {
 	property statePath;
 
+	/**
+	 * @statePath Absolute path to the JSON state file; defaults to ~/.nanobox/processes.json
+	 */
 	function init( string statePath = "" ) {
 		variables.statePath = arguments.statePath != "" ? arguments.statePath : expandPath( "~/.nanobox/processes.json" )
 		var parent = getDirectoryFromPath( variables.statePath )
@@ -8,6 +22,18 @@ class {
 		if ( !fileExists( variables.statePath ) ) { fileWrite( variables.statePath, jsonSerialize( { processes: {} }, true ) ) }
 		return this
 	}
+
+	/**
+	 * Starts a named process if it is not already tracked.
+	 *
+	 * If a process with the given name is already in state, its current status is
+	 * returned without launching a second instance.
+	 *
+	 * @name    Logical process name used as a key in state
+	 * @command Executable path or name to launch
+	 * @args    Additional command-line arguments
+	 * @return  Struct with success, status, pid, and name keys
+	 */
 	struct function start( required string name, required string command, array args = [] ) {
 		var state = readState()
 		if ( structKeyExists( state.processes, arguments.name ) ) { return status( arguments.name ) }
@@ -24,6 +50,13 @@ class {
 			return { success: true, status: "started", pid: process.pid(), name: arguments.name }
 		} catch ( any exception ) { return { success: false, error: exception.message } }
 	}
+
+	/**
+	 * Stops a named process by sending a destroy signal via ProcessHandle.
+	 *
+	 * @name Logical process name to stop
+	 * @return Struct with success, status, name, and pid keys
+	 */
 	struct function stop( required string name ) {
 		var state = readState()
 		if ( !structKeyExists( state.processes, arguments.name ) ) { return { success: true, status: "stopped", name: arguments.name } }
@@ -36,6 +69,16 @@ class {
 		writeState( state )
 		return { success: true, status: "stopped", name: arguments.name, pid: process.pid }
 	}
+
+	/**
+	 * Returns the current status of a named process.
+	 *
+	 * Verifies liveness via ProcessHandle; removes stale state entries for dead
+	 * processes.
+	 *
+	 * @name Logical process name to query
+	 * @return Struct with name, status (running|stopped), pid, started, and command keys
+	 */
 	struct function status( required string name ) {
 		var state = readState()
 		if ( !structKeyExists( state.processes, arguments.name ) ) { return { name: arguments.name, status: "stopped" } }
@@ -45,7 +88,25 @@ class {
 		if ( !alive ) { structDelete( state.processes, arguments.name ); writeState( state ); return { name: arguments.name, status: "stopped", pid: process.pid } }
 		return { name: arguments.name, status: "running", pid: process.pid, started: process.started, command: process.command }
 	}
+
+	/**
+	 * Returns the status of every tracked process.
+	 *
+	 * @return Array of status structs, one per tracked process name
+	 */
 	array function all() { var result = []; for ( var name in readState().processes ) { result.append( status( name ) ) }; return result }
+
+	/**
+	 * Deserialises the JSON state file from disk.
+	 *
+	 * @return State struct with a processes key
+	 */
 	private struct function readState() { return jsonDeserialize( fileRead( variables.statePath ) ) }
+
+	/**
+	 * Serialises and writes the state struct to the JSON state file.
+	 *
+	 * @state State struct to persist
+	 */
 	private void function writeState( required struct state ) { fileWrite( variables.statePath, jsonSerialize( arguments.state, true ) ) }
 }

@@ -3,9 +3,9 @@ class extends="testbox.system.BaseSpec" {
 		describe( "Skill curator", () => {
 			it( "reports, activates, pins, archives, restores, backs up, and pauses custom skills", () => {
 				var root = getTempDirectory() & "/curator-#createUUID()#"
-				var manager = new "cli.SkillManager"( root & "/.agents/skills" )
+				var manager = new "models.skills.SkillManager"( root & "/.agents/skills" )
 				manager.create( "custom-skill", "Custom", "Instructions" )
-				var curator = new "cli.SkillCurator"( root )
+				var curator = new "models.skills.SkillCurator"( root )
 				expect( curator.status().counts.custom ).toBe( 1 )
 				expect( curator.setMode( "custom-skill", "always-on" ).success ).toBeTrue()
 				expect( curator.pin( "custom-skill" ).success ).toBeTrue()
@@ -19,8 +19,8 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "supports dry-run without changing skill state", () => {
 				var root = getTempDirectory() & "/curator-dry-#createUUID()#"
-				new "cli.SkillManager"( root & "/.agents/skills" ).create( "dry-skill", "Dry", "Content" )
-				var result = new "cli.SkillCurator"( root ).run( true, 0, 0 )
+				new "models.skills.SkillManager"( root & "/.agents/skills" ).create( "dry-skill", "Dry", "Content" )
+				var result = new "models.skills.SkillCurator"( root ).run( true, 0, 0 )
 				expect( result.success ).toBeTrue()
 				expect( result.dryRun ).toBeTrue()
 				expect( directoryExists( root & "/.agents/skills-custom/dry-skill" ) ).toBeTrue()
