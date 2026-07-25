@@ -48,7 +48,18 @@ class {
 			case "session": return new "cli.commands.SessionCommand"( new "models.sessions.SessionManager"() ).execute( action ?: "list", args )
 			case "tokens":
 			case "token": return new "cli.commands.TokenCommand"( new "models.util.TokenTracker"() ).execute( action ?: "all", "", false, args )
-			case "agent": return new "cli.commands.AgentCommand"( new "models.agents.AgentManager"( variables.home & "/agents", variables.config ) ).execute( action ?: "list", args )
+			case "agent":
+			var mwConfig = variables.config.get( "nanobox.middleware", {} )
+			return new "cli.commands.AgentCommand"(
+				new "models.agents.AgentManager"(
+					variables.home & "/agents",
+					variables.config,
+					mwConfig.secretPatterns ?: [],
+					mwConfig.blockedTools ?: [],
+					mwConfig.allowlistPath ?: "",
+					mwConfig.requireApproval ?: true
+				)
+			).execute( action ?: "list", args )
 			case "tool": return new "cli.commands.ToolCommand"( new "models.tools.ToolManager"( variables.home, variables.config ) ).execute( action ?: "list", args )
 			case "mcp": return new "cli.commands.MCPCommand"( new "models.agents.McpManager"() ).execute( action ?: "list", args )
 			case "script": return new "cli.commands.ScriptCommand"( new "models.system.ScriptManager"() ).execute( action ?: "list", args )
@@ -237,7 +248,15 @@ class {
 	 * @return    ChatCommand result, optionally reduced to {success, text}
 	 */
 	private struct function chat( required string query, struct args = {}, boolean textOnly = false ) {
-		var result = new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ).execute( arguments.query, arguments.args )
+		var mwConfig = variables.config.get( "nanobox.middleware", {} )
+		var result = new "cli.commands.ChatCommand"(
+			variables.config,
+			new "models.util.TokenTracker"(),
+			mwConfig.secretPatterns ?: [],
+			mwConfig.blockedTools ?: [],
+			mwConfig.allowlistPath ?: "",
+			mwConfig.requireApproval ?: true
+		).execute( arguments.query, arguments.args )
 		if ( arguments.textOnly ) { return { success: result.success, text: result.content ?: "", error: result.error ?: "" } }
 		return result
 	}
@@ -252,7 +271,16 @@ class {
 	 * @return  Struct with success flag, interactive=true, and sessionId
 	 */
 	private struct function interactiveChat( struct parsed = {} ) {
-		var interactive = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( variables.config, new "models.util.TokenTracker"() ), new "models.sessions.SessionManager"(), variables.config )
+		var mwConfig = variables.config.get( "nanobox.middleware", {} )
+		var chatCommand = new "cli.commands.ChatCommand"(
+			variables.config,
+			new "models.util.TokenTracker"(),
+			mwConfig.secretPatterns ?: [],
+			mwConfig.blockedTools ?: [],
+			mwConfig.allowlistPath ?: "",
+			mwConfig.requireApproval ?: true
+		)
+		var interactive = new "cli.InteractiveChat"( chatCommand, new "models.sessions.SessionManager"(), variables.config )
 		var started = interactive.start( true )
 		var renderer = new "cli.InteractiveChatRenderer"( interactive, true )
 		println( renderer.renderHeader( { title: started.title, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } ) )

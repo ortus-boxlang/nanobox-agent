@@ -12,12 +12,23 @@
 class {
 	property agentsPath;
 	property config;
+	property securityMiddleware;
 
 	/**
-	 * @agentsPath   Directory containing agent Markdown files; defaults to ~/.nanobox/agents
-	 * @configManager Optional ConfigManager for provider and model resolution at run time
+	 * @agentsPath       Directory containing agent Markdown files; defaults to ~/.nanobox/agents
+	 * @configManager    Optional ConfigManager for provider and model resolution at run time
+	 * @secretPatterns   Optional array of regex patterns for secret detection (defaults to common API key formats)
+	 * @blockedTools     Optional array of tool names to block (empty means no tools blocked)
+	 * @allowlistPath    Optional path to OsToolMiddleware allowlist JSON file
+	 * @requireApproval  When true, dangerous OS tool calls require user approval (default: true)
 	 */
-	function init( string agentsPath = "", any configManager = null ) { variables.agentsPath = len( arguments.agentsPath ) ? arguments.agentsPath : expandPath( "~/.nanobox/agents" ); variables.config = arguments.configManager; if ( !directoryExists( variables.agentsPath ) ) { directoryCreate( variables.agentsPath, true ) }; return this }
+	function init( string agentsPath = "", any configManager = null, array secretPatterns = [], array blockedTools = [], string allowlistPath = "", boolean requireApproval = true ) {
+		variables.agentsPath = len( arguments.agentsPath ) ? arguments.agentsPath : expandPath( "~/.nanobox/agents" )
+		variables.config = arguments.configManager
+		variables.securityMiddleware = new "models.middleware.SecurityMiddleware"( arguments.secretPatterns, arguments.blockedTools )
+		if ( !directoryExists( variables.agentsPath ) ) { directoryCreate( variables.agentsPath, true ) }
+		return this
+	}
 
 	/**
 	 * Returns all registered agents as an array of parsed definition structs.
@@ -78,13 +89,66 @@ class {
 	 *
 	 * Resolves the provider from config, loads always-on and lazy skills from
 	 * the custom skills directory, and delegates to the bx-ai agent loop.
+	 * Security middleware is applied before and after the agent call.
 	 *
 	 * @name            Agent name to run
 	 * @query           User query / task to pass to the agent
 	 * @runtimeOptions  Optional overrides (provider, etc.)
 	 * @return Struct with success, response, agent, model, and provider keys
 	 */
-	struct function run( required string name, required string query, struct runtimeOptions = {} ) { if ( !len( arguments.query ) ) { return { success: false, error: "An agent query is required" } }; var definition = show( arguments.name ); if ( structIsEmpty( definition ) ) { return { success: false, error: "Agent not found: #arguments.name#" } }; var logicalProvider = arguments.runtimeOptions.provider ?: ( variables.config != null ? variables.config.get( "bx-ai.defaultProvider", "" ) : "" ); var providerConfig = variables.config != null ? variables.config.get( "bx-ai.providers.#logicalProvider#", {} ) : {}; var serviceProvider = isStruct( providerConfig ) && lCase( providerConfig.type ?: "" ) == "openai-compatible" ? "openai-compatible" : logicalProvider; var modelId = definition.metadata.model ?: ( variables.config != null ? variables.config.get( "bx-ai.defaultModel", "" ) : "" ); var modelParams = {}; if ( len( modelId ) ) { modelParams.model = modelId }; var modelOptions = duplicate( providerConfig.options ?: {} ); if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { modelOptions.baseURL = providerConfig.baseURL }; if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { modelOptions.apiKey = providerConfig.apiKey }; var model = len( serviceProvider ) ? aiModel( provider: serviceProvider, params: modelParams, options: modelOptions ) : aiModel( params: modelParams, options: modelOptions ); var alwaysOn = []; var lazy = []; var skillRoot = expandPath( ".agents/skills" ); var customRoot = expandPath( ".agents/skills-custom" ); var registrySkills = aiSkill( skillRoot ); var customSkills = aiSkill( customRoot ); for ( var loadedSkill in customSkills ) { var activation = loadActivation( loadedSkill ); if ( activation.enabled ) { new "models.skills.SkillManager"( expandPath( ".agents/skills" ) ).recordUse( loadedSkill.getName() ); if ( activation.mode == "always-on" ) { alwaysOn.append( loadedSkill ) } else { lazy.append( loadedSkill ) } } }; var agent = aiAgent( name: definition.metadata.name, description: definition.metadata.description ?: "", instructions: definition.instructions, model: model, params: definition.metadata.options ?: {}, skills: alwaysOn, availableSkills: lazy.append( registrySkills, true ) ); try { return { success: true, response: agent.run( arguments.query ), agent: definition.metadata.name, model: modelId, provider: logicalProvider } } catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ), agent: definition.metadata.name } } }
+	struct function run( required string name, required string query, struct runtimeOptions = {} ) {
+		if ( !len( arguments.query ) ) { return { success: false, error: "An agent query is required" } }
+		var definition = show( arguments.name )
+		if ( structIsEmpty( definition ) ) { return { success: false, error: "Agent not found: #arguments.name#" } }
+
+		// SecurityMiddleware: check query for secrets before LLM call
+		var llmContext = { messages: arguments.query }
+		var securityResult = variables.securityMiddleware.beforeLLMCall( llmContext )
+		if ( !securityResult.continue ) { return { success: false, error: securityResult.message } }
+
+		var logicalProvider = arguments.runtimeOptions.provider ?: ( variables.config != null ? variables.config.get( "bx-ai.defaultProvider", "" ) : "" )
+		var providerConfig = variables.config != null ? variables.config.get( "bx-ai.providers.#logicalProvider#", {} ) : {}
+		var serviceProvider = isStruct( providerConfig ) && lCase( providerConfig.type ?: "" ) == "openai-compatible" ? "openai-compatible" : logicalProvider
+		var modelId = definition.metadata.model ?: ( variables.config != null ? variables.config.get( "bx-ai.defaultModel", "" ) : "" )
+		var modelParams = {}
+		if ( len( modelId ) ) { modelParams.model = modelId }
+		var modelOptions = duplicate( providerConfig.options ?: {} )
+		if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { modelOptions.baseURL = providerConfig.baseURL }
+		if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { modelOptions.apiKey = providerConfig.apiKey }
+		var model = len( serviceProvider ) ? aiModel( provider: serviceProvider, params: modelParams, options: modelOptions ) : aiModel( params: modelParams, options: modelOptions )
+		var alwaysOn = []
+		var lazy = []
+		var skillRoot = expandPath( ".agents/skills" )
+		var customRoot = expandPath( ".agents/skills-custom" )
+		var registrySkills = aiSkill( skillRoot )
+		var customSkills = aiSkill( customRoot )
+		for ( var loadedSkill in customSkills ) {
+			var activation = loadActivation( loadedSkill )
+			if ( activation.enabled ) {
+				new "models.skills.SkillManager"( expandPath( ".agents/skills" ) ).recordUse( loadedSkill.getName() )
+				if ( activation.mode == "always-on" ) { alwaysOn.append( loadedSkill ) } else { lazy.append( loadedSkill ) }
+			}
+		}
+		for ( var loadedSkill in registrySkills ) {
+			var activation = loadActivation( loadedSkill )
+			if ( activation.enabled ) {
+				new "models.skills.SkillManager"( expandPath( ".agents/skills" ) ).recordUse( loadedSkill.getName() )
+				if ( activation.mode == "always-on" ) { alwaysOn.append( loadedSkill ) } else { lazy.append( loadedSkill ) }
+			}
+		}
+
+		try {
+			var response = aiAgent( definition.instructions, model, alwaysOn, lazy )
+			var content = isStruct( response ) ? ( response.content ?: "" ) : response
+
+			// SecurityMiddleware: check response for leaked secrets
+			var responseContext = { response: content }
+			var postSecurityResult = variables.securityMiddleware.afterAgentRun( responseContext )
+			if ( !postSecurityResult.continue ) { return { success: false, error: postSecurityResult.message } }
+
+			return { success: true, response: content, agent: definition.name, model: modelId, provider: logicalProvider, raw: response }
+		} catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ) } }
+	}
 
 	/**
 	 * Reads a skill's activation metadata from its .nanobox-skill.json sidecar file.

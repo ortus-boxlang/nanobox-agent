@@ -12,12 +12,24 @@
 class {
 	property configManager;
 	property tokenTracker;
+	property securityMiddleware;
+	property osToolMiddleware;
 
 	/**
-	 * @appConfig     ConfigManager instance for provider/model resolution
-	 * @usageTracker  TokenTracker instance for recording usage (currently stored on callers)
+	 * @appConfig         ConfigManager instance for provider/model resolution
+	 * @usageTracker      TokenTracker instance for recording usage
+	 * @secretPatterns    Optional array of regex patterns for secret detection (defaults to common API key formats)
+	 * @blockedTools      Optional array of tool names to block (empty means no tools blocked)
+	 * @allowlistPath     Optional path to OsToolMiddleware allowlist JSON file
+	 * @requireApproval   When true, dangerous OS tool calls require user approval (default: true)
 	 */
-	function init( required any appConfig, required any usageTracker ) { variables.configManager = arguments.appConfig; variables.tokenTracker = arguments.usageTracker; return this }
+	function init( required any appConfig, required any usageTracker, array secretPatterns = [], array blockedTools = [], string allowlistPath = "", boolean requireApproval = true ) {
+		variables.configManager = arguments.appConfig
+		variables.tokenTracker = arguments.usageTracker
+		variables.securityMiddleware = new "models.middleware.SecurityMiddleware"( arguments.secretPatterns, arguments.blockedTools )
+		variables.osToolMiddleware = new "models.middleware.OsToolMiddleware"( arguments.allowlistPath, arguments.requireApproval )
+		return this
+	}
 
 	/**
 	 * Executes a chat query and returns the AI response.
@@ -25,9 +37,10 @@ class {
 	 * Supports per-request overrides for temperature, max_tokens, provider,
 	 * model, and named models.  On success the returned struct contains content,
 	 * provider, serviceProvider, model, namedModel, usage, and raw keys.
+	 * Token usage is recorded via the injected TokenTracker.
 	 *
 	 * @query    User prompt text; must be non-empty
-	 * @options  Optional overrides: provider, model, namedModel, temperature, max_tokens
+	 * @options  Optional overrides: provider, model, namedModel, temperature, max_tokens, sessionId
 	 * @return   Struct with success flag, content, provider, model, and error keys
 	 */
 	struct function execute( required string query, struct options = {} ) {
@@ -44,10 +57,41 @@ class {
 		if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { providerOptions.baseURL = providerConfig.baseURL }
 		if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { providerOptions.apiKey = providerConfig.apiKey }
 		providerOptions.provider = serviceProvider; providerOptions[ "returnFormat" ] = "single"
+		// Run SecurityMiddleware beforeLLMCall to check for secrets in the query
+		var llmContext = { messages: arguments.query }
+		var securityResult = variables.securityMiddleware.beforeLLMCall( llmContext )
+		if ( !securityResult.continue ) { return { success: false, error: securityResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel } }
+
+		// Run OsToolMiddleware beforeToolCall (no-op if no tool calls, but ensures safety)
+		var toolContext = { toolName: "", toolArgs: {} }
+		var osResult = variables.osToolMiddleware.beforeToolCall( toolContext )
+		if ( !osResult.continue ) {
+			if ( osResult.suspended ) {
+				return { success: false, error: "Approval required: " & osResult.question, suspended: true, toolName: osResult.toolName, toolArgs: osResult.toolArgs, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
+			}
+			return { success: false, error: osResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
+		}
+
 		try {
 			var response = aiChat( arguments.query, params, providerOptions )
 			var content = isStruct( response ) ? ( response.content ?: "" ) : response
-			return { success: true, content: content, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel, usage: {}, raw: response }
+
+			// Run SecurityMiddleware afterAgentRun to check response for leaked secrets
+			var responseContext = { response: content }
+			var postSecurityResult = variables.securityMiddleware.afterAgentRun( responseContext )
+			if ( !postSecurityResult.continue ) {
+				return { success: false, error: postSecurityResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
+			}
+
+			// Record token usage via TokenTracker
+			var usageData = {}
+			if ( isStruct( response ) && response.keyExists( "usage" ) ) {
+				usageData = response.usage
+			}
+			var sessionId = arguments.options.sessionId ?: ""
+			variables.tokenTracker.record( usageData, selection.provider, selection.model, "chat", sessionId )
+
+			return { success: true, content: content, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel, usage: usageData, raw: response }
 		} catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ), provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel } }
 	}
 
