@@ -1,7 +1,10 @@
 class {
+	variables.thisDir = getDirectoryFromPath( getCurrentTemplatePath() )
 	this.mappings = {
-		"/testbox": expandPath( "./testbox" ),
-		"/tests": expandPath( "./tests" ),
-		"/cli": expandPath( "./cli" )
+		"/testbox": variables.thisDir & "../lib/testbox",
+		"/tests"  : variables.thisDir,
+		"/cli"    : variables.thisDir & "../cli",
+		"/models" : variables.thisDir & "../models",
+		"/nanobox": variables.thisDir & "../"
 	}
 }

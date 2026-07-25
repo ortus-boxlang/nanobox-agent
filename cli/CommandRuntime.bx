@@ -72,7 +72,7 @@ class {
 				return new "cli.commands.SkillCommand"( new "models.skills.SkillManager"( expandPath( "." ) & "/.agents/skills" ) ).execute( action ?: "list", args )
 			case "chat":
 				if ( args.z ?: args[ "z" ] ?: false ) { return chat( args.query ?: args.q ?: arrayToList( parsed.positionals.slice( 2 ), " " ), args, true ) }
-				if ( !len( args.query ?: args.q ?: "" ) ) { return interactiveChat( parsed ) }
+				if ( !len( args.query ?: args.q ?: "" ) ) { return { success: false, error: "A query is required. Use --query or -q to provide one." } }
 				return chat( args.query ?: args.q ?: "", args, false )
 			default: return { success: false, error: "Unknown command: #command#" }
 		}

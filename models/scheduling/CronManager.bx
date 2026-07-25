@@ -14,13 +14,26 @@ class {
 	property datasource;
 
 	/**
-	 * Initialises the manager and binds to the nanobox datasource.
+	 * Initialises the manager.
 	 *
-	 * @tasksPath  Unused legacy parameter; retained for API compatibility
+	 * @tasksPath  Optional path for an isolated SQLite database (used in tests).
+	 *             When empty, binds to the shared "nanobox" datasource.
 	 */
 	function init( string tasksPath = "" ) {
-		variables.datasource = "nanobox"
+		if ( len( arguments.tasksPath ) ) {
+			var dbFile = reReplace( arguments.tasksPath, "\.[^.]+$", ".db", "one" )
+			var dbDir = getDirectoryFromPath( dbFile )
+			if ( !directoryExists( dbDir ) ) { directoryCreate( dbDir, true, true ) }
+			variables.datasource = { driver: "sqlite", connectionString: "jdbc:sqlite:#dbFile#" }
+		} else {
+			variables.datasource = "nanobox"
+		}
+		ensureTable()
 		return this
+	}
+
+	private void function ensureTable() {
+		queryExecute( "CREATE TABLE IF NOT EXISTS nanobox_cron_tasks (name TEXT PRIMARY KEY, schedule TEXT, prompt TEXT DEFAULT '', ""group"" TEXT DEFAULT 'default', skills TEXT DEFAULT '', enabled INTEGER DEFAULT 1, runs INTEGER DEFAULT 0, failures INTEGER DEFAULT 0, lastRun TIMESTAMP, created TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", {}, { datasource: variables.datasource } )
 	}
 
 	/**
@@ -30,10 +43,10 @@ class {
 	 * @return Array of task structs sorted by name ascending
 	 */
 	array function list( string group = "" ) {
-		var sql = "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks"
+		var sql = "SELECT name, schedule, prompt, ""group"", skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks"
 		var params = {}
 		if ( len( arguments.group ) ) {
-			sql &= " WHERE group = :group"
+			sql &= " WHERE ""group"" = :group"
 			params.group = arguments.group
 		}
 		sql &= " ORDER BY name ASC"
@@ -83,7 +96,7 @@ class {
 		}
 		var skillsStr = arrayIsEmpty( arguments.skills ) ? "" : arrayToList( arguments.skills, "," )
 		queryExecute(
-			"INSERT INTO nanobox_cron_tasks (name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created) VALUES (:name, :schedule, :prompt, :group, :skills, 1, 0, 0, NULL, CURRENT_TIMESTAMP)",
+			"INSERT INTO nanobox_cron_tasks (name, schedule, prompt, ""group"", skills, enabled, runs, failures, lastRun, created) VALUES (:name, :schedule, :prompt, :group, :skills, 1, 0, 0, NULL, CURRENT_TIMESTAMP)",
 			{
 				name: arguments.name,
 				schedule: arguments.schedule,
@@ -106,8 +119,9 @@ class {
 	 * @return Task struct, or empty struct if not found
 	 */
 	struct function show( required string name ) {
-		var result = queryExecute( "SELECT name, schedule, prompt, group, skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks WHERE name = :name", { name: arguments.name }, { datasource: variables.datasource } )
-		return queryToArray( result ).first()
+		var result = queryExecute( "SELECT name, schedule, prompt, ""group"", skills, enabled, runs, failures, lastRun, created FROM nanobox_cron_tasks WHERE name = :name", { name: arguments.name }, { datasource: variables.datasource } )
+		var rows = queryToArray( result )
+		return rows.isEmpty() ? {} : rows.first()
 	}
 
 	/**

@@ -21,7 +21,13 @@ class {
 		if ( !len( arguments.databasePath ) ) { arguments.databasePath = expandPath( "~/.nanobox/data/nanobox.db" ) }
 		var parent = getDirectoryFromPath( arguments.databasePath )
 		if ( !directoryExists( parent ) ) { directoryCreate( parent, true ) }
+		ensureTable()
 		return this
+	}
+
+	private void function ensureTable() {
+		queryExecute( "CREATE TABLE IF NOT EXISTS nanobox_sessions (id TEXT PRIMARY KEY, title TEXT, provider TEXT DEFAULT '', model TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", {}, { datasource: variables.datasource } )
+		queryExecute( "CREATE TABLE IF NOT EXISTS nanobox_messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", {}, { datasource: variables.datasource } )
 	}
 
 	/**

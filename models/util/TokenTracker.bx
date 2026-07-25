@@ -14,11 +14,26 @@ class {
 	property datasource;
 
 	/**
-	 * Initialises the tracker and binds to the nanobox datasource.
+	 * Initialises the tracker.
+	 *
+	 * @databasePath  Optional path for an isolated SQLite database (used in tests).
+	 *                When empty, binds to the shared "nanobox" datasource.
 	 */
-	function init() {
-		variables.datasource = "nanobox"
+	function init( string databasePath = "" ) {
+		if ( len( arguments.databasePath ) ) {
+			var dbFile = reReplace( arguments.databasePath, "\.[^.]+$", ".db", "one" )
+			var dbDir = getDirectoryFromPath( dbFile )
+			if ( !directoryExists( dbDir ) ) { directoryCreate( dbDir, true, true ) }
+			variables.datasource = { driver: "sqlite", connectionString: "jdbc:sqlite:#dbFile#" }
+		} else {
+			variables.datasource = "nanobox"
+		}
+		ensureTable()
 		return this
+	}
+
+	private void function ensureTable() {
+		queryExecute( "CREATE TABLE IF NOT EXISTS nanobox_token_events (id TEXT PRIMARY KEY, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, provider TEXT DEFAULT '', model TEXT DEFAULT '', operation TEXT DEFAULT 'chat', session_id TEXT DEFAULT '', prompt_tokens INTEGER DEFAULT 0, completion_tokens INTEGER DEFAULT 0, total_tokens INTEGER DEFAULT 0)", {}, { datasource: variables.datasource } )
 	}
 
 	/**
@@ -108,7 +123,7 @@ class {
 	 * @return Array of event structs
 	 */
 	array function events( numeric limit = 0 ) {
-		var sql = "SELECT id, timestamp, provider, model, operation, session_id, prompt_tokens, completion_tokens, total_tokens FROM nanobox_token_events ORDER BY timestamp DESC"
+		var sql = "SELECT id, timestamp, provider, model, operation, session_id AS sessionId, prompt_tokens AS promptTokens, completion_tokens AS completionTokens, total_tokens AS totalTokens FROM nanobox_token_events ORDER BY timestamp DESC"
 		if ( arguments.limit > 0 ) {
 			sql &= " LIMIT #arguments.limit#"
 		}
