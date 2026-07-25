@@ -60,6 +60,27 @@ class {
 	}
 
 	/**
+	 * Returns the quarantine directory path.
+	 *
+	 * @return Absolute path to the quarantine directory
+	 */
+	string function getQuarantinePath() { return variables.quarantinePath }
+
+	/**
+	 * Returns the report file path.
+	 *
+	 * @return Absolute path to the JSON security report file
+	 */
+	string function getReportPath() { return variables.reportPath }
+
+	/**
+	 * Returns the registered threat-pattern count.
+	 *
+	 * @return Number of security patterns currently loaded
+	 */
+	numeric function getPatternCount() { return variables.patterns.len() }
+
+	/**
 	 * Returns the last written security report.
 	 *
 	 * @return Parsed report struct, or {status: "never-scanned"} when no report exists

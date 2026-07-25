@@ -67,7 +67,7 @@ class {
 			case "backup": return new "cli.commands.BackupCommand"( new "models.system.BackupManager"() ).execute( action ?: "status", args )
 			case "update": return new "cli.commands.UpdateCommand"( new "models.system.UpdateManager"() ).execute( action ?: "status", args )
 			case "vault": return new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( variables.home & "/vault" ) ).execute( action ?: "list", args )
-			case "security": return security( action ?: "status", args )
+			case "security": return new "cli.commands.SecurityCommand"( new "models.security.SecurityCzar"() ).execute( action ?: "status", args )
 			case "web": return wrapProcessResult( new "cli.commands.WebCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
 			case "worker": return wrapProcessResult( new "cli.commands.WorkerCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
 			case "start":
@@ -204,18 +204,6 @@ class {
 		return { success: true, documents: manager.list( arguments.args.category ?: "" ) }
 	}
 
-	/**
-	 * Delegates security scan or status operations to SecurityCzar.
-	 *
-	 * @action  "scan" or default (status)
-	 * @args    Named arguments (type, path)
-	 * @return  Security operation result
-	 */
-	private struct function security( required string action, struct args = {} ) {
-		var czar = new "models.security.SecurityCzar"()
-		if ( arguments.action == "scan" ) { return { success: true, results: czar.scanFiles( arguments.args.type ?: "all", arguments.args.path ?: variables.home ) } }
-		return { success: true, report: czar.status() }
-	}
 
 	/**
 	 * Delegates model get/set operations to ConfigManager.
@@ -252,6 +240,7 @@ class {
 		var result = new "cli.commands.ChatCommand"(
 			variables.config,
 			new "models.util.TokenTracker"(),
+			new "models.sessions.SessionManager"(),
 			mwConfig.secretPatterns ?: [],
 			mwConfig.blockedTools ?: [],
 			mwConfig.allowlistPath ?: "",
@@ -275,6 +264,7 @@ class {
 		var chatCommand = new "cli.commands.ChatCommand"(
 			variables.config,
 			new "models.util.TokenTracker"(),
+			new "models.sessions.SessionManager"(),
 			mwConfig.secretPatterns ?: [],
 			mwConfig.blockedTools ?: [],
 			mwConfig.allowlistPath ?: "",

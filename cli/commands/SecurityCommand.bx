@@ -1,0 +1,37 @@
+/**
+ * SecurityCommand — CLI interface for security scanning and policy status.
+ *
+ * Dispatches security actions (scan, report, status) to the injected
+ * SecurityCzar instance.  scan triggers a background tick, report shows
+ * the latest scan findings, and status displays the current policy summary.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	property czar;
+
+	/**
+	 * @securityCzar SecurityCzar instance that owns scanning and reporting
+	 */
+	function init( required any securityCzar ) { variables.czar = arguments.securityCzar; return this }
+
+	/**
+	 * Dispatches a security action.
+	 *
+	 * Supported actions: scan, report, status.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (type, path, scope, root)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "scan": return variables.czar.tick( arguments.args.scope ?: "all", arguments.args.root ?: "" )
+			case "report": return { success: true, report: variables.czar.status() }
+			case "status": return { success: true, patterns: variables.czar.getPatternCount(), quarantinePath: variables.czar.getQuarantinePath(), reportPath: variables.czar.getReportPath() }
+			default: return { success: false, error: "Unknown security action: #arguments.action#" }
+		}
+	}
+}

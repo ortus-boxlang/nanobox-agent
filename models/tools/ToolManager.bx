@@ -38,11 +38,11 @@ class {
 	 */
 	function refresh() {
 		var registry = aiToolRegistry()
-		var coreDir = expandPath( "/cli/tools" )
+		var coreDir = expandPath( "/models/tools" )
 		var userDir = variables.homePath & "/tools"
 		if ( !directoryExists( userDir ) ) { directoryCreate( userDir, true ) }
 
-		// Scan shipped core tools (under /cli mapping)
+		// Scan shipped core tools (under /models/tools mapping)
 		if ( directoryExists( coreDir ) ) {
 			for ( var file in directoryList( coreDir, false, "query", "*.bx" ) ) {
 				try {

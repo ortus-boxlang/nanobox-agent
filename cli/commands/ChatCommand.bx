@@ -12,20 +12,23 @@
 class {
 	property configManager;
 	property tokenTracker;
+	property sessionManager;
 	property securityMiddleware;
 	property osToolMiddleware;
 
 	/**
 	 * @appConfig         ConfigManager instance for provider/model resolution
 	 * @usageTracker      TokenTracker instance for recording usage
+	 * @sessionManager    Optional SessionManager for loading/saving conversation history
 	 * @secretPatterns    Optional array of regex patterns for secret detection (defaults to common API key formats)
 	 * @blockedTools      Optional array of tool names to block (empty means no tools blocked)
 	 * @allowlistPath     Optional path to OsToolMiddleware allowlist JSON file
 	 * @requireApproval   When true, dangerous OS tool calls require user approval (default: true)
 	 */
-	function init( required any appConfig, required any usageTracker, array secretPatterns = [], array blockedTools = [], string allowlistPath = "", boolean requireApproval = true ) {
+	function init( required any appConfig, required any usageTracker, any sessionManager = null, array secretPatterns = [], array blockedTools = [], string allowlistPath = "", boolean requireApproval = true ) {
 		variables.configManager = arguments.appConfig
 		variables.tokenTracker = arguments.usageTracker
+		variables.sessionManager = arguments.sessionManager
 		variables.securityMiddleware = new "models.middleware.SecurityMiddleware"( arguments.secretPatterns, arguments.blockedTools )
 		variables.osToolMiddleware = new "models.middleware.OsToolMiddleware"( arguments.allowlistPath, arguments.requireApproval )
 		return this
@@ -73,8 +76,16 @@ class {
 		}
 
 		try {
-			var response = aiChat( arguments.query, params, providerOptions )
+			// Build message array with session history if available
+			var messages = buildMessageArray( arguments.query, arguments.options.sessionId ?: "" )
+			var response = aiChat( messages, params, providerOptions )
 			var content = isStruct( response ) ? ( response.content ?: "" ) : response
+
+			// Persist conversation if session manager is wired
+			if ( !isNull( variables.sessionManager ) && len( arguments.options.sessionId ?: "" ) ) {
+				variables.sessionManager.appendMessage( arguments.options.sessionId, { role: "user", content: arguments.query } )
+				variables.sessionManager.appendMessage( arguments.options.sessionId, { role: "assistant", content: content } )
+			}
 
 			// Run SecurityMiddleware afterAgentRun to check response for leaked secrets
 			var responseContext = { response: content }
@@ -112,5 +123,34 @@ class {
 		if ( !len( provider ) ) { return { success: false, error: "No AI provider configured. Run nanobox model setup or config provider add." } }
 		if ( !len( model ) ) { return { success: false, error: "No model configured. Run nanobox model setup or select a named model." } }
 		return { success: true, provider: provider, model: model, options: {}, namedModel: "" }
+	}
+
+	/**
+	 * Builds a message array for aiChat() by loading previous session history.
+	 *
+	 * When session history is available, the array contains all previous messages
+	 * followed by the current user query.  Falls back to a single-element array
+	 * with the raw query string when no session manager or session ID is set.
+	 *
+	 * @query     Current user prompt
+	 * @sessionId Session UUID to load history from (may be empty)
+	 * @return    Array of message structs with role and content keys, or the raw query string
+	 */
+	private any function buildMessageArray( required string query, required string sessionId ) {
+		if ( isNull( variables.sessionManager ) || !len( arguments.sessionId ) ) {
+			return arguments.query
+		}
+		try {
+			var previous = variables.sessionManager.messages( arguments.sessionId )
+			var result = []
+			for ( var msg in previous ) {
+				result.append( { role: msg.role, content: msg.content } )
+			}
+			result.append( { role: "user", content: arguments.query } )
+			return result
+		} catch ( any e ) {
+			// If loading history fails, fall back to a raw query
+			return arguments.query
+		}
 	}
 }
