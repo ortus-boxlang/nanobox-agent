@@ -6,9 +6,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NANOBOX_HOME="${NANOBOX_HOME:-$HOME/.nanobox}"
 
-BOXLANG="${BOXLANG:-$(command -v boxlang || true)}"
+# ── Locate the BoxLang binary ─────────────────────────────────
+BOXLANG="${BOXLANG:-$(command -v boxlang 2>/dev/null || true)}"
 if [[ -z "$BOXLANG" ]]; then
 	for candidate in \
 		"$HOME/.bvm/current/bin/boxlang" \
@@ -18,24 +18,51 @@ if [[ -z "$BOXLANG" ]]; then
 		if [[ -x "$candidate" ]]; then
 			BOXLANG="$candidate"
 			break
-	fi
-done
+		fi
+	done
 fi
 
-if [[ -z "$BOXLANG" || ! -x "$BOXLANG" ]]; then
-	printf 'Error: boxlang binary not found.\n' >&2
-	printf 'Install BoxLang: https://boxlang.ortusbooks.com/getting-started/installation\n' >&2
+if [[ -z "${BOXLANG:-}" || ! -x "${BOXLANG:-}" ]]; then
+	printf 'Error: BoxLang binary not found.\n' >&2
+	printf 'Install: curl -fsSL https://downloads.ortussolutions.com/ortussolutions/boxlang-quick-installer/install-boxlang.sh | bash\n' >&2
+	printf 'Then re-run: ./install.sh\n' >&2
 	exit 4
 fi
 
-CLI_SCRIPT="$NANOBOX_HOME/current/nanobox.bx"
-if [[ ! -f "$CLI_SCRIPT" ]]; then
-	CLI_SCRIPT="$SCRIPT_DIR/nanobox.bx"
+# ── Locate CLI script and BoxLang runtime config ──────────────
+#
+# Dev/local mode  — this wrapper is beside the source tree
+# Installed mode  — this wrapper is in ~/.local/bin and the
+#                   source has been copied to NANOBOX_HOME
+#
+if [[ -f "$SCRIPT_DIR/cli/nanobox.bx" ]]; then
+	# Running from the project checkout (dev / --local install)
+	: "${NANOBOX_HOME:=$SCRIPT_DIR/.nanobox}"
+	CLI_SCRIPT="$SCRIPT_DIR/cli/nanobox.bx"
+	# Prefer a locally generated config (created by install.sh --local)
+	if [[ -f "$NANOBOX_HOME/boxlang-local.json" ]]; then
+		BX_CONFIG="$NANOBOX_HOME/boxlang-local.json"
+	else
+		BX_CONFIG="$SCRIPT_DIR/config/boxlang.json"
+	fi
+else
+	# Running from PATH after a global install
+	: "${NANOBOX_HOME:=$HOME/.nanobox}"
+	CLI_SCRIPT="$NANOBOX_HOME/current/cli/nanobox.bx"
+	BX_CONFIG="$NANOBOX_HOME/boxlang.json"
 fi
+
 if [[ ! -f "$CLI_SCRIPT" ]]; then
-	printf 'Error: nanobox.bx not found in %s/current or beside this wrapper.\n' "$NANOBOX_HOME" >&2
+	printf 'Error: nanobox CLI not found at %s\n' "$CLI_SCRIPT" >&2
+	printf 'Run ./install.sh (or ./install.sh --local for a project-local install).\n' >&2
+	exit 1
+fi
+
+if [[ ! -f "$BX_CONFIG" ]]; then
+	printf 'Error: BoxLang config not found at %s\n' "$BX_CONFIG" >&2
+	printf 'Run ./install.sh to regenerate it.\n' >&2
 	exit 1
 fi
 
 export NANOBOX_HOME
-exec "$BOXLANG" "$CLI_SCRIPT" "$@"
+exec "$BOXLANG" --bx-config "$BX_CONFIG" "$CLI_SCRIPT" "$@"
