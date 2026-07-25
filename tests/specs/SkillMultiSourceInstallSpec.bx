@@ -32,7 +32,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "installs from a local SKILL.md file", function() {
 				var testFile = variables.testRoot & "/source-skill.md"
-				fileWrite( testFile, "---" & chr(10) & "name: source-skill" & chr(10) & "description: From file" & chr(10) & "---" & chr(10) & chr(10) & "File content" )
+				fileWrite( testFile, "---" & char(10) & "name: source-skill" & char(10) & "description: From file" & char(10) & "---" & char(10) & char(10) & "File content" )
 
 				var result = variables.manager.install( testFile )
 
@@ -43,7 +43,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "installs from a local SKILL.md file with name override", function() {
 				var testFile = variables.testRoot & "/original.md"
-				fileWrite( testFile, "---" & chr(10) & "name: original-name" & chr(10) & "description: From file" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+				fileWrite( testFile, "---" & char(10) & "name: original-name" & char(10) & "description: From file" & char(10) & "---" & char(10) & char(10) & "Content" )
 
 				var result = variables.manager.install( testFile, false, "custom-name" )
 
@@ -55,7 +55,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "installs from a local directory", function() {
 				var testDir = variables.testRoot & "/my-skill-dir"
 				directoryCreate( testDir, true, true )
-				fileWrite( testDir & "/SKILL.md", "---" & chr(10) & "name: dir-skill" & chr(10) & "description: From directory" & chr(10) & "---" & chr(10) & chr(10) & "Directory content" )
+				fileWrite( testDir & "/SKILL.md", "---" & char(10) & "name: dir-skill" & char(10) & "description: From directory" & char(10) & "---" & char(10) & char(10) & "Directory content" )
 
 				var result = variables.manager.install( testDir )
 
@@ -90,7 +90,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "prevents duplicate installation without force", function() {
 				var testFile = variables.testRoot & "/dup.md"
-				fileWrite( testFile, "---" & chr(10) & "name: dup-skill" & chr(10) & "description: Dup" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+				fileWrite( testFile, "---" & char(10) & "name: dup-skill" & char(10) & "description: Dup" & char(10) & "---" & char(10) & char(10) & "Content" )
 
 				var first = variables.manager.install( testFile )
 				expect( first.success ).toBeTrue()
@@ -105,7 +105,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "tracks source type in the manifest", function() {
 				var testFile = variables.testRoot & "/tracked.md"
-				fileWrite( testFile, "---" & chr(10) & "name: tracked-skill" & chr(10) & "description: Tracked" & chr(10) & "---" & chr(10) & chr(10) & "Content" )
+				fileWrite( testFile, "---" & char(10) & "name: tracked-skill" & char(10) & "description: Tracked" & char(10) & "---" & char(10) & char(10) & "Content" )
 
 				var result = variables.manager.install( testFile )
 				expect( result.success ).toBeTrue()

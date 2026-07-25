@@ -148,7 +148,7 @@ class {
 	 * @source  Source string to classify
 	 * @return  "http", "local", "registry", or "invalid"
 	 */
-	private string function detectSourceType( required string source ) {
+	string function detectSourceType( required string source ) {
 		if ( reFindNoCase( "^https?://", arguments.source ) ) {
 			return "http"
 		}
@@ -336,7 +336,9 @@ class {
 		writeManifest( manifest );
 
 		recordTelemetry( skillName, "patch" );
-		return { success: true, skill: parse( target & "/SKILL.md", true ), source: "local" }
+		var parsed = parse( target & "/SKILL.md", true )
+		parsed.name = skillName
+		return { success: true, skill: parsed, source: "local" }
 	}
 
 	/**
