@@ -1,0 +1,29 @@
+/**
+ * MemoryTools — AI-callable tools for managing NanoBox user memory.
+ *
+ * Exposes tools to the bx-ai tool registry that allow an LLM agent to save,
+ * recall, and remove durable facts about the user or system.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	@AITool( "Save a durable fact to user memory. Categories include 'user' (personal info), 'memory' (general facts), 'preference' (settings), etc. Returns the saved memory entry with ID." )
+	public struct function memory_save( required string category, required string topic, required string entry ) {
+		return new "models.system.MemoryManager"().save( arguments.category, arguments.topic, arguments.entry )
+	}
+
+	@AITool( "Recall memories from user memory. Optionally filter by category (e.g., 'user', 'memory', 'preference') or search by topic. Returns array of matching memory entries." )
+	public array function memory_recall( string category = "", string topic = "" ) {
+		if ( len( arguments.topic ) ) {
+			return new "models.system.MemoryManager"().search( arguments.topic, 20 )
+		}
+		return new "models.system.MemoryManager"().recall( arguments.category )
+	}
+
+	@AITool( "Remove a memory entry by ID. Returns confirmation with deleted status and ID." )
+	public struct function memory_remove( required string id ) {
+		return new "models.system.MemoryManager"().remove( arguments.id )
+	}
+}

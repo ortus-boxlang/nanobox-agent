@@ -1,0 +1,127 @@
+/**
+ * MemoryManager — SQLite-backed persistence for NanoBox user memory.
+ *
+ * Manages the {@code nanobox_user_memory} table. Provides CRUD operations,
+ * full-text search, category filtering, and export functionality.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	property datasource;
+
+	/**
+	 * Entry point invoked by the BoxLang runtime.
+	 */
+	function init() {
+		variables.datasource = "nanobox"
+		ensureTable()
+		return this
+	}
+
+	/**
+	 * Creates the table if it does not exist.
+	 */
+	private void function ensureTable() {
+		queryExecute( "CREATE TABLE IF NOT EXISTS nanobox_user_memory (id VARCHAR(36) PRIMARY KEY, category VARCHAR(64) NOT NULL, topic VARCHAR(255) NOT NULL, entry TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", {}, { datasource: variables.datasource } )
+	}
+
+	/**
+	 * Saves a memory entry. If a memory with the same category and topic exists, updates it; otherwise inserts a new record.
+	 *
+	 * @category  Memory category (e.g., "user", "memory", "preference")
+	 * @topic     Memory topic key (shorthand identifier)
+	 * @entry     Memory content (the fact to remember)
+	 * @return    The saved memory struct with id, category, topic, entry, created_at, and updated_at keys
+	 */
+	struct function save( required string category, required string topic, required string entry ) {
+		var existing = queryExecute( "SELECT id FROM nanobox_user_memory WHERE category = :category AND topic = :topic", { category: arguments.category, topic: arguments.topic }, { datasource: variables.datasource } )
+		if ( existing.recordCount ) {
+			var id = existing.id[ 1 ]
+			queryExecute( "UPDATE nanobox_user_memory SET entry = :entry, updated_at = CURRENT_TIMESTAMP WHERE id = :id", { entry: arguments.entry, id: id }, { datasource: variables.datasource } )
+			return get( id )
+		} else {
+			var id = createUUID()
+			queryExecute( "INSERT INTO nanobox_user_memory (id, category, topic, entry) VALUES (:id, :category, :topic, :entry)", { id: id, category: arguments.category, topic: arguments.topic, entry: arguments.entry }, { datasource: variables.datasource } )
+			return get( id )
+		}
+	}
+
+	/**
+	 * Returns memory entries, optionally filtered by category.
+	 *
+	 * @category  Optional category filter (empty string returns all categories)
+	 * @return    Array of memory structs
+	 */
+	array function recall( string category = "" ) {
+		if ( len( arguments.category ) ) {
+			var result = queryExecute( "SELECT * FROM nanobox_user_memory WHERE category = :category ORDER BY updated_at DESC", { category: arguments.category }, { datasource: variables.datasource } )
+		} else {
+			var result = queryExecute( "SELECT * FROM nanobox_user_memory ORDER BY updated_at DESC", {}, { datasource: variables.datasource } )
+		}
+		return queryToArray( result )
+	}
+
+	/**
+	 * Removes a memory entry by ID.
+	 *
+	 * @id  Memory UUID to delete
+	 * @return Struct with deleted (boolean) and id keys
+	 */
+	struct function remove( required string id ) {
+		queryExecute( "DELETE FROM nanobox_user_memory WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		var exists = get( arguments.id )
+		return { deleted: structIsEmpty( exists ), id: arguments.id }
+	}
+
+	/**
+	 * Returns a single memory entry by ID.
+	 *
+	 * @id  Memory UUID to retrieve
+	 * @return Memory struct, or empty struct if not found
+	 */
+	struct function get( required string id ) {
+		var result = queryExecute( "SELECT * FROM nanobox_user_memory WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		return result.recordCount ? queryToArray( result ).first() : {}
+	}
+
+	/**
+	 * Searches memory entries by topic or content.
+	 *
+	 * @query  Search string (wrapped in SQL wildcards)
+	 * @limit  Maximum number of entries to return (clamped to 1–500)
+	 * @return Array of matching memory structs
+	 */
+	array function search( required string query, numeric limit = 20 ) {
+		var safeLimit = max( 1, min( 500, int( arguments.limit ) ) )
+		var result = queryExecute( "SELECT * FROM nanobox_user_memory WHERE category LIKE :query OR topic LIKE :query OR entry LIKE :query ORDER BY updated_at DESC LIMIT #safeLimit#", { query: "%#arguments.query#%" }, { datasource: variables.datasource } )
+		return queryToArray( result )
+	}
+
+	/**
+	 * Exports all memory entries.
+	 *
+	 * @return Array of all memory structs
+	 */
+	array function export() {
+		var result = queryExecute( "SELECT * FROM nanobox_user_memory ORDER BY category, topic", {}, { datasource: variables.datasource } )
+		return queryToArray( result )
+	}
+
+	/**
+	 * Converts a query object to an array of structs.
+	 *
+	 * @data  Query result to convert
+	 * @return Array where each element is a struct keyed by column name
+	 */
+	private array function queryToArray( required query data ) {
+		var rows = []
+		for ( var rowIndex = 1; rowIndex <= arguments.data.recordCount; rowIndex++ ) {
+			var row = {}
+			for ( var column in arguments.data.columnList.listToArray() ) { row[ column ] = arguments.data[ column ][ rowIndex ] }
+			rows.append( row )
+		}
+		return rows
+	}
+}

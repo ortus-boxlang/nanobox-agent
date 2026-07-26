@@ -270,7 +270,8 @@ class {
 		variables.config.set( "bx-ai.defaultModel", arguments.providerConfig.model ?: "" )
 
 		// Save provider definitions (without API keys — keys go to .env)
-		var allProviders = { arguments.primaryProvider: buildProviderConfig( arguments.providerConfig ) }
+		var allProviders = {}
+		allProviders[ arguments.primaryProvider ] = buildProviderConfig( arguments.providerConfig )
 		for ( var ep in arguments.extraProviders ) {
 			allProviders[ ep.name ] = buildProviderConfig( ep )
 		}

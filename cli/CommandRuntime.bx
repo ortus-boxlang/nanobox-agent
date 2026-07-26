@@ -79,6 +79,7 @@ class {
 				return new "cli.commands.LogCommand"( new "models.system.LogManager"() ).execute( action, args )
 			}
 			case "setup": return new "cli.commands.SetupCommand"( variables.config ).execute( args.force ?: args[ "force" ] ?: false )
+			case "memory": return new "cli.commands.MemoryCommand"( new "models.system.MemoryManager"() ).execute( action ?: "list", args )
 			case "image": {
 				var imgPrompt = args.prompt ?: args.query ?: arrayToList( parsed.positionals.slice( 2 ), " " )
 				return new "cli.commands.ImageCommand"( variables.config ).execute( imgPrompt, args )
@@ -147,6 +148,9 @@ class {
 		if ( arguments.command == "skill" && values.len() >= 3 && !result.keyExists( "query" ) && arguments.action == "search" ) { result.query = arrayToList( values.slice( 3 ), " " ) }
 		if ( arguments.command == "skill" && arguments.action == "find" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }
 		if ( arguments.command == "skill" && arguments.action == "install" && values.len() >= 3 && !result.keyExists( "slug" ) ) { result.slug = values[ 3 ] }
+		if ( arguments.command == "memory" && [ "show", "delete" ].contains( arguments.action ) && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
+		if ( arguments.command == "memory" && arguments.action == "add" ) { if ( values.len() >= 3 && !result.keyExists( "topic" ) ) { result.topic = values[ 3 ] }; if ( values.len() >= 4 && !result.keyExists( "entry" ) ) { result.entry = arrayToList( values.slice( 4 ), " " ) } }
+		if ( arguments.command == "memory" && arguments.action == "search" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }
 		if ( arguments.command == "vault" && values.len() >= 3 && !result.keyExists( "id" ) ) { result.id = values[ 3 ] }
 		if ( arguments.command == "vault" && arguments.action == "import" && values.len() >= 3 && !result.keyExists( "source" ) ) { result.source = values[ 3 ] }
 		if ( arguments.command == "vault" && arguments.action == "search" && values.len() >= 3 && !result.keyExists( "query" ) ) { result.query = arrayToList( values.slice( 3 ), " " ) }

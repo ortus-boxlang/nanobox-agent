@@ -1,0 +1,92 @@
+/**
+ * MemoryCommand — CLI interface for managing NanoBox user memory.
+ *
+ * Dispatches memory actions (list, show, add, delete, search, export) to the
+ * injected MemoryManager.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	property memory;
+
+	/**
+	 * @memoryManager MemoryManager instance that owns memory persistence
+	 */
+	function init( required any memoryManager ) { variables.memory = arguments.memoryManager; return this }
+
+	/**
+	 * Dispatches a memory action.
+	 *
+	 * Supported actions: list, show, add, delete, search, export.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments (id, category, topic, entry, query, etc.)
+	 * @return  Result struct with success flag and action-specific payload
+	 */
+	struct function execute( required string action, struct args = {} ) {
+		var op = lCase( arguments.action )
+		switch ( op ) {
+			case "list": return { success: true, memories: variables.memory.recall( arguments.args.category ?: "" ) }
+			case "show": return show( arguments.args.id ?: "" )
+			case "add": return add( arguments.args.category ?: "memory", arguments.args.topic ?: "", arguments.args.entry ?: "" )
+			case "delete": return delete( arguments.args.id ?: "" )
+			case "search": return search( arguments.args.query ?: "", arguments.args.limit ?: 20 )
+			case "export": return { success: true, memories: variables.memory.export() }
+			default: return { success: false, error: "Unknown memory action: #arguments.action#" }
+		}
+	}
+
+	/**
+	 * Returns a single memory entry.
+	 *
+	 * @id   Memory ID to retrieve
+	 * @return Struct with success flag and memory struct
+	 */
+	private struct function show( required string id ) {
+		if ( !len( arguments.id ) ) { return { success: false, error: "A memory id is required" } }
+		var result = variables.memory.get( arguments.id )
+		if ( structIsEmpty( result ) ) { return { success: false, error: "Memory not found: #arguments.id#" } }
+		return { success: true, memory: result }
+	}
+
+	/**
+	 * Adds a new memory entry.
+	 *
+	 * @category  Memory category (default "memory")
+	 * @topic     Memory topic key
+	 * @entry     Memory content
+	 * @return    Struct with success flag and saved memory struct
+	 */
+	private struct function add( required string category, required string topic, required string entry ) {
+		if ( !len( arguments.topic ) || !len( arguments.entry ) ) {
+			return { success: false, error: "A topic and entry are required" }
+		}
+		return { success: true, memory: variables.memory.save( arguments.category, arguments.topic, arguments.entry ) }
+	}
+
+	/**
+	 * Deletes a memory entry by ID.
+	 *
+	 * @id   Memory ID to delete
+	 * @return Struct with success flag and deletion result
+	 */
+	private struct function delete( required string id ) {
+		if ( !len( arguments.id ) ) { return { success: false, error: "A memory id is required" } }
+		var result = variables.memory.remove( arguments.id )
+		return { success: result.deleted, result: result, error: result.deleted ? "" : "Memory not found: #arguments.id#" }
+	}
+
+	/**
+	 * Searches memory entries by text query.
+	 *
+	 * @query  Search text
+	 * @limit  Maximum number of entries to return
+	 * @return Struct with success flag and memories array
+	 */
+	private struct function search( required string query, required numeric limit ) {
+		if ( !len( arguments.query ) ) { return { success: false, error: "A search query is required" } }
+		return { success: true, memories: variables.memory.search( arguments.query, arguments.limit ) }
+	}
+}

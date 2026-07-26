@@ -1,0 +1,8 @@
+class {
+	this.datasources = {
+		nanobox: {
+			driver: "sqlite",
+			connectionString: "jdbc:sqlite:#createObject( "java", "java.lang.System" ).getProperty( "user.home", "" )#/.nanobox/data/nanobox.db"
+		}
+	}
+}

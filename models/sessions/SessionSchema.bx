@@ -28,8 +28,11 @@ class {
 			"CREATE INDEX IF NOT EXISTS idx_token_events_timestamp ON nanobox_token_events(timestamp)",
 			"CREATE INDEX IF NOT EXISTS idx_token_events_session ON nanobox_token_events(session_id)",
 			"CREATE INDEX IF NOT EXISTS idx_cron_tasks_group ON nanobox_cron_tasks(""group"")",
-			"CREATE INDEX IF NOT EXISTS idx_cron_tasks_enabled ON nanobox_cron_tasks(enabled)"
-		]
+			"CREATE INDEX IF NOT EXISTS idx_cron_tasks_enabled ON nanobox_cron_tasks(enabled)",
+			"CREATE TABLE IF NOT EXISTS nanobox_user_memory (id VARCHAR(36) PRIMARY KEY, category VARCHAR(64) NOT NULL, topic VARCHAR(255) NOT NULL, entry TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+			"CREATE INDEX IF NOT EXISTS idx_memory_category ON nanobox_user_memory(category)",
+			"CREATE INDEX IF NOT EXISTS idx_memory_topic ON nanobox_user_memory(topic)"
+			]
 		for ( var sql in schema ) { queryExecute( sql, {}, { datasource: "nanobox" } ) }
 		println( "NanoBox SQLite schema initialized" )
 	}

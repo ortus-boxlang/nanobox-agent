@@ -1,0 +1,265 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "NanoBox MemoryManager", () => {
+			beforeEach( () => {
+				// Ensure schema exists
+				new "models.sessions.SessionSchema"().main()
+				variables.manager = new "models.system.MemoryManager"()
+			} )
+
+			describe( "save()", () => {
+				it( "saves a new memory entry", () => {
+					var result = variables.manager.save( "user", "favorite-color", "blue" )
+					expect( result ).toBeStruct()
+					expect( result ).toHaveKey( "id" )
+					expect( result.category ).toBe( "user" )
+					expect( result.topic ).toBe( "favorite-color" )
+					expect( result.entry ).toBe( "blue" )
+					expect( result ).toHaveKey( "created_at" )
+					expect( result ).toHaveKey( "updated_at" )
+				} )
+
+				it( "upserts when same category and topic exists", () => {
+					var first = variables.manager.save( "memory", "project-status", "Phase 1" )
+					var second = variables.manager.save( "memory", "project-status", "Phase 2" )
+					expect( second.id ).toBe( first.id )
+					expect( second.entry ).toBe( "Phase 2" )
+				} )
+
+				it( "creates separate entries for different categories", () => {
+					var user = variables.manager.save( "user", "name", "Alice" )
+					var memory = variables.manager.save( "memory", "name", "Bob" )
+					expect( user.id ).notToBe( memory.id )
+					expect( user.entry ).toBe( "Alice" )
+					expect( memory.entry ).toBe( "Bob" )
+				} )
+			} )
+
+			describe( "recall()", () => {
+				it( "returns all memories when no category specified", () => {
+					variables.manager.save( "user", "color", "red" )
+					variables.manager.save( "memory", "fact", "BoxLang is cool" )
+					var result = variables.manager.recall()
+					expect( result ).toBeArray()
+					expect( result.len() ).toBeGTE( 2 )
+				} )
+
+				it( "filters by category", () => {
+					variables.manager.save( "user", "language", "BoxLang" )
+					variables.manager.save( "memory", "topic", "AI" )
+					var users = variables.manager.recall( "user" )
+					expect( users.len() ).toBeGTE( 1 )
+					users.each( ( m ) => expect( m.category ).toBe( "user" ) )
+				} )
+
+				it( "returns empty array for non-existent category", () => {
+					var result = variables.manager.recall( "nonexistent-category-#createUUID()#" )
+					expect( result ).toBeArray()
+					expect( result.len() ).toBe( 0 )
+				} )
+			} )
+
+			describe( "get()", () => {
+				it( "returns a single memory by ID", () => {
+					var saved = variables.manager.save( "preference", "editor", "VS Code" )
+					var fetched = variables.manager.get( saved.id )
+					expect( fetched ).toBeStruct()
+					expect( fetched.id ).toBe( saved.id )
+					expect( fetched.topic ).toBe( "editor" )
+				} )
+
+				it( "returns empty struct for non-existent ID", () => {
+					var result = variables.manager.get( createUUID() )
+					expect( result ).toBeStruct()
+					expect( structIsEmpty( result ) ).toBeTrue()
+				} )
+			} )
+
+			describe( "remove()", () => {
+				it( "deletes a memory by ID", () => {
+					var saved = variables.manager.save( "test", "delete-me", "goodbye" )
+					var result = variables.manager.remove( saved.id )
+					expect( result ).toBeStruct()
+					expect( result.deleted ).toBeTrue()
+					expect( result.id ).toBe( saved.id )
+					// Verify it's gone
+					var fetched = variables.manager.get( saved.id )
+					expect( structIsEmpty( fetched ) ).toBeTrue()
+				} )
+
+				it( "returns deleted=false for non-existent ID", () => {
+					var result = variables.manager.remove( createUUID() )
+					expect( result ).toBeStruct()
+					expect( result.deleted ).toBeFalse()
+				} )
+			} )
+
+			describe( "search()", () => {
+				it( "searches by topic", () => {
+					variables.manager.save( "memory", "favorite-food", "pizza" )
+					variables.manager.save( "memory", "drink", "coffee" )
+					var result = variables.manager.search( "food" )
+					expect( result ).toBeArray()
+					expect( result.len() ).toBeGTE( 1 )
+					expect( result[ 1 ].topic ).toBe( "favorite-food" )
+				} )
+
+				it( "searches by entry content", () => {
+					variables.manager.save( "user", "job", "developer" )
+					variables.manager.save( "user", "hobby", "painting" )
+					var result = variables.manager.search( "developer" )
+					expect( result ).toBeArray()
+					expect( result.len() ).toBeGTE( 1 )
+				} )
+
+				it( "searches by category", () => {
+					variables.manager.save( "unique-cat-#createUUID()#", "test", "value" )
+					var result = variables.manager.search( "unique-cat" )
+					expect( result ).toBeArray()
+					expect( result.len() ).toBeGTE( 1 )
+				} )
+
+				it( "returns empty array for no matches", () => {
+					var result = variables.manager.search( "xyznonexistent#createUUID()#" )
+					expect( result ).toBeArray()
+					expect( result.len() ).toBe( 0 )
+				} )
+			} )
+
+			describe( "export()", () => {
+				it( "returns all memories", () => {
+					variables.manager.save( "export-test", "one", "first" )
+					variables.manager.save( "export-test", "two", "second" )
+					var result = variables.manager.export()
+					expect( result ).toBeArray()
+					expect( result.len() ).toBeGTE( 2 )
+				} )
+			} )
+		} )
+
+		describe( "NanoBox MemoryCommand", () => {
+			beforeEach( () => {
+				new "models.sessions.SessionSchema"().main()
+				variables.manager = new "models.system.MemoryManager"()
+				variables.command = new "cli.commands.MemoryCommand"( variables.manager )
+			} )
+
+			it( "executes list action", () => {
+				var result = variables.command.execute( "list" )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result ).toHaveKey( "memories" )
+			} )
+
+			it( "executes add action", () => {
+				var result = variables.command.execute( "add", { category: "test", topic: "command-test", entry: "works" } )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result ).toHaveKey( "memory" )
+				expect( result.memory.topic ).toBe( "command-test" )
+			} )
+
+			it( "executes show action", () => {
+				var saved = variables.manager.save( "show-test", "detail", "content" )
+				var result = variables.command.execute( "show", { id: saved.id } )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result.memory.id ).toBe( saved.id )
+			} )
+
+			it( "executes delete action", () => {
+				var saved = variables.manager.save( "delete-test", "remove", "bye" )
+				var result = variables.command.execute( "delete", { id: saved.id } )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result.result.deleted ).toBeTrue()
+			} )
+
+			it( "executes search action", () => {
+				variables.manager.save( "search-test", "findable", "searchable content" )
+				var result = variables.command.execute( "search", { query: "searchable" } )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result.memories.len() ).toBeGTE( 1 )
+			} )
+
+			it( "executes export action", () => {
+				var result = variables.command.execute( "export" )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeTrue()
+				expect( result ).toHaveKey( "memories" )
+			} )
+
+			it( "returns error for unknown action", () => {
+				var result = variables.command.execute( "unknown" )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeFalse()
+				expect( result ).toHaveKey( "error" )
+			} )
+
+			it( "returns error when add missing required fields", () => {
+				var result = variables.command.execute( "add", { category: "test" } )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "required" )
+			} )
+
+			it( "returns error when show missing id", () => {
+				var result = variables.command.execute( "show", {} )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "required" )
+			} )
+
+			it( "returns error when delete missing id", () => {
+				var result = variables.command.execute( "delete", {} )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "required" )
+			} )
+
+			it( "returns error when search missing query", () => {
+				var result = variables.command.execute( "search", {} )
+				expect( result ).toBeStruct()
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toContain( "required" )
+			} )
+		} )
+
+		describe( "NanoBox MemoryTools", () => {
+			beforeEach( () => {
+				new "models.sessions.SessionSchema"().main()
+				variables.tools = new "models.tools.MemoryTools"()
+			} )
+
+			it( "memory_save saves and returns memory", () => {
+				var result = variables.tools.memory_save( "tool-test", "tool-topic", "tool content" )
+				expect( result ).toBeStruct()
+				expect( result ).toHaveKey( "id" )
+				expect( result.topic ).toBe( "tool-topic" )
+			} )
+
+			it( "memory_recall returns memories", () => {
+				variables.tools.memory_save( "recall-test", "recall-topic", "recall content" )
+				var result = variables.tools.memory_recall( category="recall-test" )
+				expect( result ).toBeArray()
+				expect( result.len() ).toBeGTE( 1 )
+			} )
+
+			it( "memory_recall searches by topic", () => {
+				variables.tools.memory_save( "search-tool", "unique-topic", "content" )
+				var result = variables.tools.memory_recall( topic="unique-topic" )
+				expect( result ).toBeArray()
+				expect( result.len() ).toBeGTE( 1 )
+			} )
+
+			it( "memory_remove deletes memory", () => {
+				var saved = variables.tools.memory_save( "remove-tool", "to-remove", "bye" )
+				var result = variables.tools.memory_remove( saved.id )
+				expect( result ).toBeStruct()
+				expect( result.deleted ).toBeTrue()
+			} )
+		} )
+	}
+}
