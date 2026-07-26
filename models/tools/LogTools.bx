@@ -1,0 +1,57 @@
+/**
+ * LogTools — AI-callable tools for searching and inspecting BoxLang logs.
+ *
+ * Wraps NanoBox's LogManager to expose log file operations to the
+ * bx-ai tool registry.  The AI can list available logs, view recent
+ * entries, and search across logs for errors or specific patterns.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property manager;
+
+	function init() {
+		variables.manager = new "models.system.LogManager"()
+		return this
+	}
+
+	@AITool( "List available log files with their size and last modified date. Returns an array of log names like nanobox-security, nanobox-backup, ai, application, scheduler. Use this first to discover what logs are available." )
+	public array function log_list() {
+		return variables.manager.list()
+	}
+
+	@AITool( "Show recent entries from a specific log file. Returns the last N lines (default 50). Optionally filter by level: info, warn, error, debug. Use this to inspect what's been happening in a particular log." )
+	public struct function log_show(
+		required string name,
+		numeric lines = 50,
+		string level = ""
+	) {
+		return variables.manager.show( arguments.name, arguments.lines, arguments.level )
+	}
+
+	@AITool( "Search across all log files for a pattern. Returns matching lines grouped by log file. Supports regex patterns. Optionally scope to a specific log with the 'log' parameter, or filter by level (info, warn, error, debug). Use this to find errors, track down issues, or investigate activity." )
+	public array function log_search(
+		required string query,
+		string log = "",
+		string level = "",
+		numeric limit = 50
+	) {
+		return variables.manager.search(
+			arguments.query,
+			arguments.log,
+			arguments.level,
+			"",  // before
+			"",  // after
+			arguments.limit
+		)
+	}
+
+	@AITool( "Get the absolute path to the logs directory on disk. Useful if you need to reference the log directory location." )
+	public string function log_path() {
+		return variables.manager.getPath()
+	}
+
+}
