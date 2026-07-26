@@ -37,6 +37,28 @@ class {
 	}
 
 	/**
+	 * Downloads a Maven Central artifact by group/artifact/version coordinates.
+	 *
+	 * URL pattern: https://repo1.maven.org/maven2/{group}/{artifact}/{version}/{artifact}-{version}.jar
+	 *
+	 * @group     Group ID (e.g. "com.microsoft.playwright")
+	 * @artifact  Artifact ID (e.g. "playwright")
+	 * @version   Version (e.g. "1.49.0")
+	 * @destPath  Absolute path where the JAR should be saved
+	 * @return    Result struct from download()
+	 */
+	struct function downloadMavenArtifact(
+		required string group,
+		required string artifact,
+		required string version,
+		required string destPath
+	) {
+		var urlPath = "/maven2/" & replace( arguments.group, ".", "/", "all" ) & "/" & arguments.artifact & "/" & arguments.version & "/" & arguments.artifact & "-" & arguments.version & ".jar"
+		var url = "https://repo1.maven.org" & urlPath
+		return download( url, arguments.destPath, true )
+	}
+
+	/**
 	 * Downloads a URL to a local file path with a progress bar.
 	 *
 	 * Follows redirects automatically.  Renders a progress bar to stdout

@@ -63,7 +63,7 @@ class {
 
 			return { success: true, status: "started", headless: variables.headless }
 		} catch ( any e ) {
-			return { success: false, error: "Failed to launch browser: #e.message#" }
+			return { success: false, error: "Failed to launch browser: #e.message#", status: "error" }
 		}
 	}
 
