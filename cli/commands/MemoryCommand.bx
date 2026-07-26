@@ -34,6 +34,7 @@ class {
 			case "delete": return delete( arguments.args.id ?: "" )
 			case "search": return search( arguments.args.query ?: "", arguments.args.limit ?: 20 )
 			case "export": return { success: true, memories: variables.memory.export() }
+			case "clear": return clearMem( arguments.args.category ?: "" )
 			default: return { success: false, error: "Unknown memory action: #arguments.action#" }
 		}
 	}
@@ -88,5 +89,15 @@ class {
 	private struct function search( required string query, required numeric limit ) {
 		if ( !len( arguments.query ) ) { return { success: false, error: "A search query is required" } }
 		return { success: true, memories: variables.memory.search( arguments.query, arguments.limit ) }
+	}
+
+	/**
+	 * Clears memory entries, optionally filtered by category.
+	 *
+	 * @category  Optional category to clear
+	 * @return    Struct with success flag and result
+	 */
+	private struct function clearMem( required string category ) {
+		return { success: true, result: variables.memory.clear( category ) }
 	}
 }

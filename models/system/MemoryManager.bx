@@ -76,6 +76,21 @@ class {
 	}
 
 	/**
+	 * Clears memory entries, optionally filtered by category.
+	 *
+	 * @category  Optional category to clear (empty = clear all)
+	 * @return Struct with cleared (boolean) and entriesRemoved keys
+	 */
+	struct function clear( string category = "" ) {
+		if ( len( arguments.category ) ) {
+			var result = queryExecute( "DELETE FROM nanobox_user_memory WHERE category = :category", { category: arguments.category }, { datasource: variables.datasource } )
+		} else {
+			var result = queryExecute( "DELETE FROM nanobox_user_memory", {}, { datasource: variables.datasource } )
+		}
+		return { success: true, entriesRemoved: result, category: len( arguments.category ) ? arguments.category : "all" }
+	}
+
+	/**
 	 * Returns a single memory entry by ID.
 	 *
 	 * @id  Memory UUID to retrieve

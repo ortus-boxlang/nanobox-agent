@@ -26,4 +26,9 @@ class {
 	public struct function memory_remove( required string id ) {
 		return new "models.system.MemoryManager"().remove( arguments.id )
 	}
+
+	@AITool( "Clear all memory entries, or optionally only entries in a specific category (e.g., 'user', 'memory', 'preference'). Use with caution - this operation is irreversible." )
+	public struct function memory_clear( string category = "" ) {
+		return new "models.system.MemoryManager"().clear( arguments.category )
+	}
 }
