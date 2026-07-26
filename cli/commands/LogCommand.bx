@@ -1,0 +1,175 @@
+/**
+ * LogCommand — CLI interface for NanoBox log operations.
+ *
+ * Dispatches log actions (list, show, tail, search, path, clear) to the
+ * injected LogManager. Bare-name action (e.g. `nanobox logs application`)
+ * is treated as `show <name>`.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property manager;
+	property cli;
+
+	/**
+	 * @logManager  LogManager instance that owns log file persistence
+	 * @cli         PrettyCli instance for formatted terminal output
+	 */
+	function init( required any logManager, any cli ) {
+		variables.manager = arguments.logManager
+		variables.cli = arguments.cli ?: new "models.util.PrettyCli"()
+		return this
+	}
+
+	/**
+	 * Dispatches a log action.
+	 *
+	 * Supported actions: list, show, tail, search, path, clear.
+	 * An unknown action name is treated as `show <name>`.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Action arguments
+	 * @return  Result struct with success flag and action-specific payload
+	 */
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "list": return list()
+			case "show": {
+				var name = arguments.args.name ?: arguments.args[ 1 ] ?: ""
+				if ( !len( name ) ) { return { success: false, error: "Log name is required" } }
+				return show( name, arguments.args.lines ?: 50, arguments.args.level ?: "" )
+			}
+			case "tail": {
+				var name = arguments.args.name ?: arguments.args[ 1 ] ?: ""
+				if ( !len( name ) ) { return { success: false, error: "Log name is required" } }
+				return { success: true, action: "tail", name: name }
+			}
+			case "search": {
+				var query = arguments.args.query ?: arguments.args[ 1 ] ?: ""
+				if ( !len( query ) ) { return { success: false, error: "Search query is required" } }
+				return search(
+					query,
+					arguments.args.log ?: "",
+					arguments.args.level ?: "",
+					arguments.args.before ?: "",
+					arguments.args.after ?: "",
+					arguments.args.limit ?: 50
+				)
+			}
+			case "path": return path()
+			case "clear": {
+				var name = arguments.args.name ?: arguments.args[ 1 ] ?: ""
+				if ( !len( name ) ) { return { success: false, error: "Log name is required" } }
+				return clear( name )
+			}
+			default: {
+				if ( len( arguments.action ) ) {
+					return show( arguments.action, arguments.args.lines ?: 50, arguments.args.level ?: "" )
+				}
+				return { success: false, error: "Unknown logs action: #arguments.action#" }
+			}
+		}
+	}
+
+	/**
+	 * Lists all log files.
+	 *
+	 * @return Result struct with success flag and log list
+	 */
+	private struct function list() {
+		var logs = variables.manager.list()
+		return { success: true, logs: logs, total: arrayLen( logs ), path: variables.manager.getPath() }
+	}
+
+	/**
+	 * Shows log entries with colorized entries.
+	 *
+	 * @name   Log name (without .log extension)
+	 * @lines  Number of lines to show
+	 * @level  Optional level filter
+	 * @return Result struct with success flag and entries
+	 */
+	private struct function show( required string name, numeric lines = 50, string level = "" ) {
+		var result = variables.manager.show( arguments.name, arguments.lines, arguments.level )
+		if ( !result.success ) { return result }
+		var colorized = []
+		for ( var entry in result.entries ) {
+			arrayAppend( colorized, colorizeLogEntry( entry ) )
+		}
+		result.entries = colorized
+		return result
+	}
+
+	/**
+	 * Searches log files.
+	 *
+	 * @query   Search pattern (supports regex)
+	 * @log     Optional specific log name
+	 * @level   Optional level filter
+	 * @before  Optional date filter
+	 * @after   Optional date filter
+	 * @limit   Maximum results
+	 * @return Result struct with success flag and matches
+	 */
+	private struct function search(
+		required string query,
+		string log = "",
+		string level = "",
+		string before = "",
+		string after = "",
+		numeric limit = 50
+	) {
+		var results = variables.manager.search(
+			arguments.query, arguments.log, arguments.level,
+			arguments.before, arguments.after, arguments.limit
+		)
+		var colorized = []
+		for ( var match in results ) {
+			match.coloredLine = colorizeLogEntry( match.matchedLine )
+			arrayAppend( colorized, match )
+		}
+		return { success: true, matches: colorized, total: arrayLen( colorized ) }
+	}
+
+	/**
+	 * Prints the logs directory path.
+	 *
+	 * @return Result struct with success flag and path
+	 */
+	private struct function path() {
+		return { success: true, path: variables.manager.getPath() }
+	}
+
+	/**
+	 * Clears a log file.
+	 *
+	 * @name Log name (without .log extension)
+	 * @return Result struct with success flag
+	 */
+	private struct function clear( required string name ) {
+		var cleared = variables.manager.clear( arguments.name )
+		if ( cleared ) {
+			return { success: true, name: arguments.name }
+		}
+		return { success: false, error: "Failed to clear log: #arguments.name#" }
+	}
+
+	/**
+	 * Colorizes a log entry based on its level.
+	 *
+	 * @entry Log line text
+	 * @return Colorized string
+	 */
+	private string function colorizeLogEntry( required string entry ) {
+		var line = arguments.entry
+		if ( reFindNoCase( "\[error\]", line ) ) { return variables.cli.red( line ) }
+		if ( reFindNoCase( "\[warn", line ) ) { return variables.cli.yellow( line ) }
+		if ( reFindNoCase( "\[info", line ) ) { return variables.cli.green( line ) }
+		if ( reFindNoCase( "\[debug\]", line ) || reFindNoCase( "\[trace\]", line ) ) { return variables.cli.dim( line ) }
+		return line
+	}
+
+}

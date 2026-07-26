@@ -1,0 +1,41 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "SpeakCommand", () => {
+			variables.mockConfig = {
+				get: function( key, defaultValue = "" ) {
+					if ( key == "bx-ai.defaultProvider" ) return ""
+					return defaultValue
+				}
+			}
+
+			it( "rejects generation without text", () => {
+				var cmd = new "cli.commands.SpeakCommand"( variables.mockConfig )
+				var result = cmd.execute( "", { text: "" } )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "Text" )
+			} )
+
+			it( "handles unknown help action", () => {
+				var cmd = new "cli.commands.SpeakCommand"( variables.mockConfig )
+				var result = cmd.execute( "help", {} )
+				expect( result.success ).toBeTrue()
+				expect( result.text ?: "" ).toInclude( "speak" )
+			} )
+
+			it( "resolves default provider when none configured", () => {
+				var cmd = new "cli.commands.SpeakCommand"( variables.mockConfig )
+				var result = cmd.execute( "", { text: "hello world" } )
+				// Falls back to openai when nothing configured
+				expect( result.success ).toBeFalse()
+				expect( result.provider ?: "" ).toBe( "openai" )
+			} )
+
+			it( "accepts explicit provider override", () => {
+				var cmd = new "cli.commands.SpeakCommand"( variables.mockConfig )
+				var result = cmd.execute( "", { text: "hello", provider: "elevenlabs" } )
+				expect( result.success ).toBeFalse()
+				expect( result.provider ?: "" ).toBe( "elevenlabs" )
+			} )
+		} )
+	}
+}

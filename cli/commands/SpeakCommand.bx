@@ -1,0 +1,234 @@
+/**
+ * SpeakCommand — CLI interface for the aiSpeak() BIF (text-to-speech).
+ *
+ * Synthesises text into speech audio and saves the result to disk.
+ * Resolves the AI provider from the active NanoBox configuration, honouring
+ * the same precedence as ChatCommand (named model → override → default).
+ *
+ * Usage:
+ *   nanobox speak "Hello, world"
+ *   nanobox speak --voice nova --speed 1.2 --format wav "Greeting"
+ *   nanobox speak --output /tmp/hello.mp3 "Greeting"
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property configManager;
+
+	/**
+	 * @appConfig ConfigManager instance for provider/model resolution
+	 */
+	function init( required any appConfig ) {
+		variables.configManager = arguments.appConfig
+		return this
+	}
+
+	/**
+	 * Synthesises text to speech and saves the result as an audio file.
+	 *
+	 * @action  Sub-action name. Currently only the default (empty/"speak") is supported.
+	 *          "help" prints usage information.
+	 * @args    Named arguments:
+	 *            text        — (or positional remainder) the text to synthesise
+	 *            voice       — voice name/ID, or "male"/"female" keyword
+	 *            speed       — playback speed (0.25–4.0, default 1.0)
+	 *            format      — output audio format: mp3, wav, flac, opus, pcm (default mp3)
+	 *            output      — absolute output file path; overrides the default save dir
+	 *            filename    — filename (without dir) to use under the default save dir
+	 *            provider    — override AI provider (defaults to configured provider)
+	 *            model       — TTS model (e.g. tts-1, tts-1-hd)
+	 *            timeout     — HTTP request timeout in seconds (default 30)
+	 * @return  Struct with success flag, saved file path, and metadata
+	 */
+	struct function execute( required string action = "", struct args = {} ) {
+		if ( lCase( arguments.action ) == "help" ) {
+			return { success: true, text: buildHelpText() }
+		}
+
+		var text = trim( arguments.args.text ?: "" )
+		if ( !len( text ) ) {
+			return { success: false, error: "Text to speak is required. Usage: nanobox speak 'your text here'" }
+		}
+
+		// Resolve provider + model from config, same as ChatCommand
+		var selection = resolveSpeechModel( arguments.args )
+
+		// Build aiSpeak() params + options
+		var params  = {}
+		var options = { provider: selection.provider }
+
+		if ( len( arguments.args.voice ?: "" ) )   { options.voice = arguments.args.voice }
+		if ( len( selection.model ?: "" ) )         { params.model  = selection.model }
+
+		// Speed: accept numeric or string; validate range
+		var speed = arguments.args.speed ?: ""
+		if ( len( speed ) && isNumeric( speed ) ) {
+			speed = val( speed )
+			if ( speed < 0.25 || speed > 4.0 ) {
+				return { success: false, error: "Speed must be between 0.25 and 4.0 (received: #speed#)" }
+			}
+			params.speed = speed
+		}
+
+		// Format validation
+		var allowedFormats = [ "mp3", "wav", "flac", "opus", "pcm" ]
+		var format = lCase( arguments.args.format ?: "mp3" )
+		if ( !allowedFormats.find( format ) ) {
+			return { success: false, error: "Unsupported format '#format#'. Allowed: #arrayToList( allowedFormats, ', ' )#" }
+		}
+		options.outputFormat = format
+
+		if ( len( arguments.args.timeout ?: "" ) && isNumeric( arguments.args.timeout ) ) {
+			options.timeout = val( arguments.args.timeout )
+		}
+
+		// Resolve output path
+		var outputPath = resolveOutputPath( arguments.args, format )
+		options.outputFile = outputPath
+
+		try {
+			var result = aiSpeak( text, params, options )
+
+			// When outputFile is set, aiSpeak() returns the path string
+			if ( isSimpleValue( result ) ) {
+				return {
+					success : true,
+					path    : result,
+					format  : format,
+					size    : fileExists( result ) ? getFileInfo( result ).size : 0,
+					provider: selection.provider,
+					model   : selection.model ?: "",
+					voice   : arguments.args.voice ?: ""
+				}
+			}
+
+			// Fallback: AiSpeechResponse object — save it ourselves
+			if ( isObject( result ) && result.hasAudio() ) {
+				result.saveToFile( outputPath )
+				return {
+					success : true,
+					path    : outputPath,
+					format  : format,
+					size    : result.getSize(),
+					provider: selection.provider,
+					model   : selection.model ?: "",
+					voice   : arguments.args.voice ?: ""
+				}
+			}
+
+			return { success: false, error: "aiSpeak() returned no audio data." }
+		} catch ( any e ) {
+			return { success: false, error: e.message ?: toString( e ), provider: selection.provider ?: "" }
+		}
+	}
+
+	/**
+	 * Resolves the TTS provider and model for a request.
+	 *
+	 * Resolution order:
+	 *   1. Explicit --provider / --model override on the command line
+	 *   2. Named model config (bx-ai.namedModels.<name>)
+	 *   3. Default provider (bx-ai.defaultProvider)
+	 *
+	 * TTS is supported by several providers (openai, mistral, gemini, grok, elevenlabs).
+	 * Falls back to "openai" when nothing is configured — the aiSpeak() BIF will
+	 * then pick up OPENAI_API_KEY from the environment.
+	 */
+	private struct function resolveSpeechModel( struct args ) {
+		// 1. Explicit overrides
+		if ( len( arguments.args.provider ?: "" ) ) {
+			return { success: true, provider: arguments.args.provider, model: arguments.args.model ?: "" }
+		}
+
+		// 2. Named model
+		var named = arguments.args.namedModel ?: arguments.args[ "named-model" ] ?: variables.configManager.get( "bx-ai.defaultNamedModel", "" )
+		if ( len( named ) ) {
+			var namedConfig = variables.configManager.get( "bx-ai.namedModels.#named#", {} )
+			if ( !structIsEmpty( namedConfig ) ) {
+				return { success: true, provider: namedConfig.provider, model: arguments.args.model ?: namedConfig.model ?: "" }
+			}
+		}
+
+		// 3. Default provider
+		var provider = variables.configManager.get( "bx-ai.defaultProvider", "" )
+		if ( !len( provider ) ) { provider = "openai" }
+
+		return { success: true, provider: provider, model: arguments.args.model ?: "" }
+	}
+
+	/**
+	 * Resolves the absolute output file path for the audio file.
+	 *
+	 * Precedence:
+	 *   1. Explicit --output (absolute or relative; honoured as-is, made absolute)
+	 *   2. --filename under the default save dir (~/Audio/nanobox/)
+	 *   3. Auto-generated filename: speak_<ISO-timestamp>.<format>
+	 *
+	 * The default save dir is created on demand.
+	 */
+	private string function resolveOutputPath( struct args, string format ) {
+		var defaultDir = expandPath( "~/Audio/nanobox" )
+
+		// 1. Explicit path
+		if ( len( arguments.args.output ?: "" ) ) {
+			var explicit = arguments.args.output
+			// Make relative paths absolute relative to CWD
+			if ( !reFindNoCase( "^(/|[A-Z]:)", explicit ) ) {
+				explicit = expandPath( "./" & explicit )
+			}
+			// Ensure parent dir exists
+			var parent = getParentPath( explicit )
+			if ( !directoryExists( parent ) ) { directoryCreate( parent ) }
+			return explicit
+		}
+
+		// Ensure default dir exists
+		if ( !directoryExists( defaultDir ) ) { directoryCreate( defaultDir ) }
+
+		// 2. Custom filename
+		var filename = arguments.args.filename ?: "speak_#dateFormat( now(), 'yyyymmdd' )#_#timeFormat( now(), 'HHmmss' )#.#arguments.format#"
+		// Ensure extension matches format
+		if ( !filename.endsWith( ".#arguments.format#" ) ) {
+			filename = filename & ".#arguments.format#"
+		}
+
+		return defaultDir & "/" & filename
+	}
+
+	/**
+	 * Returns the parent directory of an absolute file path.
+	 */
+	private string function getParentPath( required string path ) {
+		return createObject( "java", "java.io.File" ).init( arguments.path ).getParent()
+	}
+
+	/**
+	 * Builds the help text for `nanobox speak --help`.
+	 */
+	private string function buildHelpText() {
+		var nl = char( 10 )
+		return "nanobox speak -- Text-to-Speech via aiSpeak()" & nl & nl &
+			"Usage:" & nl &
+			"  nanobox speak ""text to speak"" [options]" & nl & nl &
+			"Options:" & nl &
+			"  --voice <name>       Voice name/ID, or ""male""/""female"" (provider-resolved)" & nl &
+			"  --speed <n>          Playback speed 0.25-4.0 (default: 1.0)" & nl &
+			"  --format <fmt>       Output format: mp3, wav, flac, opus, pcm (default: mp3)" & nl &
+			"  --output <path>      Save to explicit file path" & nl &
+			"  --filename <name>    Custom filename under default save dir" & nl &
+			"  --provider <name>    AI provider (default: configured provider)" & nl &
+			"  --model <name>       TTS model (e.g. tts-1, tts-1-hd)" & nl &
+			"  --named-model <n>    Use a configured named model provider" & nl &
+			"  --timeout <sec>      HTTP timeout in seconds (default: 30)" & nl & nl &
+			"Default save directory: ~/Audio/nanobox/" & nl & nl &
+			"Examples:" & nl &
+			"  nanobox speak ""Hello world""" & nl &
+			"  nanobox speak --voice nova --speed 1.2 ""Welcome""" & nl &
+			"  nanobox speak --format wav --output /tmp/hi.wav ""Hi there""" & nl & nl &
+			"Supported providers: openai, mistral, gemini, grok, elevenlabs"
+	}
+
+}

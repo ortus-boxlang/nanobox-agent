@@ -68,7 +68,23 @@ class {
 			case "update": return new "cli.commands.UpdateCommand"( new "models.system.UpdateManager"() ).execute( action ?: "status", args )
 			case "vault": return new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( variables.home & "/vault" ) ).execute( action ?: "list", args )
 			case "security": return new "cli.commands.SecurityCommand"( new "models.security.SecurityCzar"() ).execute( action ?: "status", args )
+			case "logs":
+			case "log": {
+				// Handle bare positional as show action: `nanobox logs mylog` -> show mylog
+				var logsKnown = [ "list", "show", "tail", "search", "path", "clear" ]
+				if ( !logsKnown.contains( lCase( action ) ) ) {
+					// First positional after 'logs' is not a known action -> treat as show <name>
+					return new "cli.commands.LogCommand"( new "models.system.LogManager"() ).execute( action, args )
+				}
+				return new "cli.commands.LogCommand"( new "models.system.LogManager"() ).execute( action, args )
+			}
 			case "setup": return new "cli.commands.SetupCommand"( variables.config ).execute( args.force ?: args[ "force" ] ?: false )
+			case "image": {
+				var imgPrompt = args.prompt ?: args.query ?: arrayToList( parsed.positionals.slice( 2 ), " " )
+				return new "cli.commands.ImageCommand"( variables.config ).execute( imgPrompt, args )
+			}
+			case "speak":
+			case "tts": return new "cli.commands.SpeakCommand"( variables.config ).execute( action ?: "speak", args )
 			case "web": return wrapProcessResult( new "cli.commands.WebCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
 			case "worker": return wrapProcessResult( new "cli.commands.WorkerCommand"( new "models.system.ProcessManager"() ).execute( action ?: "status", args ) )
 			case "start":
@@ -164,6 +180,8 @@ class {
 		if ( arguments.command == "vault" && arguments.action == "import" && options.keyExists( "category" ) ) { result.category = options.category }
 		if ( arguments.command == "gateway" && arguments.action == "send" ) { if ( values.len() >= 4 && !result.keyExists( "recipient" ) ) { result.recipient = values[ 4 ] }; if ( values.len() >= 5 && !result.keyExists( "message" ) ) { result.message = values[ 5 ] } }
 		if ( arguments.command == "gateway" && arguments.action == "broadcast" ) { if ( values.len() >= 3 && !result.keyExists( "recipient" ) ) { result.recipient = values[ 3 ] }; if ( values.len() >= 4 && !result.keyExists( "message" ) ) { result.message = values[ 4 ] } }
+		if ( [ "speak", "tts" ].contains( arguments.command ) && values.len() >= 2 && !result.keyExists( "text" ) ) { result.text = arrayToList( values.slice( 2 ), " " ) }
+		if ( arguments.command == "image" && values.len() >= 2 && !result.keyExists( "prompt" ) ) { result.prompt = arrayToList( values.slice( 2 ), " " ) }
 		if ( result.keyExists( "token-env" ) ) { result.tokenEnv = result[ "token-env" ] }
 		return result
 	}

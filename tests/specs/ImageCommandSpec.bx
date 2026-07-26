@@ -1,0 +1,56 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "ImageCommand", () => {
+			variables.mockConfig = {
+				get: function( key, defaultValue = "" ) {
+					return defaultValue
+				},
+				getNanoboxHome: function() { return "/tmp/nanobox-test" }
+			}
+
+			it( "rejects generation without a prompt", () => {
+				var cmd = new "cli.commands.ImageCommand"( variables.mockConfig )
+				var result = cmd.execute( "", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "prompt is required" )
+			} )
+
+			it( "rejects generation when no provider is configured", () => {
+				var cmd = new "cli.commands.ImageCommand"( variables.mockConfig )
+				var result = cmd.execute( "a test prompt", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toBeEmpty().or.toInclude( "provider" )
+			} )
+
+			it( "handles named model resolution", () => {
+				var cfg = {
+					get: function( key, defaultValue = "" ) {
+						if ( key == "bx-ai.defaultNamedModel" ) return "testmodel"
+						if ( key == "bx-ai.namedModels.testmodel" ) return { provider: "openai", model: "dall-e-3" }
+						return defaultValue
+					},
+					getNanoboxHome: function() { return "/tmp/nanobox-test" }
+				}
+				var cmd = new "cli.commands.ImageCommand"( cfg )
+				var result = cmd.execute( "a test prompt", {} )
+				// Will fail at aiImage() call but provider resolution succeeds
+				expect( result.success ).toBeFalse()
+				expect( result.provider ?: "" ).toBe( "openai" )
+			} )
+
+			it( "accepts explicit provider overrides", () => {
+				var cfg = {
+					get: function( key, defaultValue = "" ) {
+						if ( key == "bx-ai.providers.testprovider" ) return {}
+						return defaultValue
+					},
+					getNanoboxHome: function() { return "/tmp/nanobox-test" }
+				}
+				var cmd = new "cli.commands.ImageCommand"( cfg )
+				var result = cmd.execute( "test prompt", { provider: "testprovider" } )
+				expect( result.success ).toBeFalse()
+				expect( result.provider ?: "" ).toBe( "testprovider" )
+			} )
+		} )
+	}
+}

@@ -14,7 +14,7 @@ import models.system.ConfigManager
  */
 class {
 	static VERSION = "0.1.0"
-	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker setup#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#"
+	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker setup speak image#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#"
 
 	/**
 	 * Application entry point invoked by the BoxLang runtime.

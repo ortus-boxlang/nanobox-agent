@@ -1,0 +1,114 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "LogCommand", () => {
+
+			beforeEach( () => {
+				variables.logDir = getTempDirectory() & "nanobox-cmd-logs-test-" & createUUID()
+				directoryCreate( variables.logDir )
+				variables.logManager = new "models.system.LogManager"( variables.logDir )
+				variables.logCommand = new "cli.commands.LogCommand"( variables.logManager )
+			} )
+
+			afterEach( () => {
+				if ( directoryExists( variables.logDir ) ) {
+					directoryDelete( variables.logDir, true )
+				}
+			} )
+
+			it( "list action returns log files", () => {
+				fileWrite( variables.logDir & "/app.log", "test" )
+				fileWrite( variables.logDir & "/security.log", "test" )
+
+				var result = variables.logCommand.execute( "list" )
+				expect( result.success ).toBeTrue()
+				expect( result.logs.len() ).toBe( 2 )
+				expect( result.total ).toBe( 2 )
+				expect( result.path ).toBe( variables.logDir )
+			} )
+
+			it( "list returns empty when no logs exist", () => {
+				var result = variables.logCommand.execute( "list" )
+				expect( result.success ).toBeTrue()
+				expect( result.logs.len() ).toBe( 0 )
+				expect( result.total ).toBe( 0 )
+			} )
+
+			it( "show action returns formatted log entries", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [ERROR] Test error#char( 10 )#" )
+
+				var result = variables.logCommand.execute( "show", { name: "app" } )
+				expect( result.success ).toBeTrue()
+				expect( result.name ).toBe( "app" )
+				expect( result.entries.len() ).toBe( 1 )
+			} )
+
+			it( "show returns error for missing log name", () => {
+				var result = variables.logCommand.execute( "show", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "required" )
+			} )
+
+			it( "bare name is treated as show action", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [INFO] Test#char( 10 )#" )
+
+				var result = variables.logCommand.execute( "app" )
+				expect( result.success ).toBeTrue()
+				expect( result.name ).toBe( "app" )
+			} )
+
+			it( "search action returns search results", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [ERROR] Error occurred#char( 10 )#" )
+
+				var result = variables.logCommand.execute( "search", { query: "error" } )
+				expect( result.success ).toBeTrue()
+				expect( result.matches.len() ).toBe( 1 )
+				expect( result.total ).toBe( 1 )
+			} )
+
+			it( "search returns error for missing query", () => {
+				var result = variables.logCommand.execute( "search", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "required" )
+			} )
+
+			it( "path action returns logs directory path", () => {
+				var result = variables.logCommand.execute( "path" )
+				expect( result.success ).toBeTrue()
+				expect( result.path ).toBe( variables.logDir )
+			} )
+
+			it( "clear action clears log file", () => {
+				fileWrite( variables.logDir & "/app.log", "test content" )
+
+				var result = variables.logCommand.execute( "clear", { name: "app" } )
+				expect( result.success ).toBeTrue()
+				expect( result.name ).toBe( "app" )
+
+				var info = getFileInfo( variables.logDir & "/app.log" )
+				expect( info.size ).toBe( 0 )
+			} )
+
+			it( "clear returns error for missing log name", () => {
+				var result = variables.logCommand.execute( "clear", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "required" )
+			} )
+
+			it( "tail action returns tail descriptor", () => {
+				var result = variables.logCommand.execute( "tail", { name: "app" } )
+				expect( result.success ).toBeTrue()
+				expect( result.action ).toBe( "tail" )
+				expect( result.name ).toBe( "app" )
+			} )
+
+			it( "tail returns error for missing log name", () => {
+				var result = variables.logCommand.execute( "tail", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "required" )
+			} )
+
+		} )
+	}
+
+}

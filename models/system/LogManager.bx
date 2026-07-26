@@ -1,0 +1,278 @@
+/**
+ * LogManager — Backend for NanoBox log file operations.
+ *
+ * Provides list/show/search/clear operations on BoxLang log files.
+ * Scans the configured logs directory (defaults to ~/.boxlang/logs)
+ * and parses plain-text log entries with regex.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property logsDir;
+
+	/**
+	 * @logsDir Absolute path to the logs directory. Defaults to config's logs directory or ~/.boxlang/logs
+	 */
+	function init( string logsDir = "" ) {
+		if ( !len( arguments.logsDir ) ) {
+			try {
+				var config = new "models.system.ConfigManager"()
+				variables.logsDir = config.get( "nanobox.logsDir", "" )
+			} catch ( any e ) {
+				variables.logsDir = ""
+			}
+		} else {
+			variables.logsDir = arguments.logsDir
+		}
+
+		if ( !len( variables.logsDir ) ) {
+			variables.logsDir = expandPath( "~/.boxlang/logs" )
+		}
+
+		return this
+	}
+
+	/**
+	 * Lists all .log files in the logs directory.
+	 *
+	 * @return Array of structs: {name, size, sizeFormatted, lastModified, path}
+	 */
+	array function list() {
+		var result = []
+		var dir = variables.logsDir
+
+		if ( !directoryExists( dir ) ) {
+			return result
+		}
+
+		var files = directoryList( dir, false, "query", "*.log", "dateLastModified DESC" )
+
+		for ( var row in files ) {
+			var filePath = row.directory & "/" & row.name
+			var size = row.size
+			arrayAppend( result, {
+				name: replaceNoCase( row.name, ".log", "" ),
+				size: size,
+				sizeFormatted: formatFileSize( size ),
+				lastModified: row.dateLastModified,
+				path: filePath
+			} )
+		}
+
+		return result
+	}
+
+	/**
+	 * Shows the last N lines from a log file with optional level filtering.
+	 *
+	 * @name   Log name (without .log extension)
+	 * @lines  Number of lines to return (default 50)
+	 * @level  Optional level filter: info, warn, error, debug
+	 * @return Struct: {name, entries:[], total, showing}
+	 */
+	struct function show( required string name, numeric lines = 50, string level = "" ) {
+		var filePath = variables.logsDir & "/" & arguments.name & ".log"
+
+		if ( !fileExists( filePath ) ) {
+			return {
+				success: false,
+				error: "Log file not found: #arguments.name#"
+			}
+		}
+
+		var allLines = fileReadLines( filePath )
+		var filteredLines = allLines
+
+		// Apply level filter if specified
+		if ( len( arguments.level ) ) {
+			filteredLines = []
+			var levelPattern = "\[" & lCase( arguments.level ) & "\]"
+			for ( var line in allLines ) {
+				if ( reFindNoCase( levelPattern, line ) ) {
+					arrayAppend( filteredLines, line )
+				}
+			}
+		}
+
+		// Take last N lines
+		var startLine = max( 1, arrayLen( filteredLines ) - arguments.lines + 1 )
+		var showLines = []
+		for ( var i = startLine; i <= arrayLen( filteredLines ); i++ ) {
+			arrayAppend( showLines, filteredLines[ i ] )
+		}
+
+		return {
+			success: true,
+			name: arguments.name,
+			entries: showLines,
+			total: arrayLen( filteredLines ),
+			showing: arrayLen( showLines )
+		}
+	}
+
+	/**
+	 * Searches across log files for a query pattern.
+	 *
+	 * @query   Search pattern (supports regex)
+	 * @log     Optional specific log name to search (default: all logs)
+	 * @level   Optional level filter
+	 * @before  Optional date filter (YYYY-MM-DD)
+	 * @after   Optional date filter (YYYY-MM-DD)
+	 * @limit   Maximum results to return (default 50)
+	 * @return Array of structs: {log, line, lineNumber, matchedLine}
+	 */
+	array function search(
+		required string query,
+		string log = "",
+		string level = "",
+		string before = "",
+		string after = "",
+		numeric limit = 50
+	) {
+		var results = []
+		var files = []
+
+		if ( len( arguments.log ) ) {
+			var filePath = variables.logsDir & "/" & arguments.log & ".log"
+			if ( fileExists( filePath ) ) {
+				arrayAppend( files, { name: arguments.log, path: filePath } )
+			}
+		} else {
+			var dir = variables.logsDir
+			if ( directoryExists( dir ) ) {
+				var dirFiles = directoryList( dir, false, "query", "*.log" )
+				for ( var row in dirFiles ) {
+					arrayAppend( files, {
+						name: replaceNoCase( row.name, ".log", "" ),
+						path: row.directory & "/" & row.name
+					} )
+				}
+			}
+		}
+
+		for ( var file in files ) {
+			if ( arrayLen( results ) >= arguments.limit ) {
+				break
+			}
+
+			var lines = fileReadLines( file.path )
+			var lineNumber = 0
+
+			for ( var line in lines ) {
+				lineNumber++
+
+				// Apply query filter
+				if ( len( arguments.query ) && !reFindNoCase( arguments.query, line ) ) {
+					continue
+				}
+
+				// Apply level filter
+				if ( len( arguments.level ) ) {
+					var levelPattern = "\[" & lCase( arguments.level ) & "\]"
+					if ( !reFindNoCase( levelPattern, line ) ) {
+						continue
+					}
+				}
+
+				// Apply date filters
+				if ( len( arguments.before ) || len( arguments.after ) ) {
+					var dateMatch = reFind( "\[(\d{4}-\d{2}-\d{2})", line, 1, true )
+					if ( dateMatch.pos[ 1 ] > 0 ) {
+						var lineDate = mid( line, dateMatch.pos[ 1 ] + 1, dateMatch.len[ 1 ] - 1 )
+						if ( len( arguments.before ) && lineDate >= arguments.before ) {
+							continue
+						}
+						if ( len( arguments.after ) && lineDate <= arguments.after ) {
+							continue
+						}
+					}
+				}
+
+				arrayAppend( results, {
+					log: file.name,
+					line: lineNumber,
+					matchedLine: line
+				} )
+
+				if ( arrayLen( results ) >= arguments.limit ) {
+					break
+				}
+			}
+		}
+
+		return results
+	}
+
+	/**
+	 * Returns the absolute path to the logs directory.
+	 *
+	 * @return Absolute path string
+	 */
+	string function getPath() {
+		return variables.logsDir
+	}
+
+	/**
+	 * Clears (truncates) a log file to 0 bytes.
+	 *
+	 * @name Log name (without .log extension)
+	 * @return Boolean indicating success
+	 */
+	boolean function clear( required string name ) {
+		var filePath = variables.logsDir & "/" & arguments.name & ".log"
+
+		if ( !fileExists( filePath ) ) {
+			return false
+		}
+
+		try {
+			fileWrite( filePath, "" )
+			return true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * Reads all lines from a file.
+	 *
+	 * @filePath Absolute path to the file
+	 * @return Array of line strings
+	 */
+	private array function fileReadLines( required string filePath ) {
+		if ( !fileExists( arguments.filePath ) ) {
+			return []
+		}
+
+		var content = fileRead( arguments.filePath )
+		if ( !len( content ) ) {
+			return []
+		}
+
+		return listToArray( content, char( 10 ) )
+	}
+
+	/**
+	 * Formats a file size in bytes to a human-readable string.
+	 *
+	 * @size Size in bytes
+	 * @return Formatted string (e.g., "1.5 MB", "234 KB")
+	 */
+	private string function formatFileSize( required numeric size ) {
+		if ( arguments.size < 1024 ) {
+			return arguments.size & " B"
+		}
+
+		var kb = arguments.size / 1024
+		if ( kb < 1024 ) {
+			return numberFormat( kb, "0.0" ) & " KB"
+		}
+
+		var mb = kb / 1024
+		return numberFormat( mb, "0.0" ) & " MB"
+	}
+
+}

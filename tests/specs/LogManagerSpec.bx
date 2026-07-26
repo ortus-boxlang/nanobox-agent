@@ -1,0 +1,166 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "LogManager", () => {
+
+			beforeEach( () => {
+				variables.logDir = getTempDirectory() & "nanobox-logs-test-" & createUUID()
+				directoryCreate( variables.logDir )
+				variables.logManager = new "models.system.LogManager"( variables.logDir )
+			} )
+
+			afterEach( () => {
+				if ( directoryExists( variables.logDir ) ) {
+					directoryDelete( variables.logDir, true )
+				}
+			} )
+
+			it( "list() returns empty array when no logs exist", () => {
+				var result = variables.logManager.list()
+				expect( result ).toBeArray()
+				expect( result.len() ).toBe( 0 )
+			} )
+
+			it( "list() returns all log files with metadata", () => {
+				fileWrite( variables.logDir & "/app.log", "test content" )
+				fileWrite( variables.logDir & "/security.log", "test content" )
+
+				var result = variables.logManager.list()
+				expect( result ).toBeArray()
+				expect( result.len() ).toBe( 2 )
+
+				var names = []
+				for ( var f in result ) { names.append( f.name ) }
+				expect( names ).toInclude( "app" )
+				expect( names ).toInclude( "security" )
+
+				var appEntry = result.filter( (x) => x.name == "app" )[ 1 ]
+				expect( appEntry.path ).toBe( variables.logDir & "/app.log" )
+				expect( appEntry.size ).toBeNumeric()
+				expect( appEntry.sizeFormatted ).toBeString()
+			} )
+
+			it( "list() formats file sizes correctly", () => {
+				var content = repeatString( "x", 2048 )
+				fileWrite( variables.logDir & "/big.log", content )
+
+				var result = variables.logManager.list()
+				expect( result[ 1 ].size ).toBe( 2048 )
+				expect( result[ 1 ].sizeFormatted ).toBe( "2.0 KB" )
+			} )
+
+			it( "show() returns error for non-existent log", () => {
+				var result = variables.logManager.show( "nonexistent" )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "not found" )
+			} )
+
+			it( "show() returns last N lines by default", () => {
+				var lines = []
+				for ( var i = 1; i <= 100; i++ ) {
+					lines.append( "[2026-01-01 12:00:00] [INFO] Line " & i )
+				}
+				fileWrite( variables.logDir & "/app.log", arrayToList( lines, char( 10 ) ) )
+
+				var result = variables.logManager.show( "app" )
+				expect( result.success ).toBeTrue()
+				expect( result.name ).toBe( "app" )
+				expect( result.entries.len() ).toBe( 50 )
+				expect( result.total ).toBe( 100 )
+				expect( result.showing ).toBe( 50 )
+			} )
+
+			it( "show() respects custom line limit", () => {
+				var lines = []
+				for ( var i = 1; i <= 20; i++ ) {
+					lines.append( "[2026-01-01 12:00:00] [INFO] Line " & i )
+				}
+				fileWrite( variables.logDir & "/app.log", arrayToList( lines, char( 10 ) ) )
+
+				var result = variables.logManager.show( "app", 10 )
+				expect( result.entries.len() ).toBe( 10 )
+			} )
+
+			it( "show() filters by log level", () => {
+				var content = "[2026-01-01 12:00:00] [INFO] Info line 1#char( 10 )#"
+				content &= "[2026-01-01 12:00:01] [ERROR] Error line 1#char( 10 )#"
+				content &= "[2026-01-01 12:00:02] [INFO] Info line 2#char( 10 )#"
+				content &= "[2026-01-01 12:00:03] [WARN] Warn line 1#char( 10 )#"
+				fileWrite( variables.logDir & "/app.log", content )
+
+				var result = variables.logManager.show( "app", 50, "ERROR" )
+				expect( result.entries.len() ).toBe( 1 )
+				expect( result.entries[ 1 ] ).toInclude( "Error line" )
+			} )
+
+			it( "search() finds matches across all logs", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [ERROR] App error#char( 10 )#" )
+				fileWrite( variables.logDir & "/security.log", "[2026-01-01 12:00:00] [ERROR] Security error#char( 10 )#" )
+
+				var result = variables.logManager.search( "error" )
+				expect( result.len() ).toBe( 2 )
+			} )
+
+			it( "search() filters by specific log file", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [ERROR] App error#char( 10 )#" )
+				fileWrite( variables.logDir & "/security.log", "[2026-01-01 12:00:00] [ERROR] Security error#char( 10 )#" )
+
+				var result = variables.logManager.search( "error", "app" )
+				expect( result.len() ).toBe( 1 )
+				expect( result[ 1 ].log ).toBe( "app" )
+			} )
+
+			it( "search() filters by level", () => {
+				var content = "[2026-01-01 12:00:00] [INFO] Info#char( 10 )#"
+				content &= "[2026-01-01 12:00:01] [ERROR] Error#char( 10 )#"
+				fileWrite( variables.logDir & "/app.log", content )
+
+				var result = variables.logManager.search( "", "", "ERROR" )
+				expect( result.len() ).toBe( 1 )
+				expect( result[ 1 ].matchedLine ).toInclude( "Error" )
+			} )
+
+			it( "search() respects limit", () => {
+				var lines = []
+				for ( var i = 1; i <= 100; i++ ) {
+					lines.append( "[2026-01-01 12:00:00] [INFO] Match " & i )
+				}
+				fileWrite( variables.logDir & "/app.log", arrayToList( lines, char( 10 ) ) )
+
+				var result = variables.logManager.search( "Match", "", "", "", "", 10 )
+				expect( result.len() ).toBe( 10 )
+			} )
+
+			it( "search() supports regex patterns", () => {
+				fileWrite( variables.logDir & "/app.log", "[2026-01-01 12:00:00] [ERROR] Code 500#char( 10 )#" )
+				fileWrite( variables.logDir & "/app2.log", "[2026-01-01 12:00:00] [ERROR] Code 404#char( 10 )#" )
+
+				var result = variables.logManager.search( "Code [45]\d\d" )
+				expect( result.len() ).toBe( 2 )
+			} )
+
+			it( "clear() truncates log file to zero bytes", () => {
+				fileWrite( variables.logDir & "/app.log", "some content" )
+				expect( fileExists( variables.logDir & "/app.log" ) ).toBeTrue()
+
+				var result = variables.logManager.clear( "app" )
+				expect( result ).toBeTrue()
+
+				var info = getFileInfo( variables.logDir & "/app.log" )
+				expect( info.size ).toBe( 0 )
+			} )
+
+			it( "clear() returns false for non-existent log", () => {
+				var result = variables.logManager.clear( "nonexistent" )
+				expect( result ).toBeFalse()
+			} )
+
+			it( "getPath() returns the configured logs directory", () => {
+				var result = variables.logManager.getPath()
+				expect( result ).toBe( variables.logDir )
+			} )
+
+		} )
+	}
+
+}
