@@ -44,7 +44,7 @@ class {
 			bold: "1"
 		}
 		var code = codes[ lCase( arguments.colorName ) ] ?: "0"
-		return chr( 27 ) & "[" & code & "m" & arguments.text & chr( 27 ) & "[0m"
+		return char( 27 ) & "[" & code & "m" & arguments.text & char( 27 ) & "[0m"
 	}
 
 	/**

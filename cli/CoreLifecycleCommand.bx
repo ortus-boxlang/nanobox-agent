@@ -20,10 +20,11 @@ class {
 	 * Dispatches a lifecycle action to the appropriate sub-commands.
 	 *
 	 * Supports start, stop, restart, status, and doctor.  start and stop accept
-	 * --web-only / --worker-only flags to limit which sub-process is affected.
+	 * --web-only / --worker-only / --no-scheduler flags to limit which
+	 * sub-process is affected.
 	 *
 	 * @action  Lifecycle action name
-	 * @args    Optional flags (webOnly, workerOnly, etc.)
+	 * @args    Optional flags (webOnly, workerOnly, noScheduler, etc.)
 	 * @return  Result struct with success flag and per-process status
 	 */
 	struct function execute( required string action, struct args = {} ) {
@@ -32,12 +33,18 @@ class {
 		var worker = new "cli.commands.WorkerCommand"( manager )
 		var webOnly = arguments.args.webOnly ?: arguments.args[ "web-only" ] ?: false
 		var workerOnly = arguments.args.workerOnly ?: arguments.args[ "worker-only" ] ?: false
-		if ( arguments.action == "status" ) { return { success: true, processes: manager.all() } }
+		var noScheduler = arguments.args.noScheduler ?: arguments.args[ "no-scheduler" ] ?: false
+		if ( arguments.action == "status" ) {
+			var statusResult = { success: true, processes: manager.all() }
+			if ( !noScheduler ) { statusResult.scheduler = schedulerStatus() }
+			return statusResult
+		}
 		if ( arguments.action == "doctor" ) { return doctor( manager ) }
 		if ( arguments.action == "stop" ) {
 			var stopResult = { success: true }
 			if ( !workerOnly ) { stopResult.web = web.execute( "stop", arguments.args ) }
 			if ( !webOnly ) { stopResult.worker = worker.execute( "stop", arguments.args ) }
+			if ( !noScheduler ) { stopResult.scheduler = schedulerStop() }
 			return stopResult
 		}
 		if ( arguments.action == "restart" ) { execute( "stop", arguments.args ); return execute( "start", arguments.args ) }
@@ -45,7 +52,8 @@ class {
 			var startResult = { success: true }
 			if ( !workerOnly ) { startResult.web = web.execute( "start", arguments.args ) }
 			if ( !webOnly ) { startResult.worker = worker.execute( "start", arguments.args ) }
-			startResult.success = ( startResult.web?.success ?: true ) && ( startResult.worker?.success ?: true )
+			if ( !noScheduler ) { startResult.scheduler = schedulerStart() }
+			startResult.success = ( startResult.web?.success ?: true ) && ( startResult.worker?.success ?: true ) && ( startResult.scheduler?.success ?: true )
 			return startResult
 		}
 		return { success: false, error: "Unknown lifecycle action: #arguments.action#" }
@@ -60,6 +68,55 @@ class {
 	private struct function doctor( required any manager ) {
 		variables.config.load()
 		var status = manager.all()
-		return { success: true, checks: { config: fileExists( variables.config.getConfigPath() ), nanoboxHome: directoryExists( variables.config.getNanoboxHome() ), processState: fileExists( variables.config.getNanoboxHome() & "/run/processes.json" ), modules: [ "bx-ai", "bx-sqlite" ], processes: status } }
+		var scheduler = schedulerStatus()
+		return { success: true, checks: { config: fileExists( variables.config.getConfigPath() ), nanoboxHome: directoryExists( variables.config.getNanoboxHome() ), processState: fileExists( variables.config.getNanoboxHome() & "/run/processes.json" ), scheduler: scheduler.status, modules: [ "bx-ai", "bx-sqlite" ], processes: status } }
+	}
+
+	/**
+	 * Starts the in-process task scheduler.
+	 *
+	 * Creates a Scheduler wired to CronManager and registers all
+	 * enabled cron tasks with the BoxLang native scheduler API.
+	 *
+	 * @return Struct from Scheduler.start()
+	 */
+	private struct function schedulerStart() {
+		try {
+			var cron = new "models.scheduling.CronManager"()
+			var sched = new "models.scheduling.Scheduler"( cron )
+			return sched.start()
+		} catch ( any e ) {
+			return { success: false, status: "error", error: e.message }
+		}
+	}
+
+	/**
+	 * Stops the in-process task scheduler.
+	 *
+	 * @return Struct from Scheduler.stop()
+	 */
+	private struct function schedulerStop() {
+		try {
+			var cron = new "models.scheduling.CronManager"()
+			var sched = new "models.scheduling.Scheduler"( cron )
+			return sched.stop()
+		} catch ( any e ) {
+			return { success: true, status: "stopped" }
+		}
+	}
+
+	/**
+	 * Returns the status of the in-process scheduler.
+	 *
+	 * @return Struct from Scheduler.status() or a stopped indicator
+	 */
+	private struct function schedulerStatus() {
+		try {
+			var cron = new "models.scheduling.CronManager"()
+			var sched = new "models.scheduling.Scheduler"( cron )
+			return sched.status()
+		} catch ( any e ) {
+			return { name: "nanobox-scheduler", status: "stopped" }
+		}
 	}
 }

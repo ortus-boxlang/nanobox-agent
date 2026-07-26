@@ -1,9 +1,13 @@
 /**
- * Scheduler — thin façade over WorkerSupervisor for use by domain code.
+ * Scheduler — in-process task scheduler using BoxLang's native scheduler API.
  *
- * The real scheduling work is done by the BoxLang native scheduler running
- * {@code worker/nanobox-worker.bx}.  This class lets other domain models start,
- * stop, and query the worker process without coupling to WorkerCommand.
+ * Reads enabled cron tasks from CronManager and registers each one with a
+ * BoxLang Scheduler via the schedulerNew() BIF so they execute in-process
+ * without requiring a separate worker process.  Supports start, stop,
+ * restart, status, and stats operations.
+ *
+ * The scheduler tasks run aiChat() with the configured prompt for each
+ * firing and record run/failure outcomes back to CronManager.
  *
  * @author Ortus Solutions
  * @version 0.1.0
@@ -11,60 +15,170 @@
  */
 class {
 
-	property supervisor;
+	property name="cronManager";
+	property name="schedulerName";
+	property name="scheduler";
 
 	/**
-	 * @processManager ProcessManager instance used to spawn and track the worker process
-	 * @projectRoot    Absolute path to the project root; defaults to the current directory
+	 * @cronManager    CronManager instance for reading and recording cron tasks
+	 * @schedulerName  Optional name for the BoxLang scheduler (default "nanobox-scheduler")
 	 */
-	function init( required any processManager, string projectRoot = "" ) {
-		variables.supervisor = new "worker.core.WorkerSupervisor"(
-			arguments.processManager,
-			len( arguments.projectRoot ) ? arguments.projectRoot : expandPath( "." )
-		)
+	function init( required any cronManager, string schedulerName = "nanobox-scheduler" ) {
+		variables.cronManager   = arguments.cronManager
+		variables.schedulerName = arguments.schedulerName
 		return this
 	}
 
 	/**
-	 * Starts the BoxLang worker scheduler process.
+	 * Starts the in-process scheduler, registering all enabled cron tasks.
 	 *
-	 * @return Struct with success, status, pid, and name keys
+	 * Creates a new BoxLang scheduler via schedulerNew(), loads every enabled
+	 * cron task from CronManager, and registers each one with its cron expression.
+	 * Returns immediately after startup — tasks fire on their schedule.
+	 *
+	 * @return Struct with success, status, registered (count), and name keys
 	 */
-	struct function start()   { return variables.supervisor.start() }
+	struct function start() {
+		if ( !isNull( variables.scheduler ) && variables.scheduler.isRunning() ) {
+			return { success: true, status: "running", name: variables.schedulerName }
+		}
+
+		variables.scheduler = schedulerNew( variables.schedulerName, "UTC", true )
+		variables.scheduler.setSchedulerName( variables.schedulerName )
+
+		var tasks   = variables.cronManager.list()
+		var registered = 0
+
+		for ( var task in tasks ) {
+			if ( !( task.enabled ?: false ) ) { continue }
+			if ( !len( task.schedule ?: "" ) || !len( task.prompt ?: "" ) ) { continue }
+			registerTask( task )
+			registered++
+		}
+
+		variables.scheduler.startup()
+
+		return { success: true, status: "started", registered: registered, name: variables.schedulerName }
+	}
 
 	/**
-	 * Stops the worker process.
+	 * Gracefully stops the scheduler and all its registered tasks.
 	 *
-	 * @return Struct with success, status, name, and pid keys
+	 * @force   When true, force-stops the scheduler (default false)
+	 * @timeout Timeout in seconds to wait for graceful shutdown (default 30)
+	 * @return  Struct with success, status, and name keys
 	 */
-	struct function stop()    { return variables.supervisor.stop() }
+	struct function stop( boolean force = false, numeric timeout = 30 ) {
+		if ( isNull( variables.scheduler ) ) {
+			return { success: true, status: "stopped", name: variables.schedulerName }
+		}
+		try {
+			schedulerShutdown( variables.schedulerName, arguments.force, arguments.timeout )
+			variables.scheduler = null
+		} catch ( any e ) {
+			return { success: false, error: e.message, status: "error", name: variables.schedulerName }
+		}
+		return { success: true, status: "stopped", name: variables.schedulerName }
+	}
 
 	/**
-	 * Stops then restarts the worker process.
+	 * Stops then restarts the scheduler, reloading all tasks from CronManager.
 	 *
-	 * @return Result of the start call
+	 * @return Result of the start() call
 	 */
-	struct function restart() { return variables.supervisor.restart() }
+	struct function restart() {
+		stop()
+		return start()
+	}
 
 	/**
-	 * Returns the current status of the worker process.
+	 * Returns the current status of the scheduler.
 	 *
-	 * @return Struct with name, status (running|stopped), pid, started, and command keys
+	 * @return Struct with name, status (running|stopped), tasks (array), and stats keys
 	 */
-	struct function status()  { return variables.supervisor.status() }
+	struct function status() {
+		if ( isNull( variables.scheduler ) || !variables.scheduler.isRunning() ) {
+			return { name: variables.schedulerName, status: "stopped" }
+		}
+		var tasks      = variables.scheduler.getRegisteredTasks()
+		var taskStats  = []
+		for ( var taskName in tasks ) {
+			var record = variables.scheduler.getTaskRecord( taskName )
+			taskStats.append( {
+				name:     taskName,
+				disabled: record.disabled ?: false,
+				runs:     record.task.getStats().totalRuns ?: 0,
+				failures: record.task.getStats().totalFailures ?: 0
+			} )
+		}
+		return {
+			name:     variables.schedulerName,
+			status:   "running",
+			started:  variables.scheduler.getStartedAt(),
+			tasks:    taskStats
+		}
+	}
 
 	/**
-	 * Returns a summary of the worker process suitable for dashboard display.
+	 * Returns aggregate statistics for all scheduler tasks.
 	 *
-	 * @return Struct with name, status, pid, and started keys
+	 * @return Struct with name, status, taskCount, totalRuns, and totalFailures keys
 	 */
 	struct function stats() {
-		var proc = variables.supervisor.status()
+		var st = status()
+		if ( st.status != "running" ) {
+			return { name: variables.schedulerName, status: "stopped", taskCount: 0, totalRuns: 0, totalFailures: 0 }
+		}
+		var totalRuns     = 0
+		var totalFailures = 0
+		for ( var t in st.tasks ) {
+			totalRuns     += t.runs
+			totalFailures += t.failures
+		}
 		return {
-			name:    "nanobox-worker",
-			status:  proc.status ?: "stopped",
-			pid:     proc.pid ?: "",
-			started: proc.started ?: ""
+			name:          variables.schedulerName,
+			status:        "running",
+			taskCount:     st.tasks.len(),
+			totalRuns:     totalRuns,
+			totalFailures: totalFailures
+		}
+	}
+
+	/**
+	 * Registers a single cron task with the BoxLang scheduler.
+	 *
+	 * @task  Struct from CronManager with name, schedule, and prompt keys
+	 */
+	private void function registerTask( required struct task ) {
+		var taskName   = "cron-#arguments.task.name#"
+		var taskPrompt = arguments.task.prompt
+		var taskCron   = arguments.task.schedule
+		var taskDb     = variables.cronManager
+
+		variables.scheduler.task( taskName )
+			.call( () => executeTask( arguments.task.name, taskPrompt, taskDb ) )
+			.cron( taskCron )
+	}
+
+	/**
+	 * Executes a single cron task — sends the prompt via aiChat() and
+	 * records the outcome (success/failure) to CronManager.
+	 *
+	 * @taskName  Cron task name for logging and result recording
+	 * @prompt    AI prompt to send
+	 * @cronDb    CronManager instance for recording run/failure
+	 */
+	private void function executeTask(
+		required string taskName,
+		required string prompt,
+		required any    cronDb
+	) {
+		taskName = arguments.taskName
+		try {
+			aiChat( arguments.prompt )
+			arguments.cronDb.run( arguments.taskName )
+		} catch ( any e ) {
+			arguments.cronDb.fail( arguments.taskName )
 		}
 	}
 
