@@ -8,98 +8,110 @@
 
 ```
 nanobox/
-├── AGENTS.md                    # ← You are reading this
-├── box.json                     # BoxLang project manifest
-├── install.sh                   # Installation script (supports --local, --uninstall, --prefix)
-├── nanobox                      # macOS/Linux launcher (bash)
-├── nanobox.bat                  # Windows launcher (batch)
-├── nanobox.ps1                  # Windows launcher (PowerShell)
-│
-├── cli/                         # Interface layer — CLI surface only
-│   ├── nanobox.bx               # Entry point (main class)
-│   ├── CommandDispatcher.bx     # Routes commands to handlers
-│   ├── CommandRuntime.bx        # Executes commands, manages state
-│   ├── CoreLifecycleCommand.bx  # start/stop/status/restart/doctor
-│   ├── InteractiveChat.bx       # REPL loop + slash-command parsing
-│   ├── InteractiveChatRenderer.bx # Terminal rendering for chat
-│   ├── ModelCommand.bx          # Provider/model setup
-│   ├── ProviderCommand.bx       # Provider configuration
-│   └── commands/                # One command class per CLI namespace
-│       ├── AgentCommand.bx
-│       ├── BackupCommand.bx
-│       ├── ChatCommand.bx
-│       ├── ConfigCommand.bx
-│       ├── CronCommand.bx
-│       ├── GatewayCommand.bx
-│       ├── MCPCommand.bx
-│       ├── ModelCommand.bx
-│       ├── ScriptCommand.bx
-│       ├── SessionCommand.bx
-│       ├── SkillActivationCommand.bx
-│       ├── SkillCommand.bx
-│       ├── SkillCuratorCommand.bx
-│       ├── TokenCommand.bx
-│       ├── ToolCommand.bx
-│       ├── UpdateCommand.bx
-│       ├── VaultCommand.bx
-│       ├── WebCommand.bx
-│       └── WorkerCommand.bx
-│
-├── models/                      # Domain layer — bounded contexts
-│   ├── system/                  # Core system services
-│   │   ├── ConfigManager.bx     # JSON config, .env, preferences
-│   │   ├── ProcessManager.bx    # PID tracking, process lifecycle
-│   │   ├── BackupManager.bx     # Backup/restore operations
-│   │   ├── ScriptManager.bx     # User-script registry
-│   │   └── UpdateManager.bx     # Version update checks
-│   ├── util/                    # Shared utilities
-│   │   ├── PrettyCli.bx         # Terminal output toolkit (colors, tables, prompts)
-│   │   └── TokenTracker.bx      # LLM token usage tracking
-│   ├── agents/                  # Agent management
-│   │   ├── AgentManager.bx      # Agent templates, creation, execution
-│   │   └── McpManager.bx        # MCP server registry
-│   ├── gateway/                 # Messaging gateways
-│   │   ├── BaseGateway.bx       # Abstract gateway contract
-│   │   ├── GatewayRegistry.bx   # Registry of all gateways
-│   │   ├── TelegramGateway.bx
-│   │   ├── EmailGateway.bx
-│   │   ├── DiscordGateway.bx
-│   │   ├── SlackGateway.bx
-│   │   ├── WhatsAppGateway.bx
-│   │   ├── WhatsAppBusinessGateway.bx
-│   │   ├── SignalGateway.bx
-│   │   └── SMSGateway.bx
-│   ├── scheduling/              # Cron/scheduler data layer
-│   │   └── CronManager.bx       # Cron job storage (SQLite)
-│   ├── security/                # Security enforcement
-│   │   └── SecurityCzar.bx      # File scanning, policy enforcement
-│   ├── sessions/                # Chat session management
-│   │   └── SessionManager.bx    # SQLite-backed session store
-│   ├── skills/                  # Skill management
-│   │   ├── SkillManager.bx      # Skill loading, search
-│   │   ├── SkillCurator.bx      # Curated skill reports
-│   │   └── CuratorReportManager.bx # Report delivery
-│   ├── tools/                   # Tool management
-│   │   └── ToolManager.bx       # Tool enable/disable, disk index
-│   ├── vault/                   # Knowledge vault
-│   │   └── VaultManager.bx      # Document indexing, search
-│   ├── middleware/              # Request/response middleware
-│   │   ├── OsToolMiddleware.bx  # OS tool safety filter
-│   │   └── SecurityMiddleware.bx # Security policy enforcement
-│   └── providers/               # LLM provider adapters
-│       └── ProviderCommand.bx   # Provider configuration CLI
-│
-├── worker/                      # Long-running supervisor (empty today; populated in Task 5)
-│   ├── README.md                # What lives here, how to run
-│   ├── nanobox-worker.bx        # Entry point: `boxlang worker/nanobox-worker.bx`
-│   ├── core/
-│   │   ├── WorkerSupervisor.bx  # PID, log, lifecycle
-│   │   └── Scheduler.bx         # Real `boxlang schedule` integration
-│   ├── cli/
-│   │   └── WorkerCommand.bx     # Moved from cli/commands/WorkerCommand.bx
-│   └── tests/specs/
-│       ├── WorkerSupervisorSpec.bx
-│       └── SchedulerSpec.bx
+│   ├── Application.bx              # Root app config (datasource definition)
+│   ├── AGENTS.md                    # ← You are reading this
+│   ├── box.json                     # BoxLang project manifest
+│   ├── install.sh                   # Installation script
+│   ├── nanobox                      # macOS/Linux launcher (bash)
+│   ├── nanobox.bat                  # Windows launcher (batch)
+│   ├── nanobox.ps1                  # Windows launcher (PowerShell)
+│   │
+│   ├── cli/                         # Interface layer — CLI surface only
+│   │   ├── nanobox.bx               # Entry point (main class)
+│   │   ├── CommandRuntime.bx        # Executes commands, manages state
+│   │   ├── CoreLifecycleCommand.bx  # start/stop/status/restart/doctor
+│   │   ├── InteractiveChat.bx       # REPL loop + slash-command parsing
+│   │   ├── InteractiveChatRenderer.bx # Terminal rendering for chat
+│   │   ├── SetupOnboarding.bx       # Terminal renderer for setup wizard
+│   │   └── commands/                # One command class per CLI namespace
+│   │       ├── AgentCommand.bx
+│   │       ├── BackupCommand.bx
+│   │       ├── BrowserCommand.bx    # Java Playwright automation
+│   │       ├── ChatCommand.bx
+│   │       ├── ConfigCommand.bx
+│   │       ├── CronCommand.bx
+│   │       ├── GatewayCommand.bx
+│   │       ├── ImageCommand.bx      # aiImage() CLI wrapper
+│   │       ├── LogCommand.bx        # Log file viewer
+│   │       ├── MCPCommand.bx
+│   │       ├── MemoryCommand.bx     # User memory CRUD
+│   │       ├── ModelCommand.bx
+│   │       ├── ScriptCommand.bx
+│   │       ├── SecurityCommand.bx   # Security scan/report/status
+│   │       ├── SessionCommand.bx
+│   │       ├── SetupCommand.bx      # Interactive onboarding wizard
+│   │       ├── SkillActivationCommand.bx
+│   │       ├── SkillCommand.bx
+│   │       ├── SkillCuratorCommand.bx
+│   │       ├── SpeakCommand.bx      # aiSpeak() CLI wrapper (+ tts alias)
+│   │       ├── TokenCommand.bx
+│   │       ├── ToolCommand.bx
+│   │       ├── UpdateCommand.bx
+│   │       ├── VaultCommand.bx
+│   │       ├── WebCommand.bx
+│   │       └── WorkerCommand.bx
+│   │
+│   ├── models/                      # Domain layer — bounded contexts
+│   │   ├── system/                  # Core system services
+│   │   │   ├── BackupManager.bx
+│   │   │   ├── ConfigManager.bx
+│   │   │   ├── DownloadManager.bx   # HTTP downloads with progress bars
+│   │   │   ├── LogManager.bx        # Log file listing/searching/clearing
+│   │   │   ├── MemoryManager.bx     # SQLite-backed user memory CRUD
+│   │   │   ├── ProcessManager.bx    # PID tracking, process lifecycle
+│   │   │   ├── ScriptManager.bx
+│   │   │   └── UpdateManager.bx
+│   │   ├── util/
+│   │   │   ├── PrettyCli.bx         # Terminal output toolkit
+│   │   │   └── TokenTracker.bx      # LLM token usage (SQLite)
+│   │   ├── agents/
+│   │   │   ├── AgentManager.bx      # Agent templates, creation, execution
+│   │   │   └── McpManager.bx        # MCP server registry
+│   │   ├── gateway/                 # Messaging gateways
+│   │   ├── scheduling/
+│   │   │   └── CronManager.bx       # Cron job storage (SQLite)
+│   │   ├── security/
+│   │   │   └── SecurityCzar.bx      # File scanning, policy enforcement
+│   │   ├── sessions/
+│   │   │   ├── SessionManager.bx    # SQLite-backed session store
+│   │   │   └── SessionSchema.bx     # DB schema initialisation
+│   │   ├── skills/
+│   │   │   ├── SkillManager.bx
+│   │   │   ├── SkillCurator.bx
+│   │   │   └── CuratorReportManager.bx
+│   │   ├── tools/                   # Tool management + AI tool classes
+│   │   │   ├── ToolManager.bx       # Tool enable/disable, disk index
+│   │   │   ├── BrowserManager.bx    # Java Playwright wrapper
+│   │   │   ├── BrowserTools.bx      # 11 @AITool browser actions
+│   │   │   ├── ConfigTools.bx       # 2 @AITool config actions
+│   │   │   ├── CronTools.bx         # 2 @AITool cron actions
+│   │   │   ├── LogTools.bx          # 4 @AITool log actions
+│   │   │   ├── MemoryTools.bx       # 4 @AITool memory actions
+│   │   │   ├── SecurityTools.bx     # 1 @AITool security action
+│   │   │   ├── SessionTools.bx      # 2 @AITool session actions
+│   │   │   ├── SkillTools.bx        # 2 @AITool skill actions
+│   │   │   ├── SystemTools.bx       # 1 @AITool system action
+│   │   │   ├── TokenTools.bx        # 1 @AITool token action
+│   │   │   └── VaultTools.bx        # 2 @AITool vault actions
+│   │   ├── vault/
+│   │   │   └── VaultManager.bx
+│   │   ├── middleware/
+│   │   │   ├── OsToolMiddleware.bx
+│   │   │   └── SecurityMiddleware.bx
+│   │   └── providers/
+│   │       └── ProviderCommand.bx
+│   │
+│   ├── worker/                      # Long-running supervisor
+│   │   ├── README.md
+│   │   ├── nanobox-worker.bx
+│   │   ├── core/
+│   │   │   ├── WorkerSupervisor.bx
+│   │   │   └── Scheduler.bx
+│   │   ├── cli/
+│   │   │   └── WorkerCommand.bx
+│   │   └── tests/specs/
+│   │       ├── WorkerSupervisorSpec.bx
+│   │       └── SchedulerSpec.bx
 │
 ├── tests/                       # TestBox specs
 │   ├── Application.bx           # TestBox application bootstrap

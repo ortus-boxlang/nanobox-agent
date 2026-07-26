@@ -1,18 +1,28 @@
 # Browser Namespace
 
-Playwright-based browser automation for research and content extraction.
+Java Playwright–based browser automation for research, content extraction, and page interaction.
+
+## Prerequisites
+
+- Java Playwright JARs must be installed: `nanobox browser install`
+- The JARs are fetched from Maven Central into `lib/java/` and loaded via the `classPaths` in `config/boxlang.json`
 
 ## Commands
 
 ```bash
-nanobox browser status                      # Check Node.js + Playwright availability
-nanobox browser open <url>                  # Open URL, return metadata
-nanobox browser screenshot <url>            # Capture screenshot (PNG/JPEG)
-nanobox browser text <url>                  # Extract visible text
-nanobox browser html <url>                  # Extract raw HTML
-nanobox browser pdf <url>                   # Generate PDF from page
-nanobox browser close                       # Close browser session
-nanobox browser install                     # Install Playwright browsers
+nanobox browser status                        # Check browser state + JAR availability
+nanobox browser start [--headless]            # Launch Chromium (headless by default)
+nanobox browser stop                          # Close browser + free resources
+nanobox browser navigate <url>                # Go to URL, return title + URL
+nanobox browser snapshot [--full]             # Get page text content
+nanobox browser screenshot [--path=<file>]    # Save screenshot (PNG)
+nanobox browser click <selector>              # Click element by CSS selector
+nanobox browser type <selector> <text>        # Fill input field
+nanobox browser scroll up|down                # Scroll page
+nanobox browser console                       # Get accumulated console messages
+nanobox browser eval <js>                     # Execute JavaScript on page
+nanobox browser images                        # List all image URLs on page
+nanobox browser install                       # Download Playwright JARs + browser binaries
 ```
 
 ## Examples
@@ -23,120 +33,80 @@ nanobox browser install                     # Install Playwright browsers
 nanobox browser status
 ```
 
-Returns Node.js version, Playwright installation status, and available browser binaries.
+Returns running state, Playwright JAR availability, and browser binary status.
 
-### Open a Page
-
-```bash
-nanobox browser open https://example.com
-```
-
-Returns page title, description, and HTTP status code.
-
-### Capture Screenshot
+### Navigate to a Page
 
 ```bash
-nanobox browser screenshot https://example.com
-nanobox browser screenshot https://example.com --output=/tmp/page.png
-nanobox browser screenshot https://example.com --full-page --format=jpeg
+nanobox browser navigate https://example.com
 ```
 
-Screenshots are saved to `~/Pictures/nanobox/browser/` by default.
+Returns the page title and final URL (after redirects).
 
-### Extract Text
+### Read Page Content
 
 ```bash
-nanobox browser text https://example.com
-nanobox browser text https://example.com --selector="article"
+nanobox browser navigate https://docs.ortusbooks.com
+nanobox browser snapshot
 ```
 
-Extracts visible text content, optionally scoped to a CSS selector.
+Returns the visible text of the current page. Use `--full` for the complete content.
 
-### Extract HTML
+### Take a Screenshot
 
 ```bash
-nanobox browser html https://example.com
-nanobox browser html https://example.com --selector="main"
+nanobox browser navigate https://example.com
+nanobox browser screenshot --path=~/Desktop/shot.png
 ```
 
-Returns raw HTML, optionally scoped to a CSS selector.
+Saves a PNG screenshot to the specified path.
 
-### Generate PDF
+### Interact with a Page
 
 ```bash
-nanobox browser pdf https://example.com
-nanobox browser pdf https://example.com --output=/tmp/report.pdf
+nanobox browser navigate https://google.com
+nanobox browser type "input[name=q]" "BoxLang"
+nanobox browser click "input[type=submit]"
 ```
 
-Generates a PDF from the rendered page.
+### Debug JavaScript
 
-### Install Browsers
+```bash
+nanobox browser navigate https://example.com
+nanobox browser eval "document.title"
+nanobox browser console
+```
+
+### Install Browser Dependencies
 
 ```bash
 nanobox browser install
 ```
 
-Downloads Chromium, Firefox, and WebKit binaries via `npx playwright install`.
+Downloads the Playwright Java JAR and platform-specific driver from Maven Central,
+then installs Chromium browser binaries (~280 MB total).
 
-## Architecture
+## AI Tools
 
-BrowserCommand delegates to a Node.js helper script (`scripts/browser-helper.js`) that wraps Playwright's Node API. The helper handles:
+The browser actions are also available as bx-ai tools:
 
-- Browser lifecycle (launch/close)
-- Page navigation with timeout
-- Content extraction (text, HTML, metadata)
-- Screenshot and PDF generation
-- CSS selector scoping
+| Tool | Description |
+|------|-------------|
+| `browser_navigate(url)` | Navigate to a URL |
+| `browser_snapshot(full)` | Get page text content |
+| `browser_screenshot(path, fullPage)` | Capture screenshot |
+| `browser_click(selector)` | Click element |
+| `browser_type(selector, text)` | Fill input |
+| `browser_scroll(direction)` | Scroll page |
+| `browser_console()` | Get console messages |
+| `browser_eval(js)` | Execute JavaScript |
+| `browser_images()` | List page images |
+| `browser_status()` | Check if running |
+| `browser_close()` | Close browser |
 
-All output files are saved to `~/Pictures/nanobox/browser/` unless `--output` is specified.
+## Security
 
-## Dependencies
-
-- Node.js 18+ (must be on PATH)
-- Playwright npm package (installed via `npx playwright install`)
-- Browser binaries (Chromium, Firefox, WebKit)
-
-Run `nanobox browser install` to set up Playwright and download browsers.
-
-## Failure Modes
-
-Missing dependencies return structured errors:
-
-```bash
-nanobox browser screenshot https://example.com
-# Error: Node.js not found. Install Node.js 18+ to use the browser tool.
-
-nanobox browser open https://example.com
-# Error: Browser helper script not found at /path/to/scripts/browser-helper.js
-
-nanobox browser unknown
-# Error: Unknown browser action: unknown
-```
-
-Network timeouts, invalid URLs, and Playwright failures are captured and returned as error messages.
-
-## Output Paths
-
-All generated files (screenshots, PDFs) default to:
-
-```text
-$NANOBOX_HOME/Pictures/nanobox/browser/
-```
-
-Override with `--output=<path>`. Parent directories are created automatically.
-
-## Tests
-
-```text
-tests/specs/BrowserCommandSpec.bx
-```
-
-Coverage includes status checks, URL validation, missing dependencies, and action dispatch.
-
-## Implementation Notes
-
-- **Helper script**: `scripts/browser-helper.js` wraps Playwright and outputs JSON for BoxLang to parse
-- **Process execution**: Uses `java.lang.ProcessBuilder` for cross-platform subprocess control
-- **Timeout handling**: Default 30s per operation, configurable via `--timeout`
-- **URL normalisation**: Adds `https://` prefix if scheme is missing
-- **Exit codes**: Non-zero exit from helper script triggers error response
+- The browser runs in headless mode by default
+- Page content is isolated — no cookies or profiles are shared with your regular browser
+- Screenshots are saved only to paths you specify
+- JavaScript execution (`eval`) has full access to the page context

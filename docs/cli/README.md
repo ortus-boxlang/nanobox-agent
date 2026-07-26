@@ -159,6 +159,18 @@ nanobox <command> [options]
 | `logs path` | Show logs directory path |
 | `logs clear <name>` | Truncate a log file |
 
+### Memory
+
+| Command | Description |
+|---------|-------------|
+| `memory list [--category=]` | List memory entries |
+| `memory show <id>` | View a memory entry |
+| `memory add <topic> <entry> [--category=]` | Save a fact |
+| `memory delete <id>` | Remove memory entry |
+| `memory search <query>` | Search memories |
+| `memory clear [--category=]` | Clear all or by category |
+| `memory export` | Dump all memories |
+
 ### Image Generation
 
 | Command | Description |
@@ -180,14 +192,19 @@ nanobox <command> [options]
 
 | Command | Description |
 |---------|-------------|
-| `browser status` | Check Node.js + Playwright availability |
-| `browser open <url>` | Open URL, return page metadata |
-| `browser screenshot <url>` | Capture screenshot |
-| `browser text <url>` | Extract visible text content |
-| `browser html <url>` | Extract raw HTML |
-| `browser pdf <url>` | Generate PDF from page |
-| `browser close` | Close browser session |
-| `browser install` | Install Playwright browsers |
+| `browser status` | Check browser state + JAR availability |
+| `browser start [--headless]` | Launch Chromium |
+| `browser stop` | Close browser |
+| `browser navigate <url>` | Go to URL |
+| `browser snapshot [--full]` | Page text content |
+| `browser screenshot [--path=]` | Save screenshot |
+| `browser click <selector>` | Click element |
+| `browser type <selector> <text>` | Fill input |
+| `browser scroll up|down` | Scroll |
+| `browser console` | Get console messages |
+| `browser eval <js>` | Execute JavaScript |
+| `browser images` | List page images |
+| `browser install` | Download Playwright JARs + browser |
 
 ### Backup
 
@@ -198,12 +215,18 @@ nanobox <command> [options]
 | `backup restore <timestamp>` | Restore from backup |
 | `backup status` | Last backup info |
 
-### System
+### Setup Wizard
+
+| Command | Description |
+|---------|-------------|
+| `setup` | Run interactive setup wizard |
+| `setup --force` | Re-run setup wizard |
+
+### System & Management
 
 | Command | Description |
 |---------|-------------|
 | `doctor` | Health checks |
-| `setup` | Run setup wizard |
 | `update [--to=]` | Update NanoBox |
 | `update --list` | Available versions |
 | `update --rollback` | Rollback to previous |
