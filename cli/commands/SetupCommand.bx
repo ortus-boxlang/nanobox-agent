@@ -35,7 +35,8 @@ class {
 		{ value: "huggingface",     label: "HuggingFace",     desc: "Open models — cloud" },
 		{ value: "cohere",          label: "Cohere",          desc: "Cohere models — cloud" },
 		{ value: "ollama",          label: "Ollama",          desc: "Local models — on-premise" },
-		{ value: "openai-compatible", label: "OpenAI-Compatible", desc: "LM Studio, vLLM, any OpenAI-API endpoint" }
+		{ value: "lmstudio",        label: "LM Studio",       desc: "Local models via LM Studio — on-premise" },
+		{ value: "openai-compatible", label: "Other OpenAI-Compatible", desc: "vLLM, TGI, any OpenAI-API endpoint" }
 	]
 
 	static PERSONALITIES = [
@@ -225,13 +226,16 @@ class {
 			groq: "llama-3.3-70b-versatile", grok: "grok-2", deepseek: "deepseek-chat",
 			mistral: "mistral-small-latest", openrouter: "auto", perplexity: "sonar-pro",
 			huggingface: "Qwen/Qwen2.5-72B-Instruct", cohere: "command-r-plus",
-			ollama: "qwen2.5:7b-instruct"
+			ollama: "qwen2.5:7b-instruct", lmstudio: "qwen2.5-7b-instruct"
 		}
 
 		if ( arguments.provider == "openai-compatible" ) {
 			result.baseURL = ui.prompt( "Base URL (e.g. http://localhost:1234/v1)", "http://localhost:1234/v1" )
 			result.model = ui.prompt( "Model name", "gpt-4o-mini" )
 			result.apiKey = ui.prompt( "API key (if required)", "not-required" )
+		} else if ( arguments.provider == "lmstudio" ) {
+			result.baseURL = ui.prompt( "Base URL", "http://localhost:1234/v1" )
+			result.model = ui.prompt( "Model name", defaultModels[ arguments.provider ] )
 		} else {
 			result.model = ui.prompt( "Model", defaultModels[ arguments.provider ] ?: "gpt-4o" )
 		}
@@ -303,6 +307,9 @@ class {
 			result.type = "openai-compatible"
 			result.baseURL = arguments.cfg.baseURL ?: ""
 			result.apiKey = arguments.cfg.apiKey ?: ""
+		} else if ( arguments.cfg.provider == "lmstudio" ) {
+			result.type = "openai-compatible"
+			result.baseURL = arguments.cfg.baseURL ?: "http://localhost:1234/v1"
 		} else {
 			result.type = arguments.cfg.provider
 			if ( len( arguments.cfg.apiKey ?: "" ) ) { result.apiKey = arguments.cfg.apiKey }
