@@ -1,0 +1,141 @@
+/**
+ * BrowserTools — AI-callable tools for browser automation via Java Playwright.
+ *
+ * Exposes navigation, content extraction, interaction, and inspection tools
+ * to the bx-ai tool registry.  Each tool creates or reuses a BrowserManager
+ * instance to talk to Playwright Java running Chromium.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property manager;
+
+	/**
+	 * Initialises with an optional shared BrowserManager.
+	 * If not provided, one is created lazily per tool call.
+	 */
+	function init( any browserManager = null ) {
+		if ( !isNull( arguments.browserManager ) ) {
+			variables.manager = arguments.browserManager
+		}
+		return this
+	}
+
+	/**
+	 * Ensures the browser is launched before any page interaction.
+	 */
+	function ensureBrowser() {
+		if ( isNull( variables.manager ) ) {
+			variables.manager = new "models.tools.BrowserManager"()
+		}
+		var st = variables.manager.status()
+		if ( !st.running ) {
+			return variables.manager.launch( true )
+		}
+		return { success: true, status: "already running" }
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	//  Navigation
+	// ─────────────────────────────────────────────────────────────────
+
+	@AITool( "Navigate to a URL and return the page title and URL. Prepends https:// if no scheme is provided. Use this first before taking snapshots or screenshots of a page." )
+	public struct function browser_navigate( required string url, numeric timeout = 30000 ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		if ( !reFindNoCase( "^https?://", arguments.url ) ) { arguments.url = "https://" & arguments.url }
+		return variables.manager.navigate( arguments.url )
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	//  Content Extraction
+	// ─────────────────────────────────────────────────────────────────
+
+	@AITool( "Get the visible text content of the current page. When full=true returns the complete page text; when false returns a summary with title and first 2000 characters. Use to read page content, find information, or verify page state." )
+	public struct function browser_snapshot( boolean full = false ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.snapshot( arguments.full )
+	}
+
+	@AITool( "Take a screenshot of the current page and save it to a file. Returns the file path. Use to visually inspect page layout, verify UI elements, or capture evidence. Optionally capture the full scrollable page with fullPage=true." )
+	public struct function browser_screenshot( string path = "", boolean fullPage = false ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.screenshot( arguments.path, arguments.fullPage )
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	//  Page Interaction
+	// ─────────────────────────────────────────────────────────────────
+
+	@AITool( "Click an element on the page identified by a CSS selector. For example: button.submit, .nav-link, button:has-text(Submit). Returns success status." )
+	public struct function browser_click( required string selector ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.click( arguments.selector )
+	}
+
+	@AITool( "Type text into an input field identified by a CSS selector. Clears any existing text first. For example: selector input.search, text hello world." )
+	public struct function browser_type( required string selector, required string text ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.type( arguments.selector, arguments.text )
+	}
+
+	@AITool( "Scroll the page in a direction. Specify up or down. Each scroll moves approximately 500 pixels." )
+	public struct function browser_scroll( string direction = "down" ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.scroll( arguments.direction )
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	//  Inspection
+	// ─────────────────────────────────────────────────────────────────
+
+	@AITool( "Get accumulated browser console log messages (console.log, console.warn, console.error). Returns an array of messages with type and text. Useful for debugging JavaScript errors on the page." )
+	public array function browser_console() {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return [] }
+		return variables.manager.consoleLog()
+	}
+
+	@AITool( "Execute JavaScript in the context of the current page and return the result. Use for inspecting DOM state, reading data, or triggering custom page behavior. For example: js=document.title or js=JSON.stringify(window.__INITIAL_STATE__)." )
+	public any function browser_eval( required string js ) {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.eval( arguments.js )
+	}
+
+	@AITool( "Get a list of all image URLs on the current page. Returns an array of image source URLs. Useful for finding images to analyze or download." )
+	public struct function browser_images() {
+		var launched = ensureBrowser()
+		if ( !launched.success ) { return launched }
+		return variables.manager.getImages()
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	//  Lifecycle
+	// ─────────────────────────────────────────────────────────────────
+
+	@AITool( "Check whether the browser is currently running. Returns the current URL, page title, and running state." )
+	public struct function browser_status() {
+		if ( isNull( variables.manager ) ) {
+			return { running: false, message: "Browser not started" }
+		}
+		return variables.manager.status()
+	}
+
+	@AITool( "Close the browser and free resources. Call this when you are done browsing to clean up memory and processes." )
+	public struct function browser_close() {
+		if ( isNull( variables.manager ) ) {
+			return { success: true, status: "already closed" }
+		}
+		return variables.manager.close()
+	}
+
+}

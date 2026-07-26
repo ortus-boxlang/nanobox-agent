@@ -1,0 +1,51 @@
+/**
+ * ImageTools — AI-callable tools for AI image generation via bx-ai.
+ *
+ * Exposes image generation tools to the bx-ai tool registry, wrapping
+ * the aiImage() BIF with NanoBox provider/model resolution.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	@AITool( "Generate an image from a text description using AI. Returns the file path of the saved image. Supports options: size (e.g. '1024x1024', '1792x1024'), quality (standard, hd), style (vivid, natural), and n (number of images, default 1). Images are saved to ~/Pictures/nanobox/." )
+	public struct function image_generate(
+		required string prompt,
+		string size = "1024x1024",
+		string quality = "standard",
+		string style = "vivid",
+		numeric n = 1,
+		string provider = "",
+		string model = ""
+	) {
+		var params = {
+			model: arguments.model,
+			n: int( arguments.n ),
+			size: arguments.size,
+			quality: arguments.quality,
+			style: arguments.style
+		}
+		var options = { provider: arguments.provider }
+		// Default output path
+		var dir = expandPath( "~/Pictures/nanobox" )
+		if ( !directoryExists( dir ) ) { directoryCreate( dir ) }
+		var ts = dateTimeFormat( now(), "yyyymmdd_HHnnss" )
+		options.outputFile = dir & "/image_#ts#.png"
+
+		try {
+			var result = aiImage( arguments.prompt, params, options )
+			return {
+				success: true,
+				path: options.outputFile,
+				prompt: arguments.prompt,
+				size: arguments.size,
+				provider: len( arguments.provider ) ? arguments.provider : "default"
+			}
+		} catch ( any e ) {
+			return { success: false, error: e.message, prompt: arguments.prompt }
+		}
+	}
+
+}
