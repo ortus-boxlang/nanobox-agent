@@ -215,14 +215,8 @@ class {
 
 		// API key — required for cloud providers, optional for local
 		var needsKey = [ "openai", "claude", "gemini", "groq", "grok", "deepseek", "mistral", "openrouter", "perplexity", "huggingface", "cohere" ]
-		var envKeyMap = {
-			openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY", gemini: "GOOGLE_API_KEY",
-			groq: "GROQ_API_KEY", grok: "XAI_API_KEY", deepseek: "DEEPSEEK_API_KEY",
-			mistral: "MISTRAL_API_KEY", openrouter: "OPENROUTER_API_KEY",
-			perplexity: "PERPLEXITY_API_KEY", huggingface: "HF_TOKEN", cohere: "COHERE_API_KEY"
-		}
 		if ( needsKey.contains( arguments.provider ) ) {
-			var envVar = envKeyMap[ arguments.provider ]
+			var envVar = arguments.provider.ucase() & "_API_KEY"
 			var existing = getSystemSetting( envVar, "" )
 			var hint = len( existing ) ? " (currently set in env)" : ""
 			result.apiKey = ui.prompt( "API key for " & arguments.provider & hint )
