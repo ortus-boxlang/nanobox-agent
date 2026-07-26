@@ -215,9 +215,19 @@ class {
 
 		// API key — required for cloud providers, optional for local
 		var needsKey = [ "openai", "claude", "gemini", "groq", "grok", "deepseek", "mistral", "openrouter", "perplexity", "huggingface", "cohere" ]
+		var envKeyMap = {
+			openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY", gemini: "GOOGLE_API_KEY",
+			groq: "GROQ_API_KEY", grok: "XAI_API_KEY", deepseek: "DEEPSEEK_API_KEY",
+			mistral: "MISTRAL_API_KEY", openrouter: "OPENROUTER_API_KEY",
+			perplexity: "PERPLEXITY_API_KEY", huggingface: "HF_TOKEN", cohere: "COHERE_API_KEY"
+		}
 		if ( needsKey.contains( arguments.provider ) ) {
-			result.apiKey = ui.prompt( "API key for " & arguments.provider )
+			var envVar = envKeyMap[ arguments.provider ]
+			var existing = getSystemSetting( envVar, "" )
+			var hint = len( existing ) ? " (currently set in env)" : ""
+			result.apiKey = ui.prompt( "API key for " & arguments.provider & hint )
 			if ( !len( result.apiKey ) ) { return null }
+			result.envVar = envVar
 		}
 
 		// Model — prompt for the model name
@@ -244,7 +254,7 @@ class {
 	}
 
 	/**
-	 * Persists all configuration values to the config file.
+	 * Persists all configuration values to the config file and API keys to ~/.box.env.
 	 */
 	private void function saveConfig(
 		required string agentName,
@@ -265,7 +275,7 @@ class {
 		variables.config.set( "bx-ai.defaultProvider", arguments.primaryProvider )
 		variables.config.set( "bx-ai.defaultModel", arguments.providerConfig.model ?: "" )
 
-		// Save provider definitions
+		// Save provider definitions (without API keys — keys go to .env)
 		var allProviders = { arguments.primaryProvider: buildProviderConfig( arguments.providerConfig ) }
 		for ( var ep in arguments.extraProviders ) {
 			allProviders[ ep.name ] = buildProviderConfig( ep )
@@ -296,6 +306,41 @@ class {
 		variables.config.set( "nanobox.onboardingComplete", true )
 
 		variables.config.save()
+
+		// ── Write API keys to ~/.box.env ──────────────────────────────────
+		// BoxLang auto-loads ~/.box.env on every CLI invocation, so these
+		// env vars are available via getSystemSetting().
+		var envEntries = []
+		// Collect from primary provider
+		if ( len( arguments.providerConfig.envVar ?: "" ) && len( arguments.providerConfig.apiKey ?: "" ) ) {
+			envEntries.append( "#arguments.providerConfig.envVar#=#arguments.providerConfig.apiKey#" )
+		}
+		// Collect from extra providers
+		for ( var ep in arguments.extraProviders ) {
+			if ( len( ep.envVar ?: "" ) && len( ep.apiKey ?: "" ) ) {
+				envEntries.append( "#ep.envVar#=#ep.apiKey#" )
+			}
+		}
+		if ( envEntries.len() ) {
+			var boxEnvPath = expandPath( "~/.box.env" )
+			var existingLines = fileExists( boxEnvPath ) ? listToArray( fileRead( boxEnvPath ), char( 10 ) ) : []
+			var existingKeys = {}
+			for ( var l in existingLines ) {
+				var k = l.listFirst( "=" )
+				if ( len( k ) ) { existingKeys[ k ] = true }
+			}
+			var append = ""
+			for ( var line in envEntries ) {
+				var key = line.listFirst( "=" )
+				if ( !existingKeys.keyExists( key ) ) {
+					append &= ( len( append ) ? char( 10 ) : "" ) & line
+				}
+			}
+			if ( len( append ) ) {
+				fileWrite( boxEnvPath, ( existingLines.len() ? existingLines.toList( char( 10 ) ) & char( 10 ) : "" ) & append )
+			}
+			ui.info( "API keys saved to ~/.box.env (loaded automatically by BoxLang)" )
+		}
 	}
 
 	/**
@@ -312,7 +357,7 @@ class {
 			result.baseURL = arguments.cfg.baseURL ?: "http://localhost:1234/v1"
 		} else {
 			result.type = arguments.cfg.provider
-			if ( len( arguments.cfg.apiKey ?: "" ) ) { result.apiKey = arguments.cfg.apiKey }
+			// API key is stored in ~/.box.env, not in config
 		}
 		if ( len( arguments.cfg.model ?: "" ) ) { result.defaultModel = arguments.cfg.model }
 		return result
