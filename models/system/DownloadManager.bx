@@ -1,0 +1,304 @@
+/**
+ * DownloadManager — downloads files from URLs with progress bar rendering.
+ *
+ * Uses Java's {@code HttpURLConnection} and buffered streams to stream files
+ * to disk while rendering an ANSI progress bar to the terminal.  Integrates
+ * with {@code PrettyCli} for consistent colour output in the NanoBox CLI.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	property prettyCli;
+
+	property bufferSize;
+
+	property barWidth;
+
+	/**
+	 * @prettyCli   Optional PrettyCli instance for styled output; defaults to a new instance with colors enabled
+	 * @bufferSize  Read buffer size in bytes; defaults to 8192
+	 * @barWidth    Character width of the progress bar; defaults to 40
+	 */
+	function init(
+		any prettyCli      = "",
+		numeric bufferSize = 8192,
+		numeric barWidth   = 40
+	) {
+		if ( isObject( arguments.prettyCli ) ) {
+			variables.prettyCli = arguments.prettyCli;
+		} else {
+			variables.prettyCli = new models.util.PrettyCli();
+		}
+		variables.bufferSize = arguments.bufferSize;
+		variables.barWidth = arguments.barWidth;
+		return this;
+	}
+
+	/**
+	 * Downloads a URL to a local file path with a progress bar.
+	 *
+	 * Follows redirects automatically.  Renders a progress bar to stdout
+	 * showing percentage, downloaded/total size, and a visual bar.
+	 *
+	 * @url        Source URL to download (http or https)
+	 * @destPath   Absolute path where the file should be written
+	 * @overwrite  Whether to overwrite an existing file; defaults to false
+	 * @return     Struct with success, file path, bytes written, and elapsed time
+	 */
+	struct function download(
+		required string url,
+		required string destPath,
+		boolean overwrite = false
+	) {
+		if ( !arguments.overwrite && fileExists( arguments.destPath ) ) {
+			return {
+				success : false,
+				error   : "File already exists: #arguments.destPath#. Use overwrite=true to replace."
+			};
+		}
+
+		// Ensure destination directory exists
+		var destDir = getDirectoryFromPath( arguments.destPath );
+		if ( !directoryExists( destDir ) ) {
+			directoryCreate( destDir, true );
+		}
+
+		var startTime = getTickCount();
+		var totalBytesRead = 0;
+
+		try {
+			var urlObj = createObject( "java", "java.net.URL" ).init( arguments.url );
+			var connection = urlObj.openConnection();
+
+			// Follow redirects
+			connection.setInstanceFollowRedirects( true );
+			connection.setConnectTimeout( 30000 );
+			connection.setReadTimeout( 60000 );
+			connection.setRequestProperty( "User-Agent", "NanoBox/1.0" );
+			connection.connect();
+
+			var responseCode = connection.getResponseCode();
+			if ( responseCode < 200 || responseCode >= 300 ) {
+				connection.disconnect();
+				return {
+					success : false,
+					error   : "HTTP #responseCode# #connection.getResponseMessage()#"
+				};
+			}
+
+			var contentLength = connection.getContentLengthLong();
+			var inputStream = connection.getInputStream();
+			var outputStream = createObject( "java", "java.io.FileOutputStream" )
+				.init( arguments.destPath );
+			var buffer = createObject( "java", "java.lang.reflect.Array" )
+				.newInstance( createObject( "java", "java.lang.Byte" ).TYPE,
+					javacast( "int", variables.bufferSize ) );
+
+			var bytesRead = 0;
+			var lastPercent = -1;
+
+			try {
+				do {
+					bytesRead = inputStream.read( buffer );
+					if ( bytesRead > 0 ) {
+						outputStream.write(
+								buffer,
+								0,
+								bytesRead
+							);
+						totalBytesRead += bytesRead;
+
+						// Update progress bar
+						var percent = contentLength > 0 ? int( ( totalBytesRead / contentLength ) * 100 ) : -1;
+						if ( percent != lastPercent ) {
+							lastPercent = percent;
+							renderProgressBar(
+								percent,
+								totalBytesRead,
+								contentLength
+							);
+						}
+					}
+				} while ( bytesRead >= 0 );
+			} finally {
+				outputStream.close();
+				inputStream.close();
+				connection.disconnect();
+			}
+
+			// Final newline after progress bar
+			systemOutput( "", true );
+
+			var elapsed = ( getTickCount() - startTime ) / 1000;
+			var fileMeta = getFileInfo( arguments.destPath );
+
+			variables
+				.prettyCli
+				.success(
+					"Downloaded #getFileFromPath( arguments.destPath )# (#formatBytes( totalBytesRead )#) in #elapsed#s"
+				);
+
+			return {
+				success : true,
+				file    : arguments.destPath,
+				size    : fileMeta.size,
+				elapsed : elapsed,
+				url     : arguments.url
+			};
+		} catch (any exception) {
+			// Clean up partial file
+			if ( fileExists( arguments.destPath ) ) {
+				try {
+					fileDelete( arguments.destPath );
+				} catch (any ignored) {
+
+				}
+			}
+			variables
+				.prettyCli
+				.error( "Download failed: #exception.message#" );
+			return {
+				success : false,
+				error   : exception.message,
+				url     : arguments.url
+			};
+		}
+	}
+
+	/**
+	 * Downloads multiple URLs concurrently using Java threads.
+	 *
+	 * Each download renders its own progress bar.  Returns an array of result structs.
+	 *
+	 * @downloads  Array of structs, each with keys: url, destPath, overwrite (optional)
+	 * @threads    Number of concurrent downloads; defaults to 3
+	 * @return     Array of result structs from each download
+	 */
+	array function downloadMany( required array downloads, numeric threads = 3 ) {
+		var results = [];
+		var executor = createObject( "java", "java.util.concurrent.Executors" )
+			.newFixedThreadPool( javacast( "int", arguments.threads ) );
+		var futures = [];
+
+		try {
+			for ( var dl in arguments.downloads ) {
+				var callable = () => {
+					return download(
+						dl.url,
+						dl.destPath,
+						dl.overwrite ?: false
+					);
+				};
+				futures.append( executor.submit( callable ) );
+			}
+
+			for ( var future in futures ) {
+				results.append( future.get() );
+			}
+		} finally {
+			executor.shutdown();
+		}
+
+		return results;
+	}
+
+	/**
+	 * Returns information about a URL without downloading the file (HEAD request).
+	 *
+	 * Useful for checking content length, type, and whether a resource exists
+	 * before initiating a download.
+	 *
+	 * @url    URL to check
+	 * @return Struct with exists, contentType, contentLength, and redirectUrl keys
+	 */
+	struct function head( required string url ) {
+		try {
+			var urlObj = createObject( "java", "java.net.URL" ).init( arguments.url );
+			var connection = urlObj.openConnection();
+			connection.setRequestMethod( "HEAD" );
+			connection.setInstanceFollowRedirects( true );
+			connection.setConnectTimeout( 10000 );
+			connection.connect();
+
+			var code = connection.getResponseCode();
+			var result = {
+				exists        : code >= 200 && code < 300,
+				statusCode    : code,
+				contentType   : connection.getContentType() ?: "",
+				contentLength : connection.getContentLengthLong(),
+				redirectUrl   : connection.getHeaderField( "Location" ) ?: ""
+			};
+			connection.disconnect();
+			return result;
+		} catch (any exception) {
+			return {
+				exists        : false,
+				statusCode    : 0,
+				contentType   : "",
+				contentLength : -1,
+				redirectUrl   : "",
+				error         : exception.message
+			};
+		}
+	}
+
+	/**
+	 * Renders a progress bar to stdout using ANSI escape codes.
+	 *
+	 * @percent   Download percentage (0-100), or -1 if unknown
+	 * @current   Bytes downloaded so far
+	 * @total     Total bytes to download, or -1 if unknown
+	 */
+	private void function renderProgressBar(
+		required numeric percent,
+		required numeric current,
+		required numeric total
+	) {
+		var currentStr = formatBytes( arguments.current );
+		var totalStr = arguments.total > 0 ? formatBytes( arguments.total ) : "???";
+
+		if ( arguments.percent < 0 ) {
+			// Unknown total — spinner-style
+			systemOutput(
+				"#char( 13 )#  ⏳ #currentStr# downloaded...",
+				false
+			);
+			return;
+		}
+
+		var filled = int(
+			( arguments.percent / 100 ) * variables.barWidth
+		);
+		var empty = variables.barWidth - filled;
+		var bar = repeatString( "█", filled ) & repeatString( "░", empty );
+		var pctLabel = right( "   " & arguments.percent, 3 ) & "%";
+
+		// Color the bar based on progress
+		var coloredBar = variables.prettyCli.green( bar );
+		if ( arguments.percent < 50 ) {
+			coloredBar = variables.prettyCli.yellow( bar );
+		}
+
+		systemOutput(
+			"#char( 13 )#  #coloredBar# #pctLabel# #currentStr# / #totalStr#",
+			false
+		);
+	}
+
+	/**
+	 * Formats a byte count into a human-readable string (B, KB, MB, GB).
+	 *
+	 * @bytes Byte count to format
+	 * @return Formatted string like "1.5 MB"
+	 */
+	private string function formatBytes( required numeric bytes ) {
+		if ( arguments.bytes < 1024 ) { return int( arguments.bytes ) & " B" }
+		var kb = arguments.bytes / 1024
+		if ( arguments.bytes < 1048576 ) { return trim( round( kb * 10 ) / 10 ) & " KB" }
+		var mb = kb / 1024
+		if ( arguments.bytes < 1073741824 ) { return trim( round( mb * 10 ) / 10 ) & " MB" }
+		return trim( round( mb / 1024 * 10 ) / 10 ) & " GB"
+	}
+}

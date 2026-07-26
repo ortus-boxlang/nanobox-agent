@@ -1,0 +1,287 @@
+/**
+ * BrowserManager — Java Playwright wrapper for NanoBox browser automation.
+ *
+ * Uses Playwright Java via createObject("java", "com.microsoft.playwright.Playwright")
+ * to launch Chromium and perform browser operations.  All browser binaries are
+ * managed by Playwright's own download mechanism; the Playwright JAR must be
+ * present in lib/java/ and the classpath configured in boxlang.json.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property name="playwright";
+	property name="browser";
+	property name="page";
+	property name="consoleMessages";
+	property name="browserType";
+	property name="headless";
+
+	/**
+	 * Initialises the manager with default settings.
+	 * Browser is NOT launched until launch() is called.
+	 */
+	function init() {
+		variables.playwright      = null
+		variables.browser         = null
+		variables.page            = null
+		variables.consoleMessages = []
+		variables.browserType     = "chromium"
+		variables.headless        = true
+		return this
+	}
+
+	/**
+	 * Launches a Chromium browser instance via Playwright Java.
+	 *
+	 * @headless  When true, runs in headless mode (default true)
+	 * @return    Struct with success and status keys
+	 */
+	struct function launch( boolean headless = true ) {
+		if ( !isNull( variables.browser ) ) {
+			return { success: true, status: "already running" }
+		}
+		try {
+			variables.headless = arguments.headless
+			variables.playwright = createObject( "java", "com.microsoft.playwright.Playwright" ).create()
+			var launchOpts = createObject( "java", "com.microsoft.playwright.BrowserType$LaunchOptions" )
+				.setHeadless( variables.headless )
+			variables.browser = variables.playwright.chromium().launch( launchOpts )
+			variables.page = variables.browser.newPage()
+			variables.consoleMessages = []
+
+			// Collect console messages
+			variables.page.onConsoleMessage( ( msg ) => {
+				variables.consoleMessages.append( {
+					type: msg.type(),
+					text: msg.text(),
+					args: msg.args().len()
+				} )
+			} )
+
+			return { success: true, status: "started", headless: variables.headless }
+		} catch ( any e ) {
+			return { success: false, error: "Failed to launch browser: #e.message#" }
+		}
+	}
+
+	/**
+	 * Navigates to a URL and returns page metadata.
+	 *
+	 * @url  Target URL to navigate to
+	 * @return  Struct with success, title, url, status keys
+	 */
+	struct function navigate( required string url ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched. Call launch() first." }
+		}
+		try {
+			variables.page.navigate( arguments.url )
+			return {
+				success: true,
+				title: variables.page.title(),
+				url: variables.page.url(),
+				status: "loaded"
+			}
+		} catch ( any e ) {
+			return { success: false, error: "Navigation failed: #e.message#", url: arguments.url }
+		}
+	}
+
+	/**
+	 * Returns the current page content as plain text.
+	 *
+	 * @full  When true, returns full innerText; when false, returns title + URL summary
+	 * @return  Struct with success, content, and length keys
+	 */
+	struct function snapshot( boolean full = false ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			if ( arguments.full ) {
+				var text = variables.page.innerText( "body" )
+				return { success: true, content: text, length: len( text ), full: true }
+			}
+			var title = variables.page.title()
+			var url   = variables.page.url()
+			var text  = variables.page.innerText( "body" )
+			var preview = left( text, 2000 )
+			return { success: true, content: "Title: #title#\nURL: #url#\n\n#preview#", length: len( text ), full: false }
+		} catch ( any e ) {
+			return { success: false, error: "Snapshot failed: #e.message#" }
+		}
+	}
+
+	/**
+	 * Takes a screenshot of the current page.
+	 *
+	 * @outputPath  Path to save the screenshot; defaults to a timestamped file
+	 * @fullPage    When true, captures the full scrollable page
+	 * @return      Struct with success and path keys
+	 */
+	struct function screenshot( string outputPath = "", boolean fullPage = false ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			var dest = arguments.outputPath
+			if ( !len( dest ) ) {
+				var dir = expandPath( "~/Pictures/nanobox/browser" )
+				if ( !directoryExists( dir ) ) { directoryCreate( dir ) }
+				dest = dir & "/screenshot_#dateTimeFormat( now(), 'yyyymmdd_HHnnss' )#.png"
+			}
+			var opts = { path: dest }
+			if ( arguments.fullPage ) { opts.fullPage = true }
+			variables.page.screenshot( opts )
+			return { success: true, path: dest, fullPage: arguments.fullPage }
+		} catch ( any e ) {
+			return { success: false, error: "Screenshot failed: #e.message#" }
+		}
+	}
+
+	/**
+	 * Clicks an element identified by a CSS selector.
+	 *
+	 * @selector  CSS selector string
+	 * @return    Struct with success key
+	 */
+	struct function click( required string selector ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			variables.page.click( arguments.selector )
+			return { success: true, selector: arguments.selector }
+		} catch ( any e ) {
+			return { success: false, error: "Click failed: #e.message#", selector: arguments.selector }
+		}
+	}
+
+	/**
+	 * Types text into an input field.
+	 *
+	 * @selector  CSS selector for the input element
+	 * @text      Text to type
+	 * @return    Struct with success key
+	 */
+	struct function type( required string selector, required string text ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			variables.page.fill( arguments.selector, arguments.text )
+			return { success: true, selector: arguments.selector }
+		} catch ( any e ) {
+			return { success: false, error: "Type failed: #e.message#", selector: arguments.selector }
+		}
+	}
+
+	/**
+	 * Scrolls the page in the given direction.
+	 *
+	 * @direction  "up" or "down"
+	 * @return     Struct with success key
+	 */
+	struct function scroll( required string direction ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			var delta = lCase( arguments.direction ) == "up" ? -500 : 500
+			variables.page.evaluate( "window.scrollBy(0, #delta#)" )
+			return { success: true, direction: arguments.direction }
+		} catch ( any e ) {
+			return { success: false, error: "Scroll failed: #e.message#" }
+		}
+	}
+
+	/**
+	 * Returns accumulated console messages from the page.
+	 *
+	 * @return  Array of console message structs
+	 */
+	array function consoleLog() {
+		return variables.consoleMessages
+	}
+
+	/**
+	 * Evaluates JavaScript in the page context.
+	 *
+	 * @js  JavaScript expression to evaluate
+	 * @return  Struct with success and result keys
+	 */
+	struct function eval( required string js ) {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			var result = variables.page.evaluate( arguments.js )
+			return { success: true, result: result }
+		} catch ( any e ) {
+			return { success: false, error: "Eval failed: #e.message#" }
+		}
+	}
+
+	/**
+	 * Returns a list of all image URLs on the current page.
+	 *
+	 * @return  Struct with success and images array
+	 */
+	struct function getImages() {
+		if ( isNull( variables.page ) ) {
+			return { success: false, error: "Browser not launched." }
+		}
+		try {
+			var urls = variables.page.evaluate( "Array.from(document.images).map(i => i.src)" )
+			return { success: true, images: urls, count: arrayLen( urls ) }
+		} catch ( any e ) {
+			return { success: false, error: "Failed to get images: #e.message#" }
+		}
+	}
+
+	/**
+	 * Returns the current browser status.
+	 *
+	 * @return  Struct with running state, url, title, and headless keys
+	 */
+	struct function status() {
+		if ( isNull( variables.browser ) ) {
+			return { running: false, headless: variables.headless }
+		}
+		try {
+			return {
+				running: true,
+				url: variables.page.url(),
+				title: variables.page.title(),
+				headless: variables.headless,
+				consoleCount: variables.consoleMessages.len()
+			}
+		} catch ( any e ) {
+			return { running: true, headless: variables.headless }
+		}
+	}
+
+	/**
+	 * Closes the browser and Playwright instance.
+	 *
+	 * @return  Struct with success key
+	 */
+	struct function close() {
+		try {
+			if ( !isNull( variables.page ) )   { try { variables.page.close() }   catch ( any e ) {} }
+			if ( !isNull( variables.browser ) ) { try { variables.browser.close() } catch ( any e ) {} }
+			if ( !isNull( variables.playwright ) ) { try { variables.playwright.close() } catch ( any e ) {} }
+		} catch ( any e ) {
+			// Best-effort cleanup
+		}
+		variables.page       = null
+		variables.browser    = null
+		variables.playwright = null
+		variables.consoleMessages = []
+		return { success: true, status: "closed" }
+	}
+
+}

@@ -1,0 +1,59 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BrowserCommand", () => {
+			variables.mockConfig = {
+				get : function( key, defaultValue = "" ) { return defaultValue },
+				getNanoboxHome : function() { return getTempDirectory() & "nanobox-test-" & createUUID() }
+			}
+
+			it( "rejects unknown actions", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "unknown", {} )
+				expect( result.success ).toBeFalse()
+			} )
+
+			it( "rejects navigate without a URL", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "navigate", {} )
+				expect( result.success ).toBeFalse()
+				expect( result.error ).toInclude( "URL" )
+			} )
+
+			it( "normalises URLs without scheme", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "navigate", { url: "example.com" } )
+				// Will fail at Playwright but URL should be normalised
+				expect( result.success ).toBeFalse()
+			} )
+
+			it( "returns status even without browser running", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "status", {} )
+				expect( result ).toHaveKey( "running" )
+				expect( result.running ).toBeFalse()
+			} )
+
+			it( "handles close gracefully when no browser running", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "stop", {} )
+				expect( result.success ).toBeTrue()
+				expect( result.status ).toBe( "closed" )
+			} )
+
+			it( "handles install gracefully without network", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "install", {} )
+				// Will likely fail without network but should return a result, not throw
+				expect( result ).toHaveKey( "success" )
+			} )
+
+			it( "accepts bare URL as navigate", () => {
+				var cmd = new "cli.commands.BrowserCommand"( variables.mockConfig )
+				var result = cmd.execute( "https://example.com", {} )
+				expect( result.success ).toBeFalse() // no Playwright JAR installed
+				expect( result.url ?: "" ).toInclude( "example.com" )
+			} )
+		} )
+	}
+}

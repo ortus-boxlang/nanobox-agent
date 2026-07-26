@@ -190,7 +190,7 @@ class {
 			"Agents:    " & agents.len() & " custom"
 		], "color46", "color226" )
 		ui.divider()
-		ui.info( "Get started:  nanobox chat --query=\"Hello!\"" )
+		ui.info( 'Get started:  nanobox chat --query="Hello!"' )
 		ui.info( "Re-run setup:  nanobox setup --force" )
 		ui.info( "Help:          nanobox --help" )
 		println( "" )

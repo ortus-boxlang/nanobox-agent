@@ -1,5 +1,5 @@
-import models.util.PrettyCli
-import models.system.ConfigManager
+import models.util.PrettyCli;
+import models.system.ConfigManager;
 
 /**
  * NanoBox CLI entry point.
@@ -13,8 +13,8 @@ import models.system.ConfigManager
  * @since 0.1.0
  */
 class {
-	static VERSION = "0.1.0"
-	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker setup speak image#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#"
+	static VERSION = "0.1.0";
+	static HELP_TEXT = "NanoBox - AI Agent Platform#char( 10 )##char( 10 )#Usage:#char( 10 )#  nanobox command [options]#char( 10 )##char( 10 )#Commands:#char( 10 )#  start stop status restart doctor#char( 10 )#  chat model config session tokens agent tool mcp script cron backup update#char( 10 )#  gateway web worker setup speak image browser#char( 10 )##char( 10 )#Options:#char( 10 )#  --help, -h        Show this help#char( 10 )#  --version, -v     Show version#char( 10 )#";
 
 	/**
 	 * Application entry point invoked by the BoxLang runtime.
@@ -25,29 +25,62 @@ class {
 	 * @args Raw CLI positional arguments provided by the runtime
 	 */
 	function main( array args = [] ) {
-		var parsed = CLIGetArgs()
-		var options = parsed.options ?: {}
-		var positionals = parsed.positionals ?: []
-		if ( options.version ?: options.v ?: false ) { println( "NanoBox v#static.VERSION#" ); return }
-		if ( options.help ?: options.h ?: false ) { print( static.HELP_TEXT ); return }
-
-		var config = new "models.system.ConfigManager"()
-
-		// Auto-run onboarding on first invocation (unless --help or --version)
-		if ( !config.get( "nanobox.onboardingComplete", false ) && ( !positionals.len() || positionals.first() != "setup" ) ) {
-			config.load()
-			new "cli.commands.SetupCommand"( config ).execute( false )
-			// After setup completes, re-read config in case the user wants to run a command
-			config.load()
-			parsed = CLIGetArgs()
-			positionals = parsed.positionals ?: []
-			if ( !positionals.len() ) { return }
+		var parsed = CLIGetArgs();
+		var options = parsed.options ?: {};
+		var positionals = parsed.positionals ?: [];
+		if ( options.version ?: options.v ?: false ) {
+			println( "NanoBox v#static.VERSION#" );
+			return;
+		}
+		if ( options.help ?: options.h ?: false ) {
+			print( static.HELP_TEXT );
+			return;
 		}
 
-		if ( options.z ?: options[ "z" ] ?: false ) { positionals = [ "chat" ]; if ( parsed.positionals.len() > 1 ) { for ( var positional in parsed.positionals.slice( 1 ) ) { positionals.append( positional ) } }; parsed.positionals = positionals }
-		if ( !positionals.len() ) { print( static.HELP_TEXT ); return }
-		var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), config ).execute( parsed )
-		if ( options.z ?: options[ "z" ] ?: false ) { if ( isStruct( result ) && result.success ) { println( result.text ?: "" ) } else { println( jsonSerialize( result, true ) ) } } else { println( jsonSerialize( result, true ) ) }
-		if ( isStruct( result ) && result.keyExists( "success" ) && !result.success ) { CLIExit( 1 ) }
+		var config = new "models.system.ConfigManager"();
+
+		// Auto-run onboarding on first invocation (unless --help or --version)
+		if (
+			!config.get( "nanobox.onboardingComplete", false ) &&
+				( !positionals.len() || positionals.first() != "setup" )
+		) {
+			config.load();
+			new "cli.commands.SetupCommand"( config ).execute( false );
+			// After setup completes, re-read config in case the user wants to run a command
+			config.load();
+			parsed = CLIGetArgs();
+			positionals = parsed.positionals ?: [];
+			if ( !positionals.len() ) {
+				return;
+			}
+		}
+
+		if ( options.z ?: options[ "z" ] ?: false ) {
+			positionals = [ "chat"];
+			if ( parsed.positionals.len() > 1 ) {
+				for ( var positional in parsed.positionals.slice( 1 ) ) {
+					positionals.append( positional );
+				}
+			}
+			parsed.positionals = positionals;
+		}
+		if ( !positionals.len() ) {
+			print( static.HELP_TEXT );
+			return;
+		}
+		var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), config )
+			.execute( parsed );
+		if ( options.z ?: options[ "z" ] ?: false ) {
+			if ( isStruct( result ) && result.success ) {
+				println( result.text ?: "" );
+			} else {
+				println( jsonSerialize( result, true ) );
+			}
+		} else {
+			println( jsonSerialize( result, true ) );
+		}
+		if ( isStruct( result ) && result.keyExists( "success" ) && !result.success ) {
+			CLIExit( 1 );
+		}
 	}
 }

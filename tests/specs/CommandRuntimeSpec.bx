@@ -1,21 +1,89 @@
 class extends="testbox.system.BaseSpec" {
+
 	function run() {
-		describe( "NanoBox CLI runtime", () => {
-			it( "executes every non-interactive command namespace", () => {
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), new "models.system.ConfigManager"( getTempDirectory() & "/cli-runtime-#createUUID()#" ) )
-				var commands = [ "config", "session", "tokens", "agent", "tool", "mcp", "script", "cron", "backup", "update", "model", "doctor", "status", "gateway" ]
-				var actions = [ "show", "list", "", "list", "list", "list", "list", "list", "status", "status", "current", "", "", "status" ]
-				for ( var index = 1; index <= commands.len(); index++ ) {
-					var result = runtime.execute( { positionals: [ commands[ index ], actions[ index ] ], options: {} } )
-					expect( result ).toBeStruct()
-					expect( result ).toHaveKey( "success" )
-				}
-			} )
-			it( "executes positional and option gateway sends", () => {
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), new "models.system.ConfigManager"( getTempDirectory() & "/cli-gateway-#createUUID()#" ) )
-				var result = runtime.execute( { positionals: [ "gateway", "send", "telegram", "1", "hello" ], options: {} } )
-				expect( result ).toHaveKey( "success" )
-			} )
-		} )
+		describe(
+			"NanoBox CLI runtime",
+			() => {
+				it(
+					"executes every non-interactive command namespace",
+					() => {
+						var runtime = new "cli.CommandRuntime"(
+							new "models.util.PrettyCli"( false ),
+							new "models.system.ConfigManager"(
+								"#getTempDirectory()#/cli-runtime-#createUUID()#"
+							)
+						);
+						var commands = [
+							"config",
+							"session",
+							"tokens",
+							"agent",
+							"tool",
+							"mcp",
+							"script",
+							"cron",
+							"backup",
+							"update",
+							"model",
+							"doctor",
+							"status",
+							"gateway"
+						];
+						var actions = [
+							"show",
+							"list",
+							"",
+							"list",
+							"list",
+							"list",
+							"list",
+							"list",
+							"status",
+							"status",
+							"current",
+							"",
+							"",
+							"status"
+						];
+						for ( var index = 1; index <= commands.len(); index++ ) {
+							var result = runtime
+								.execute(
+									{
+										positionals : [ commands[ index ], actions[ index ]],
+										options     : {}
+									}
+								);
+							expect( result ).toBeStruct();
+							expect( result ).toHaveKey( "success" );
+						}
+					}
+				);
+				it(
+					"executes positional and option gateway sends",
+					() => {
+						var runtime = new "cli.CommandRuntime"(
+							new "models.util.PrettyCli"( false ),
+							new "models.system.ConfigManager"(
+								"#getTempDirectory()#/cli-gateway-#createUUID()#"
+							)
+						);
+						var result = runtime
+							.execute(
+								{
+									positionals : [
+										"gateway",
+										"send",
+										"telegram",
+										"1",
+										"hello"
+									],
+									options : {}
+								}
+							);
+						expect( result ).toHaveKey( "success" );
+					}
+				);
+			}
+		);
 	}
 }

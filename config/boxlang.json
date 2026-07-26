@@ -19,5 +19,8 @@
 			"driver": "sqlite",
 			"connectionString": "jdbc:sqlite:${user-home}/.nanobox/data/nanobox.db"
 		}
-	}
+	},
+	"classPaths": [
+		"${user-dir}/lib/java"
+	]
 }

@@ -1,0 +1,104 @@
+/**
+ * BrowserCommand — CLI interface for browser automation via Java Playwright.
+ *
+ * Uses BrowserManager (Java Playwright via createObject) for all browser
+ * operations.  No Node.js dependency required.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+	property configManager;
+	property manager;
+
+	/**
+	 * @appConfig  ConfigManager instance for output path resolution
+	 */
+	function init( required any appConfig ) {
+		variables.configManager = arguments.appConfig
+		variables.manager = new "models.tools.BrowserManager"()
+		return this
+	}
+
+	/**
+	 * Dispatches a browser action.
+	 *
+	 * Actions: install, start, stop, status, navigate, snapshot, screenshot,
+	 * click, type, scroll, console, eval, images.
+	 *
+	 * @action  Action name (case-insensitive)
+	 * @args    Named arguments
+	 * @return  Result struct
+	 */
+	struct function execute( required string action, struct args = {} ) {
+		switch ( lCase( arguments.action ) ) {
+			case "install":    return installBrowser()
+			case "start":      return variables.manager.launch( args.headless ?: args[ "headless" ] ?: true )
+			case "stop":       return variables.manager.close()
+			case "status":     return browserStatus()
+			case "navigate":   return navigateAction( args )
+			case "snapshot":   return variables.manager.snapshot( args.full ?: args[ "full" ] ?: false )
+			case "screenshot": return variables.manager.screenshot( args.output ?: args.o ?: "", args.fullPage ?: args[ "full-page" ] ?: false )
+			case "click":      return variables.manager.click( args.selector ?: args[ 1 ] ?: "" )
+			case "type":       return variables.manager.type( args.selector ?: "", args.text ?: "" )
+			case "scroll":     return variables.manager.scroll( args.direction ?: args[ 1 ] ?: "down" )
+			case "console":    return { success: true, messages: variables.manager.consoleLog() }
+			case "eval":       return variables.manager.eval( args.js ?: args[ 1 ] ?: "" )
+			case "images":     return variables.manager.getImages()
+			default:           return navigateAction( { url: arguments.action, 1: arguments.action } )
+		}
+	}
+
+	/**
+	 * Navigates to a URL, normalising the scheme if missing.
+	 */
+	private struct function navigateAction( struct args ) {
+		var url = args.url ?: args[ 1 ] ?: ""
+		if ( !len( url ) ) { return { success: false, error: "A URL is required" } }
+		if ( !reFindNoCase( "^https?://", url ) ) { url = "https://" & url }
+		return variables.manager.navigate( url )
+	}
+
+	/**
+	 * Returns extended status including Playwright JAR availability.
+	 */
+	private struct function browserStatus() {
+		var st = variables.manager.status()
+		var jarPath = expandPath( "." ) & "/lib/java"
+		var hasJar = directoryExists( jarPath ) && directoryList( jarPath, false, "query", "*.jar" ).len() > 0
+		st.success = true
+		st.playwrightJar = hasJar
+		st.libJavaPath = jarPath
+		if ( !hasJar ) {
+			st.installHint = "Run 'nanobox browser install' to download the Playwright JAR."
+		}
+		return st
+	}
+
+	/**
+	 * Installs Playwright Java: downloads the JAR to lib/java/.
+	 */
+	private struct function installBrowser() {
+		var libDir = expandPath( "." ) & "/lib/java"
+		if ( !directoryExists( libDir ) ) { directoryCreate( libDir ) }
+		var downloader = new "models.system.DownloadManager"()
+		// Playwright Java Maven coordinates
+		var group = "com.microsoft.playwright"
+		var artifact = "playwright"
+		var version = "1.49.0"
+		var jarPath = libDir & "/#artifact#-#version#.jar"
+
+		if ( fileExists( jarPath ) ) {
+			return { success: true, message: "Playwright JAR already installed at #jarPath#", path: jarPath }
+		}
+
+		var result = downloader.downloadMavenArtifact( group, artifact, version, jarPath )
+		if ( !result.success ) {
+			// Fallback: direct Maven Central URL
+			var url = "https://repo1.maven.org/maven2/#replace( group, '.', '/' )#/#artifact#/#version#/#artifact#-#version#.jar"
+			result = downloader.download( url, jarPath, "Playwright JAR" )
+		}
+		return result
+	}
+}

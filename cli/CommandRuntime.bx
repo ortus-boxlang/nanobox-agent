@@ -94,6 +94,7 @@ class {
 			case "doctor": return new "cli.CoreLifecycleCommand"( variables.config ).execute( command, args )
 			case "gateway": return new "cli.commands.GatewayCommand"( new "models.gateway.GatewayRegistry"( variables.config ), variables.config ).execute( action ?: "status", args )
 			case "model": return new "cli.commands.ModelCommand"( variables.config ).execute( action ?: "current", args )
+			case "browser": return new "cli.commands.BrowserCommand"( variables.config ).execute( action ?: "status", args )
 			case "skill":
 				if ( action == "curator" ) { return new "cli.commands.SkillCuratorCommand"( new "models.skills.SkillCurator"( expandPath( "." ) ), new "models.skills.CuratorReportManager"( expandPath( "." ), new "models.vault.VaultManager"( expandPath( ".nanobox/vault" ) ), variables.config ), variables.config ).execute( args.action ?: "status", args ) }
 				if ( action == "activate" ) { return new "cli.commands.SkillActivationCommand"( new "models.skills.SkillCurator"( expandPath( "." ) ) ).execute( args.action ?: "status", args ) }

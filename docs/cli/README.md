@@ -176,6 +176,19 @@ nanobox <command> [options]
 | `speak <text> [--output=<path>]` | Save to custom path |
 | `tts <text>` | Alias for `speak` |
 
+### Browser Automation
+
+| Command | Description |
+|---------|-------------|
+| `browser status` | Check Node.js + Playwright availability |
+| `browser open <url>` | Open URL, return page metadata |
+| `browser screenshot <url>` | Capture screenshot |
+| `browser text <url>` | Extract visible text content |
+| `browser html <url>` | Extract raw HTML |
+| `browser pdf <url>` | Generate PDF from page |
+| `browser close` | Close browser session |
+| `browser install` | Install Playwright browsers |
+
 ### Backup
 
 | Command | Description |
