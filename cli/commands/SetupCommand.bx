@@ -1,0 +1,314 @@
+/**
+ * SetupCommand — interactive first-run onboarding wizard for NanoBox.
+ *
+ * Guides the user through:
+ *   1. Agent naming
+ *   2. Personality / instruction preset
+ *   3. Primary AI provider + model
+ *   4. Additional providers
+ *   5. Custom agent creation
+ *   6. Gateway configuration (at least one)
+ *   7. Summary + save
+ *
+ * Auto-runs on first `nanobox` invocation.  Re-runnable via `nanobox setup`.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property config;
+	property ui;
+
+	// ── Provider list (bx-ai supported + custom) ───────────────────────────
+	static PROVIDERS = [
+		{ value: "openai",          label: "OpenAI",          desc: "GPT-4o, GPT-4, GPT-3.5 — cloud" },
+		{ value: "claude",          label: "Anthropic Claude", desc: "Claude 4 Sonnet, Haiku — cloud" },
+		{ value: "gemini",          label: "Google Gemini",   desc: "Gemini 2.5 Pro, Flash — cloud" },
+		{ value: "groq",            label: "Groq",            desc: "Fast inference — cloud" },
+		{ value: "grok",            label: "xAI Grok",        desc: "Grok models — cloud" },
+		{ value: "deepseek",        label: "DeepSeek",        desc: "DeepSeek models — cloud" },
+		{ value: "mistral",         label: "Mistral AI",      desc: "Mistral models — cloud" },
+		{ value: "openrouter",      label: "OpenRouter",      desc: "Gateway to many models — cloud" },
+		{ value: "perplexity",      label: "Perplexity",      desc: "Perplexity models — cloud" },
+		{ value: "huggingface",     label: "HuggingFace",     desc: "Open models — cloud" },
+		{ value: "cohere",          label: "Cohere",          desc: "Cohere models — cloud" },
+		{ value: "ollama",          label: "Ollama",          desc: "Local models — on-premise" },
+		{ value: "openai-compatible", label: "OpenAI-Compatible", desc: "LM Studio, vLLM, any OpenAI-API endpoint" }
+	]
+
+	static PERSONALITIES = [
+		{ value: "helpful",       label: "Helpful Assistant",
+		  desc: "Balanced, friendly, and approachable — great for general use",
+		  system: "You are a helpful, friendly AI assistant. Be concise but warm, and always offer to go deeper when asked." },
+		{ value: "technical",     label: "Code & Tech Expert",
+		  desc: "Concise, technical, and precise — ideal for development work",
+		  system: "You are a senior software engineer. Give direct, technically precise answers with code examples. Prioritise correctness and best practices." },
+		{ value: "creative",      label: "Creative Writer",
+		  desc: "Expressive, detailed, and imaginative — for content creation",
+		  system: "You are a creative writing partner. Use vivid language, explore ideas thoroughly, and help the user craft compelling narratives." },
+		{ value: "devops",        label: "DevOps Engineer",
+		  desc: "Pragmatic, infrastructure-focused — for ops and deployment",
+		  system: "You are a seasoned DevOps engineer. Focus on reliability, security, and automation. Provide practical commands and architecture guidance." },
+		{ value: "teacher",       label: "Patient Teacher",
+		  desc: "Explanatory and encouraging — for learning and exploration",
+		  system: "You are a patient educator. Break down complex topics into digestible pieces, use analogies, and encourage questions." }
+	]
+
+	/**
+	 * @configManager ConfigManager instance for reading/writing configuration
+	 */
+	function init( required any configManager ) {
+		variables.config = arguments.configManager
+		variables.ui = new "cli.SetupOnboarding"()
+		return this
+	}
+
+	/**
+	 * Runs the onboarding wizard.
+	 * Returns immediately if already configured (unless force=true).
+	 */
+	struct function execute( boolean force = false ) {
+		// Check if already configured
+		if ( !arguments.force && isConfigured() ) {
+			return { success: true, note: "Already configured. Run 'nanobox setup --force' to reconfigure." }
+		}
+
+		ui.clear()
+		ui.showNanoBoxLogo()
+		ui.rainbowDivider()
+		ui.box( "Welcome to NanoBox!", [
+			"This wizard will get you up and running in a few steps.",
+			"You'll configure your AI provider, agent personality,",
+			"and at least one gateway so NanoBox can reach you."
+		], "color75", "color46" )
+		ui.divider()
+
+		// ── Step 1: Agent Name ────────────────────────────────────────────
+		ui.step( 1, "Name Your Agent" )
+		ui.info( "This is the name NanoBox uses to identify itself in chat." )
+		var agentName = ui.prompt( "Agent name", "NanoBox" )
+
+		// ── Step 2: Personality ───────────────────────────────────────────
+		ui.step( 2, "Choose a Personality" )
+		ui.info( "This sets the default system instructions for your main agent." )
+		var personalityChoice = ui.select( "Select a personality:", static.PERSONALITIES, true )
+		var personality = ""
+		var systemPrompt = ""
+		for ( var p in static.PERSONALITIES ) {
+			if ( p.value == personalityChoice ) { personality = p.value; systemPrompt = p.system; break }
+		}
+		if ( !len( personality ) ) {
+			personality = "custom"
+			ui.info( "Write your custom system instructions:" )
+			systemPrompt = ui.prompt( "System prompt" )
+		}
+
+		// ── Step 3: Primary Provider ──────────────────────────────────────
+		ui.step( 3, "Select Your Primary AI Provider" )
+		ui.info( "This provider will be used for all default chat conversations." )
+		var providerChoice = ui.select( "Choose a provider:", static.PROVIDERS, false )
+
+		// Collect provider details
+		var providerConfig = configureProvider( providerChoice )
+		if ( providerConfig == null ) { return { success: false, error: "Provider setup cancelled" } }
+
+		// ── Step 4: Additional Providers ──────────────────────────────────
+		ui.step( 4, "Register Additional Providers (Optional)" )
+		var extraProviders = []
+		if ( ui.confirm( "Would you like to add another provider?" ) ) {
+			while ( true ) {
+				var extraChoice = ui.select( "Choose an additional provider:", static.PROVIDERS, false )
+				var extraConfig = configureProvider( extraChoice )
+				if ( extraConfig != null ) {
+					extraConfig.name = extraChoice
+					extraProviders.append( extraConfig )
+				}
+				if ( !ui.confirm( "Add another provider?" ) ) { break }
+			}
+		}
+
+		// ── Step 5: Custom Agents ─────────────────────────────────────────
+		ui.step( 5, "Create Custom Agents (Optional)" )
+		var agents = []
+		if ( ui.confirm( "Would you like to create a custom agent?" ) ) {
+			while ( true ) {
+				var agentName = ui.prompt( "Agent name" )
+				ui.info( "Describe what this agent should do (its system instructions):" )
+				var agentPrompt = ui.prompt( "Instructions" )
+				var agentProvider = providerChoice
+				if ( ui.confirm( "Use a different provider for this agent?" ) ) {
+					agentProvider = ui.select( "Choose provider:", static.PROVIDERS, false )
+				}
+				agents.append( { name: agentName, instructions: agentPrompt, provider: agentProvider } )
+				if ( !ui.confirm( "Create another agent?" ) ) { break }
+			}
+		}
+
+		// ── Step 6: Gateway Setup ─────────────────────────────────────────
+		ui.step( 6, "Configure a Gateway" )
+		ui.info( "Gateways let NanoBox reach you — at least one is required." )
+		var gateways = []
+		if ( ui.confirm( "Configure Telegram gateway?" ) ) {
+			ui.info( "Create a bot via @BotFather on Telegram and paste the token." )
+			var token = ui.prompt( "Telegram bot token" )
+			if ( len( token ) ) {
+				gateways.append( { type: "telegram", token: token } )
+				ui.success( "Telegram gateway added" )
+			}
+		}
+		if ( !gateways.len() || ui.confirm( "Also configure email gateway?" ) ) {
+			ui.info( "Email lets NanoBox send messages via SMTP." )
+			if ( ui.confirm( "Configure SMTP email?" ) ) {
+				var smtpHost = ui.prompt( "SMTP host", "smtp.gmail.com" )
+				var smtpPort = ui.prompt( "SMTP port", "587" )
+				var smtpUser = ui.prompt( "SMTP username" )
+				var smtpPass = ui.prompt( "SMTP password" )
+				var fromAddr = ui.prompt( "From address" )
+				if ( len( smtpHost ) && len( smtpUser ) ) {
+					gateways.append( { type: "email", host: smtpHost, port: smtpPort, username: smtpUser, password: smtpPass, from: fromAddr } )
+					ui.success( "Email gateway added" )
+				}
+			}
+		}
+		if ( !gateways.len() ) {
+			ui.error( "At least one gateway is required for NanoBox to reach you." )
+			return execute( arguments.force )
+		}
+
+		// ── Step 7: Save ──────────────────────────────────────────────────
+		ui.step( 7, "Save Configuration" )
+		saveConfig( agentName, personality, systemPrompt, providerChoice, providerConfig, extraProviders, agents, gateways )
+		ui.rainbowDivider()
+		ui.box( "🎉 Setup Complete!", [
+			"Agent:     " & agentName,
+			"Personality: " & personality,
+			"Provider:  " & providerChoice & " (" & ( providerConfig.model ?: "" ) & ")",
+			"Gateways:  " & gateways.len() & " configured",
+			"Agents:    " & agents.len() & " custom"
+		], "color46", "color226" )
+		ui.divider()
+		ui.info( "Get started:  nanobox chat --query=\"Hello!\"" )
+		ui.info( "Re-run setup:  nanobox setup --force" )
+		ui.info( "Help:          nanobox --help" )
+		println( "" )
+
+		return { success: true, agentName: agentName, provider: providerChoice, gateways: gateways.len() }
+	}
+
+	// ── Private Helpers ──────────────────────────────────────────────────
+
+	/**
+	 * Checks whether a basic configuration already exists.
+	 */
+	private boolean function isConfigured() {
+		return len( variables.config.get( "bx-ai.defaultProvider", "" ) ) || len( variables.config.get( "nanobox.agentName", "" ) )
+	}
+
+	/**
+	 * Prompts the user for provider-specific configuration (API key, model, base URL).
+	 */
+	private struct function configureProvider( required string provider ) {
+		var result = { provider: arguments.provider }
+
+		// API key — required for cloud providers, optional for local
+		var needsKey = [ "openai", "claude", "gemini", "groq", "grok", "deepseek", "mistral", "openrouter", "perplexity", "huggingface", "cohere" ]
+		if ( needsKey.contains( arguments.provider ) ) {
+			result.apiKey = ui.prompt( "API key for " & arguments.provider )
+			if ( !len( result.apiKey ) ) { return null }
+		}
+
+		// Model — prompt for the model name
+		var defaultModels = {
+			openai: "gpt-4o", claude: "claude-sonnet-4", gemini: "gemini-2.5-flash",
+			groq: "llama-3.3-70b-versatile", grok: "grok-2", deepseek: "deepseek-chat",
+			mistral: "mistral-small-latest", openrouter: "auto", perplexity: "sonar-pro",
+			huggingface: "Qwen/Qwen2.5-72B-Instruct", cohere: "command-r-plus",
+			ollama: "qwen2.5:7b-instruct"
+		}
+
+		if ( arguments.provider == "openai-compatible" ) {
+			result.baseURL = ui.prompt( "Base URL (e.g. http://localhost:1234/v1)", "http://localhost:1234/v1" )
+			result.model = ui.prompt( "Model name", "gpt-4o-mini" )
+			result.apiKey = ui.prompt( "API key (if required)", "not-required" )
+		} else {
+			result.model = ui.prompt( "Model", defaultModels[ arguments.provider ] ?: "gpt-4o" )
+		}
+
+		return result
+	}
+
+	/**
+	 * Persists all configuration values to the config file.
+	 */
+	private void function saveConfig(
+		required string agentName,
+		required string personality,
+		required string systemPrompt,
+		required string primaryProvider,
+		required struct providerConfig,
+		required array  extraProviders,
+		required array  agents,
+		required array  gateways
+	) {
+		// Agent identity
+		variables.config.set( "nanobox.agentName", arguments.agentName )
+		variables.config.set( "nanobox.personality", arguments.personality )
+		variables.config.set( "nanobox.systemPrompt", arguments.systemPrompt )
+
+		// Primary provider
+		variables.config.set( "bx-ai.defaultProvider", arguments.primaryProvider )
+		variables.config.set( "bx-ai.defaultModel", arguments.providerConfig.model ?: "" )
+
+		// Save provider definitions
+		var allProviders = { arguments.primaryProvider: buildProviderConfig( arguments.providerConfig ) }
+		for ( var ep in arguments.extraProviders ) {
+			allProviders[ ep.name ] = buildProviderConfig( ep )
+		}
+		
+		// Merge with existing providers if any
+		var existing = variables.config.get( "bx-ai.providers", {} )
+		for ( var key in existing ) {
+			if ( !allProviders.keyExists( key ) ) { allProviders[ key ] = existing[ key ] }
+		}
+		variables.config.set( "bx-ai.providers", allProviders )
+
+		// Save custom agents
+		if ( arguments.agents.len() ) {
+			var agentMap = {}
+			for ( var a in arguments.agents ) {
+				agentMap[ a.name ] = { instructions: a.instructions, provider: a.provider }
+			}
+			variables.config.set( "nanobox.agents", agentMap )
+		}
+
+		// Save gateways
+		if ( arguments.gateways.len() ) {
+			variables.config.set( "nanobox.gateways", arguments.gateways )
+		}
+
+		// Set onboarding complete flag
+		variables.config.set( "nanobox.onboardingComplete", true )
+
+		variables.config.save()
+	}
+
+	/**
+	 * Converts provider config from the wizard format to the config store format.
+	 */
+	private struct function buildProviderConfig( required struct cfg ) {
+		var result = { type: "openai" }
+		if ( arguments.cfg.provider == "openai-compatible" ) {
+			result.type = "openai-compatible"
+			result.baseURL = arguments.cfg.baseURL ?: ""
+			result.apiKey = arguments.cfg.apiKey ?: ""
+		} else {
+			result.type = arguments.cfg.provider
+			if ( len( arguments.cfg.apiKey ?: "" ) ) { result.apiKey = arguments.cfg.apiKey }
+		}
+		if ( len( arguments.cfg.model ?: "" ) ) { result.defaultModel = arguments.cfg.model }
+		return result
+	}
+
+}
