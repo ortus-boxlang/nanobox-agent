@@ -148,6 +148,34 @@ nanobox <command> [options]
 | `security log [--lines=]` | View security log |
 | `security status` | Security posture |
 
+### Logs
+
+| Command | Description |
+|---------|-------------|
+| `logs list` | List available log files |
+| `logs show <name> [--lines=N] [--level=]` | View log entries |
+| `logs tail <name>` | Follow log in real-time |
+| `logs search <query> [--log=] [--level=]` | Search across logs |
+| `logs path` | Show logs directory path |
+| `logs clear <name>` | Truncate a log file |
+
+### Image Generation
+
+| Command | Description |
+|---------|-------------|
+| `image <prompt> [--size=] [--quality=]` | Generate an AI image |
+| `image <prompt> [--style=] [--n=N]` | With optional parameters |
+| `image <prompt> [--output=<path>]` | Save to custom path |
+
+### Text-to-Speech
+
+| Command | Description |
+|---------|-------------|
+| `speak <text> [--voice=] [--speed=]` | Synthesise speech |
+| `speak <text> [--format=mp3|wav|flac]` | Choose output format |
+| `speak <text> [--output=<path>]` | Save to custom path |
+| `tts <text>` | Alias for `speak` |
+
 ### Backup
 
 | Command | Description |
