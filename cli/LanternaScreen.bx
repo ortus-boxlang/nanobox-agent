@@ -1,0 +1,263 @@
+/**
+ * LanternaScreen — BoxLang wrapper around the Lanterna 3.1.3 Java TUI library.
+ *
+ * Provides alternate-screen buffer management, raw keyboard input (arrow keys,
+ * Ctrl combos, function keys), double-buffered rendering, and terminal-size
+ * detection.  These capabilities are not achievable with pure ANSI + CLIRead().
+ *
+ * Requires:  lib/java/lanterna-3.1.3.jar  (added to classPaths in boxlang.json)
+ *
+ * BoxLang Java interop notes (per https://boxlang.ortusbooks.com/boxlang-framework/java-integration):
+ *   - `new ClassName(args)` calls the constructor immediately.
+ *   - `createObject("java", "...")` returns an UNINITIALIZED DynamicObject; call .init() explicitly.
+ *   - Static fields / methods work on uninitialized DynamicObject without .init().
+ *   - Inner classes use `$` separator in the FQCN (e.g. TextColor$Indexed).
+ *   - Java arrays in BoxLang are 1-based.
+ *   - Use javaCast("int", value) to disambiguate overloaded Java methods.
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	import java:com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+	import java:com.googlecode.lanterna.screen.TerminalScreen;
+	import java:com.googlecode.lanterna.input.KeyType;
+	import java:com.googlecode.lanterna.SGR;
+
+	property name="screen";
+	property name="graphics";
+	property name="running";
+
+	// KeyType constants — read once and cached (static field access on uninitialized object)
+	variables.KT = createObject( "java", "com.googlecode.lanterna.input.KeyType" );
+
+	function init() {
+		variables.running = false
+		return this
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Lifecycle
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Enters the alternate screen buffer and enables raw keyboard mode.
+	 * Must be called before any draw/read operations.
+	 */
+	void function startScreen() {
+		var factory = new DefaultTerminalFactory()
+		variables.screen = factory.createScreen()
+		variables.screen.startScreen()
+		variables.graphics = variables.screen.newTextGraphics()
+		variables.running = true
+	}
+
+	/**
+	 * Exits the alternate screen buffer and returns to the normal terminal.
+	 */
+	void function stopScreen() {
+		if ( variables.running ) {
+			variables.screen.stopScreen()
+			variables.running = false
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Terminal info
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Returns the current terminal dimensions.
+	 * @return Struct with `rows` and `columns` keys
+	 */
+	struct function getSize() {
+		var sz = variables.screen.getTerminalSize()
+		return { rows: sz.getRows(), columns: sz.getColumns() }
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Drawing
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Writes a string at the given (column, row) position using ANSI 256 colours.
+	 *
+	 * @col      0-based column
+	 * @row      0-based row
+	 * @text     String to place on screen
+	 * @fgCode   Foreground ANSI 256 colour code (numeric 0-255, or empty = default)
+	 * @bgCode   Background ANSI 256 colour code (numeric 0-255, or empty = default)
+	 * @bold     Apply bold/bright attribute
+	 */
+	void function drawText(
+		required numeric col,
+		required numeric row,
+		required string  text,
+		any fgCode = "",
+		any bgCode = "",
+		boolean bold = false
+	) {
+		var tg = variables.graphics
+
+		// Resolve foreground colour
+		if ( isNumeric( arguments.fgCode ) ) {
+			var Color = createObject( "java", "com.googlecode.lanterna.TextColor$Indexed" )
+			tg.setForegroundColor( Color.fromInt( javaCast( "int", arguments.fgCode ) ) )
+		} else {
+			var defColor = createObject( "java", "com.googlecode.lanterna.TextColor$ANSI" )
+			tg.setForegroundColor( defColor.DEFAULT )
+		}
+
+		// Resolve background colour
+		if ( isNumeric( arguments.bgCode ) ) {
+			var BgColor = createObject( "java", "com.googlecode.lanterna.TextColor$Indexed" )
+			tg.setBackgroundColor( BgColor.fromInt( javaCast( "int", arguments.bgCode ) ) )
+		} else {
+			var defBg = createObject( "java", "com.googlecode.lanterna.TextColor$ANSI" )
+			tg.setBackgroundColor( defBg.DEFAULT )
+		}
+
+		// Modifiers
+		var modArray = createObject( "java", "com.googlecode.lanterna.SGR" )
+		if ( arguments.bold ) {
+			tg.putString(
+				javaCast( "int", arguments.col ),
+				javaCast( "int", arguments.row ),
+				arguments.text,
+				javaCast( "com.googlecode.lanterna.SGR[]", [ modArray.BOLD ] )
+			)
+		} else {
+			tg.putString(
+				javaCast( "int", arguments.col ),
+				javaCast( "int", arguments.row ),
+				arguments.text,
+				javaCast( "com.googlecode.lanterna.SGR[]", [] )
+			)
+		}
+	}
+
+	/**
+	 * Fills a rectangular region with a single character using the given colour code.
+	 *
+	 * @col    0-based starting column
+	 * @row    0-based starting row
+	 * @width  Width in characters
+	 * @height Height in rows
+	 * @char   Fill character (default space)
+	 * @code   ANSI 256 colour code for background (numeric, or empty = default)
+	 */
+	void function fillRect(
+		required numeric col,
+		required numeric row,
+		required numeric width,
+		required numeric height,
+		string char = " ",
+		any code = ""
+	) {
+		for ( var r = arguments.row; r < arguments.row + arguments.height; r++ ) {
+			drawText( arguments.col, r, repeatString( arguments.char, arguments.width ),
+				"", isNumeric( arguments.code ) ? arguments.code : "", false )
+		}
+	}
+
+	/**
+	 * Draws a single-line border box (╭─╮/│/╰─╯) in a given colour.
+	 *
+	 * @col    0-based column of top-left corner
+	 * @row    0-based row of top-left corner
+	 * @width  Total width including border characters
+	 * @height Total height including border characters
+	 * @code   ANSI 256 colour code (numeric, or empty = default)
+	 */
+	void function drawBox(
+		required numeric col,
+		required numeric row,
+		required numeric width,
+		required numeric height,
+		any code = ""
+	) {
+		var fg = isNumeric( arguments.code ) ? arguments.code : ""
+		var inner = arguments.width - 2
+		// Top border
+		drawText( arguments.col, arguments.row,
+			"╭" & repeatString( "─", inner ) & "╮", fg )
+		// Side borders
+		for ( var r = arguments.row + 1; r < arguments.row + arguments.height - 1; r++ ) {
+			drawText( arguments.col,                           r, "│", fg )
+			drawText( arguments.col + arguments.width - 1,    r, "│", fg )
+		}
+		// Bottom border
+		drawText( arguments.col, arguments.row + arguments.height - 1,
+			"╰" & repeatString( "─", inner ) & "╯", fg )
+	}
+
+	/**
+	 * Positions the input cursor at (col, row).  Used to indicate the typing position.
+	 */
+	void function setCursorPosition( required numeric col, required numeric row ) {
+		variables.screen.setCursorPosition(
+			createObject( "java", "com.googlecode.lanterna.TerminalPosition" ).init(
+				javaCast( "int", arguments.col ),
+				javaCast( "int", arguments.row )
+			)
+		)
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Buffer management
+	// ══════════════════════════════════════════════════════════════════════
+
+	/** Swaps the back buffer to the screen (makes all drawText calls visible). */
+	void function refresh() { variables.screen.refresh() }
+
+	/** Clears the screen buffer to blanks. */
+	void function clear() { variables.screen.clear() }
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Keyboard input
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Reads one keystroke (blocking).
+	 *
+	 * @return Struct:
+	 *   type       — string form of KeyType (e.g. "Character", "ArrowUp", "Enter", "Backspace", "Escape", "EOF", "F1"…)
+	 *   character  — the typed character as a string, or "" for non-character keys
+	 *   ctrl       — boolean, true when Ctrl is held
+	 *   alt        — boolean, true when Alt is held
+	 *   shift      — boolean, true when Shift is held
+	 */
+	struct function readInput() {
+		var ks = variables.screen.readInput()
+		if ( isNull( ks ) ) { return { type: "none", character: "", ctrl: false, alt: false, shift: false } }
+		return {
+			type:      ks.getKeyType().toString(),
+			character: isNull( ks.getCharacter() ) ? "" : ks.getCharacter().toString(),
+			ctrl:      ks.isCtrlDown(),
+			alt:       ks.isAltDown(),
+			shift:     ks.isShiftDown()
+		}
+	}
+
+	/**
+	 * Non-blocking keystroke poll.
+	 * Returns a result with type="none" when no key is waiting.
+	 */
+	struct function pollInput() {
+		var ks = variables.screen.pollInput()
+		if ( isNull( ks ) ) { return { type: "none", character: "", ctrl: false, alt: false, shift: false } }
+		return {
+			type:      ks.getKeyType().toString(),
+			character: isNull( ks.getCharacter() ) ? "" : ks.getCharacter().toString(),
+			ctrl:      ks.isCtrlDown(),
+			alt:       ks.isAltDown(),
+			shift:     ks.isShiftDown()
+		}
+	}
+
+	/** Returns true when the screen has been started and not yet stopped. */
+	boolean function isRunning() { return variables.running }
+
+}

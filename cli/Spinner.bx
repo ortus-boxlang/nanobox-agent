@@ -1,0 +1,119 @@
+/**
+ * Spinner — Animated braille loading indicator for the NanoBox TUI.
+ *
+ * Renders a braille spinner in-place using ANSI cursor-control sequences.
+ * When a LanternaScreen is provided the spinner is drawn at an absolute
+ * (col, row) coordinate; otherwise it writes inline via systemOutput().
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property name="label";
+	property name="step";
+	property name="screen";
+	property name="col";
+	property name="row";
+	property name="color";
+
+	variables.ESC    = char( 27 )
+	variables.RESET  = char( 27 ) & "[0m"
+	variables.FRAMES = [ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" ]
+
+	function init() {
+		variables.label  = ""
+		variables.step   = 0
+		variables.screen = null
+		variables.col    = 0
+		variables.row    = 0
+		variables.color  = "color42"
+		return this
+	}
+
+	/**
+	 * Begins an inline (non-Lanterna) spinner animation at the current cursor position.
+	 *
+	 * @label  Text shown next to the spinner (e.g. "Thinking…")
+	 * @color  ANSI 256 colour name/number for the spinner character
+	 */
+	void function start( required string label, any color = "color42" ) {
+		variables.label = arguments.label
+		variables.step  = 0
+		variables.color = arguments.color
+		variables.screen = null
+	}
+
+	/**
+	 * Begins a Lanterna spinner at an absolute screen position.
+	 *
+	 * @label   Text shown next to the spinner
+	 * @col     0-based column
+	 * @row     0-based row
+	 * @screen  LanternaScreen instance
+	 * @color   ANSI 256 colour name/number (resolved to a numeric code)
+	 */
+	void function startAt( required string label, required numeric col, required numeric row, required any screen, any color = "color42" ) {
+		variables.label  = arguments.label
+		variables.step   = 0
+		variables.col    = arguments.col
+		variables.row    = arguments.row
+		variables.screen = arguments.screen
+		variables.color  = arguments.color
+	}
+
+	/**
+	 * Advances the spinner one frame.  Call this in a loop to animate.
+	 * Writes the next frame inline (ANSI mode) or to the Lanterna buffer.
+	 */
+	void function tick() {
+		var frame = variables.FRAMES[ (variables.step % variables.FRAMES.len()) + 1 ]
+		variables.step++
+
+		if ( !isNull( variables.screen ) ) {
+			// Lanterna mode — resolve colour to numeric code
+			var code = resolveColorCode( variables.color )
+			variables.screen.drawText( variables.col, variables.row,
+				frame & " " & variables.label, code )
+			variables.screen.refresh()
+		} else {
+			// Inline ANSI mode — overwrite the current line
+			var colorCode = resolveAnsi( variables.color )
+			systemOutput( char(13) & colorCode & frame & variables.RESET & " " & variables.label, false )
+		}
+	}
+
+	/**
+	 * Stops the spinner and writes a final message in its place.
+	 *
+	 * @finalLine  Replacement text (e.g. "✓ Done")
+	 */
+	void function stop( string finalLine = "" ) {
+		if ( !isNull( variables.screen ) ) {
+			if ( len( arguments.finalLine ) ) {
+				variables.screen.drawText( variables.col, variables.row, arguments.finalLine )
+				variables.screen.refresh()
+			}
+		} else {
+			var pad = repeatString( " ", max( 0, len( variables.label ) + 4 ) )
+			systemOutput( char(13) & ( len( arguments.finalLine ) ? arguments.finalLine : pad ), false )
+			println( "" )
+		}
+	}
+
+	// ── Private helpers ───────────────────────────────────────────────────
+
+	private string function resolveAnsi( any colorRef ) {
+		if ( isNumeric( colorRef ) ) { return variables.ESC & "[38;5;" & int( colorRef ) & "m" }
+		var num = replaceNoCase( toString( colorRef ), "color", "" )
+		return isNumeric( num ) ? variables.ESC & "[38;5;" & int( num ) & "m" : ""
+	}
+
+	private numeric function resolveColorCode( any colorRef ) {
+		if ( isNumeric( colorRef ) ) { return int( colorRef ) }
+		var num = replaceNoCase( toString( colorRef ), "color", "" )
+		return isNumeric( num ) ? int( num ) : 255
+	}
+
+}

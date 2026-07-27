@@ -102,7 +102,7 @@ class {
 				return new "cli.commands.SkillCommand"( new "models.skills.SkillManager"( expandPath( "." ) & "/.agents/skills" ) ).execute( action ?: "list", args )
 			case "chat":
 				if ( args.z ?: args[ "z" ] ?: false ) { return chat( args.query ?: args.q ?: arrayToList( parsed.positionals.slice( 2 ), " " ), args, true ) }
-				if ( !len( args.query ?: args.q ?: "" ) ) { return { success: false, error: "A query is required. Use --query or -q to provide one." } }
+				if ( !len( args.query ?: args.q ?: "" ) ) { return interactiveChat( arguments.parsed ) }
 				return chat( args.query ?: args.q ?: "", args, false )
 			default: return { success: false, error: "Unknown command: #command#" }
 		}
@@ -277,14 +277,27 @@ class {
 	/**
 	 * Starts the interactive REPL chat session.
 	 *
-	 * Creates an InteractiveChat session, renders the header, and enters the read–execute–print
-	 * loop until the user types /exit or /quit.
+	 * Attempts to launch the full three-panel Lanterna TUI (header, session sidebar, chat
+	 * area, input bar).  Falls back gracefully to a plain ANSI loop when Lanterna is
+	 * unavailable (JAR missing, headless environment, piped output, etc.).
 	 *
-	 * @parsed  Full parsed CLI struct (used only to resolve the entry session title)
+	 * Lanterna event loop handles:
+	 *   - Printable chars  → appended to input buffer, input bar redrawn
+	 *   - Backspace        → removes last character, input bar redrawn
+	 *   - Enter            → dispatches to InteractiveChat, chat panel redrawn
+	 *   - Tab              → toggles focus between sidebar and input
+	 *   - ArrowUp/Down     → moves sidebar session cursor (when sidebar has focus)
+	 *   - Escape           → returns focus from sidebar to input
+	 *   - Ctrl+C / EOF     → exits cleanly (stopScreen before returning)
+	 *
+	 * @parsed  Full parsed CLI struct
 	 * @return  Struct with success flag, interactive=true, and sessionId
 	 */
 	private struct function interactiveChat( struct parsed = {} ) {
-		var mwConfig = variables.config.get( "nanobox.middleware", {} )
+		var mwConfig  = variables.config.get( "nanobox.middleware", {} )
+		var tuiConfig = variables.config.get( "nanobox.tui", {} )
+
+		// ── Build ChatCommand ──────────────────────────────────────────────
 		var chatCommand = new "cli.commands.ChatCommand"(
 			variables.config,
 			new "models.util.TokenTracker"(),
@@ -294,19 +307,204 @@ class {
 			mwConfig.allowlistPath ?: "",
 			mwConfig.requireApproval ?: true
 		)
+
+		// ── Build InteractiveChat + inject slash-command dependencies ──────
 		var interactive = new "cli.InteractiveChat"( chatCommand, new "models.sessions.SessionManager"(), variables.config )
-		var started = interactive.start( true )
-		var renderer = new "cli.InteractiveChatRenderer"( interactive, true )
-		println( renderer.renderHeader( { title: started.title, provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ) } ) )
-		while ( true ) {
-			print( "\nYou › " )
-			var input = CLIRead()
-			var response = interactive.execute( input )
-			if ( response.exit ?: false ) { println( "Goodbye." ); break }
-			if ( response.action == "response" ) { println( renderer.renderAssistant( response.content ?: "" ) ) }
-			else if ( response.action == "help" ) { println( renderer.renderCommand( response ) ) }
-			else if ( response.action != "empty" ) { println( jsonSerialize( response ) ) }
+		try {
+			interactive.setCommands( {
+				agentCommand:   new "cli.commands.AgentCommand"(
+									new "models.agents.AgentManager"(
+										variables.home & "/agents",
+										variables.config,
+										mwConfig.secretPatterns ?: [],
+										mwConfig.blockedTools ?: [],
+										mwConfig.allowlistPath ?: "",
+										mwConfig.requireApproval ?: true
+									)
+								),
+				memoryCommand:  new "cli.commands.MemoryCommand"( new "models.system.MemoryManager"() ),
+				skillCommand:   new "cli.commands.SkillCommand"( new "models.skills.SkillManager"( variables.home & "/.agents/skills" ) ),
+				vaultCommand:   new "cli.commands.VaultCommand"( new "models.vault.VaultManager"( variables.home & "/vault" ) ),
+				sessionCommand: new "cli.commands.SessionCommand"( new "models.sessions.SessionManager"() ),
+				mcpCommand:     new "cli.commands.MCPCommand"( new "models.agents.McpManager"() ),
+				tokenCommand:   new "cli.commands.TokenCommand"( new "models.util.TokenTracker"() ),
+				modelCommand:   new "cli.commands.ModelCommand"( variables.config ),
+				cronCommand:    new "cli.commands.CronCommand"( new "models.scheduling.CronManager"() )
+			} )
+		} catch ( any e ) {
+			// Non-fatal — slash commands that need these classes will report "not available"
 		}
+
+		var started = interactive.start( true )
+
+		// ── Load TUI theme ─────────────────────────────────────────────────
+		var tuiTheme = new "cli.TuiTheme"()
+		var theme    = tuiTheme.current( variables.config )
+		var wrapWidth = val( tuiConfig.wrapWidth ?: 0 )
+
+		// ── Attempt Lanterna startup ───────────────────────────────────────
+		var screen      = new "cli.LanternaScreen"()
+		var useLanterna = false
+		try {
+			screen.startScreen()
+			useLanterna = true
+		} catch ( any e ) {
+			// Headless or JAR missing — ANSI fallback below
+		}
+
+		var renderer = new "cli.InteractiveChatRenderer"( interactive, theme, useLanterna ? screen : null, wrapWidth )
+
+		// ══════════════════════════════════════════════════════════════════
+		// LANTERNA EVENT LOOP
+		// ══════════════════════════════════════════════════════════════════
+		if ( useLanterna ) {
+			try {
+				var sessMgr    = new "models.sessions.SessionManager"()
+				var sessions   = []
+				try { sessions = sessMgr.list( 10, 0 ) } catch ( any e ) {}
+
+				var state = {
+					title:            started.title,
+					provider:         variables.config.get( "bx-ai.defaultProvider", "" ),
+					model:            variables.config.get( "bx-ai.defaultModel", "" ),
+					namedModel:       variables.config.get( "bx-ai.defaultNamedModel", "" ),
+					sessions:         sessions,
+					currentSessionId: started.sessionId,
+					sidebarCursor:    0,
+					sidebarFocus:     false,
+					messages:         [],
+					inputBuffer:      "",
+					cursorPos:        0,
+					usage:            { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+				}
+
+				renderer.renderAll( state )
+
+				var inputBuffer   = ""
+				var sidebarFocus  = false
+				var sidebarCursor = 0
+
+				while ( true ) {
+					var key = screen.readInput()
+
+					// ── Exit ───────────────────────────────────────────────
+					if ( key.type == "EOF" || ( key.type == "Character" && key.character == "c" && key.ctrl ) ) {
+						break
+					}
+
+					// ── Sidebar focus: arrow navigation + Enter to resume ──
+					if ( sidebarFocus ) {
+						if ( key.type == "ArrowUp" && sidebarCursor > 0 ) {
+							sidebarCursor--
+							state.sidebarCursor = sidebarCursor
+							renderer.renderAll( state )
+						} else if ( key.type == "ArrowDown" && sidebarCursor < state.sessions.len() - 1 ) {
+							sidebarCursor++
+							state.sidebarCursor = sidebarCursor
+							renderer.renderAll( state )
+						} else if ( key.type == "Enter" && state.sessions.len() > 0 ) {
+							var sel = state.sessions[ sidebarCursor + 1 ]
+							try {
+								var resumeResp = interactive.execute( "/resume " & sel.id )
+								state.currentSessionId = sel.id
+								state.title            = sel.title ?: state.title
+								state.messages         = []
+								state.usage            = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+							} catch ( any e ) {}
+							sidebarFocus       = false
+							state.sidebarFocus = false
+							renderer.renderAll( state )
+						} else if ( key.type == "Escape" || key.type == "Tab" ) {
+							sidebarFocus       = false
+							state.sidebarFocus = false
+							renderer.renderAll( state )
+						}
+						continue
+					}
+
+					// ── Input focus: typing ────────────────────────────────
+					if ( key.type == "Tab" ) {
+						sidebarFocus       = true
+						state.sidebarFocus = true
+						renderer.renderAll( state )
+
+					} else if ( key.type == "Character" && !key.ctrl && !key.alt ) {
+						inputBuffer      &= key.character
+						state.inputBuffer = inputBuffer
+						state.cursorPos   = len( inputBuffer )
+						renderer.renderInputOnly( state )
+
+					} else if ( key.type == "Backspace" ) {
+						if ( len( inputBuffer ) > 0 ) {
+							inputBuffer      = left( inputBuffer, len( inputBuffer ) - 1 )
+							state.inputBuffer = inputBuffer
+							state.cursorPos   = len( inputBuffer )
+							renderer.renderInputOnly( state )
+						}
+
+					} else if ( key.type == "Enter" ) {
+						var userInput = trim( inputBuffer )
+						inputBuffer      = ""
+						state.inputBuffer = ""
+						state.cursorPos   = 0
+
+						if ( !len( userInput ) ) { continue }
+
+						// Optimistic: show user turn + thinking placeholder
+						state.messages.append( { role: "user", content: userInput } )
+						state.messages.append( { role: "assistant", content: "  ⠙  Thinking…" } )
+						renderer.renderChatOnly( state )
+
+						// Dispatch (blocking)
+						var response = interactive.execute( userInput )
+
+						// Replace placeholder with real content
+						var lastIdx = state.messages.len()
+						if ( response.exit ?: false ) { break }
+						if ( response.action == "response" ) {
+							state.messages[ lastIdx ] = { role: "assistant", content: response.content ?: "" }
+						} else if ( response.action == "empty" ) {
+							state.messages.deleteAt( lastIdx )
+							state.messages.deleteAt( state.messages.len() )
+						} else {
+							state.messages[ lastIdx ] = { role: "command", action: response.action ?: "result", result: response }
+						}
+
+						// Refresh usage + session list
+						if ( isStruct( response.usage ?: "" ) ) { state.usage = response.usage }
+						state.title = interactive.getTitle() ?: state.title
+						try { state.sessions = sessMgr.list( 10, 0 ) } catch ( any e ) {}
+
+						renderer.renderChatOnly( state )
+					}
+				}
+			} finally {
+				screen.stopScreen()
+			}
+
+		// ══════════════════════════════════════════════════════════════════
+		// ANSI FALLBACK LOOP
+		// ══════════════════════════════════════════════════════════════════
+		} else {
+			println( renderer.renderHeader( {
+				title:      started.title,
+				provider:   variables.config.get( "bx-ai.defaultProvider", "" ),
+				model:      variables.config.get( "bx-ai.defaultModel", "" ),
+				namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" )
+			} ) )
+			while ( true ) {
+				print( "\nYou › " )
+				var input    = CLIRead()
+				var response = interactive.execute( input )
+				if ( response.exit ?: false ) { println( "Goodbye." ); break }
+				if ( response.action == "response" ) {
+					println( renderer.renderAssistant( response.content ?: "" ) )
+				} else if ( response.action != "empty" ) {
+					println( renderer.renderCommand( response ) )
+				}
+			}
+		}
+
 		return { success: true, interactive: true, sessionId: started.sessionId }
 	}
 

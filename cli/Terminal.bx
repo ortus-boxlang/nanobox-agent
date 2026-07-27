@@ -1,0 +1,581 @@
+/**
+ * Terminal — Unified ANSI terminal rendering utility for NanoBox.
+ *
+ * Single source of truth for all terminal colours, box-drawing, tables,
+ * progress bars, spinners, and gradient text.  Every other class that
+ * needs formatted output delegates here instead of embedding raw
+ * char(27) escape sequences.
+ *
+ * Colour input accepts:
+ *   • Named standard colours: "red", "green", "yellow", "blue", "magenta", "cyan", "dim", "bold"
+ *   • 256-colour names: "color42", "color226", …
+ *   • Raw numeric codes: 42, 226, …
+ *   • Empty string / omitted → no colour applied
+ *
+ * @author Ortus Solutions
+ * @version 0.2.0
+ * @since 0.2.0
+ */
+class {
+
+	property name="ESC";
+	property name="RESET";
+	property name="BOLD";
+	property name="DIM";
+	property name="ITALIC";
+	property name="theme";
+
+	// ─── Gradient theme palette (ported from boxlings Terminal.bx) ───────
+
+	variables.GRADIENTS = {
+		"Ocean"   : [ "color81", "color75", "color69", "color63", "color57", "color21" ],
+		"Fire"    : [ "color196", "color160", "color124", "color88", "color52", "color88" ],
+		"Sunset"  : [ "color214", "color208", "color202", "color196", "color160", "color124" ],
+		"Purple"  : [ "color213", "color177", "color141", "color105", "color69", "color39" ],
+		"Mint"    : [ "color158", "color122", "color86", "color50", "color44", "color38" ],
+		"Gray"    : [ "color250", "color248", "color245", "color243", "color240", "color238" ],
+		"Electric": [ "color226", "color220", "color214", "color208", "color202", "color196" ]
+	};
+
+	// NanoBox logo art (NanoBox branding)
+	variables.LOGO_LINES = [
+		"███╗   ██╗ █████╗ ███╗   ██╗ ██████╗ ██████╗  ██████╗ ██╗  ██╗",
+		"████╗  ██║██╔══██╗████╗  ██║██╔═══██╗██╔══██╗██╔═══██╗╚██╗██╔╝",
+		"██╔██╗ ██║███████║██╔██╗ ██║██║   ██║██████╔╝██║   ██║ ╚███╔╝ ",
+		"██║╚██╗██║██╔══██║██║╚██╗██║██║   ██║██╔══██╗██║   ██║ ██╔██╗ ",
+		"██║ ╚████║██║  ██║██║ ╚████║╚██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗",
+		"╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝"
+	];
+
+	// ─── Braille spinner frames (ported from boxlings Terminal.bx) ────────
+	variables.SPINNER_FRAMES = [ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" ];
+
+	function init( struct theme = {} ) {
+		variables.ESC    = char( 27 )
+		variables.RESET  = variables.ESC & "[0m"
+		variables.BOLD   = variables.ESC & "[1m"
+		variables.DIM    = variables.ESC & "[2m"
+		variables.ITALIC = variables.ESC & "[3m"
+		variables.theme  = arguments.theme
+		return this
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Low-level colour helpers
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Returns an ANSI 256-colour escape sequence for the given code (0-255).
+	 */
+	string function ansi256( required numeric code ) {
+		return variables.ESC & "[38;5;" & arguments.code & "m"
+	}
+
+	/**
+	 * Resolves a colour descriptor to an ANSI escape sequence.
+	 * Accepts: numeric code, "colorN" name, or standard colour names.
+	 * Returns empty string when colours are disabled or input is empty.
+	 */
+	string function ansi( any colorRef = "" ) {
+		if ( !len( arguments.colorRef ) ) { return "" }
+		if ( isNumeric( arguments.colorRef ) ) { return ansi256( arguments.colorRef ) }
+		switch ( lCase( arguments.colorRef ) ) {
+			case "red":     return variables.ESC & "[31m"
+			case "green":   return variables.ESC & "[32m"
+			case "yellow":  return variables.ESC & "[33m"
+			case "blue":    return variables.ESC & "[34m"
+			case "magenta": return variables.ESC & "[35m"
+			case "cyan":    return variables.ESC & "[36m"
+			case "white":   return variables.ESC & "[37m"
+			case "dim":     return variables.DIM
+			case "bold":    return variables.BOLD
+			default:        return getColorCode( arguments.colorRef )
+		}
+	}
+
+	/**
+	 * Resolves a "colorN" name to an ANSI 256-colour sequence.
+	 */
+	string function getColorCode( required string name ) {
+		var num = replaceNoCase( arguments.name, "color", "" )
+		return isNumeric( num ) ? ansi256( num ) : ""
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Text styling (returns strings, does not print)
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Wraps text in ANSI colour/style codes and returns the styled string.
+	 *
+	 * @color  Colour descriptor (see ansi() for accepted forms)
+	 * @bold   Apply bold weight
+	 * @italic Apply italic style
+	 */
+	string function style( required string text, any color = "", boolean bold = false, boolean italic = false ) {
+		var out = ""
+		if ( arguments.bold )   { out &= variables.BOLD }
+		if ( arguments.italic ) { out &= variables.ITALIC }
+		if ( len( arguments.color ) ) { out &= ansi( arguments.color ) }
+		if ( !len( out ) ) { return arguments.text }
+		return out & arguments.text & variables.RESET
+	}
+
+	/** Returns text wrapped in bold. */
+	string function bold( required string text ) { return variables.BOLD & arguments.text & variables.RESET }
+
+	/** Returns text wrapped in dim. */
+	string function dim( required string text ) { return variables.DIM & arguments.text & variables.RESET }
+
+	/** Returns text coloured red. */
+	string function red( required string text ) { return style( arguments.text, "red" ) }
+
+	/** Returns text coloured green. */
+	string function green( required string text ) { return style( arguments.text, "green" ) }
+
+	/** Returns text coloured yellow. */
+	string function yellow( required string text ) { return style( arguments.text, "yellow" ) }
+
+	/** Returns text coloured blue. */
+	string function blue( required string text ) { return style( arguments.text, "blue" ) }
+
+	/** Returns text coloured magenta. */
+	string function magenta( required string text ) { return style( arguments.text, "magenta" ) }
+
+	/** Returns text coloured cyan. */
+	string function cyan( required string text ) { return style( arguments.text, "cyan" ) }
+
+	/** Returns "✓ message" in green. */
+	string function success( required string message ) { return green( "✓ " & arguments.message ) }
+
+	/** Returns "✗ message" in red. */
+	string function error( required string message ) { return red( "✗ " & arguments.message ) }
+
+	/** Returns "⚠ message" in yellow. */
+	string function warn( required string message ) { return yellow( "⚠ " & arguments.message ) }
+
+	/** Returns "ℹ message" in blue. */
+	string function info( required string message ) { return blue( "ℹ " & arguments.message ) }
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Print helpers (write to stdout)
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Prints text followed by a newline, with optional colour.
+	 */
+	void function printLine( required string text = "", any color = "" ) {
+		if ( len( arguments.color ) ) {
+			println( ansi( arguments.color ) & arguments.text & variables.RESET )
+		} else {
+			println( arguments.text )
+		}
+	}
+
+	/**
+	 * Prints text without a trailing newline, with optional colour.
+	 */
+	void function print( required string text = "", any color = "" ) {
+		if ( len( arguments.color ) ) {
+			systemOutput( ansi( arguments.color ) & arguments.text & variables.RESET, false )
+		} else {
+			systemOutput( arguments.text, false )
+		}
+	}
+
+	/** Prints bold text. */
+	void function printBold( required string text ) { println( variables.BOLD & arguments.text & variables.RESET ) }
+
+	/** Prints dimmed text. */
+	void function printDim( required string text )  { println( variables.DIM  & arguments.text & variables.RESET ) }
+
+	/**
+	 * Prints a status line prefixed with an icon.
+	 * @status  One of: success, error, warning, info
+	 */
+	void function printStatus( required string status, required string text ) {
+		switch ( arguments.status ) {
+			case "success": println( green(   "✅ " & arguments.text ) ); break
+			case "error":   println( red(     "❌ " & arguments.text ) ); break
+			case "warning": println( yellow(  "⚠️  " & arguments.text ) ); break
+			case "info":    println( blue(    "ℹ️  " & arguments.text ) ); break
+			default:        println( arguments.text )
+		}
+	}
+
+	/** Convenience shorthands that print directly. */
+	void function printSuccess( required string text ) { printStatus( "success", arguments.text ) }
+	void function printError(   required string text ) { printStatus( "error",   arguments.text ) }
+	void function printWarn(    required string text ) { printStatus( "warning", arguments.text ) }
+	void function printInfo(    required string text ) { printStatus( "info",    arguments.text ) }
+
+	/** Clears the terminal screen. */
+	void function clear() { CLIClear() }
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Dividers and decorations
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Prints a single-character divider of the given length, with optional colour.
+	 */
+	void function printColoredDivider( string char = "═", numeric length = 64, any color = "color248" ) {
+		printLine( repeatString( arguments.char, arguments.length ), arguments.color )
+	}
+
+	/**
+	 * Prints a rainbow divider using red/orange/yellow/green/blue/purple.
+	 */
+	void function rainbowDivider( numeric length = 64 ) {
+		var colors = [ 196, 208, 226, 46, 21, 93 ]
+		var out = ""
+		for ( var i = 1; i <= arguments.length; i++ ) {
+			out &= ansi256( colors[ ( (i-1) % colors.len() ) + 1 ] ) & "═"
+		}
+		println( out & variables.RESET )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Box / banner drawing
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Draws a ╭─╮ border box with a title row and content lines.
+	 *
+	 * @title        Box title (rendered bold + titleColor inside the top border)
+	 * @lines        Array of content strings shown inside the box
+	 * @borderColor  ANSI colour for box-drawing characters (default: theme border or color42)
+	 * @titleColor   ANSI colour for the title text (default: color226)
+	 * @return       Multi-line formatted string
+	 */
+	string function box(
+		required string title,
+		required array lines,
+		any borderColor = "",
+		any titleColor  = "color226"
+	) {
+		var bc = len( arguments.borderColor ) ? arguments.borderColor : ( variables.theme.border ?: "color42" )
+		var bcCode = ansi( bc )
+		var tcCode = ansi( arguments.titleColor )
+		var maxLen = len( arguments.title )
+		for ( var line in arguments.lines ) { maxLen = max( maxLen, len( line ) ) }
+		var boxWidth = maxLen + 4
+		var out = ""
+
+		// top border with title
+		out &= bcCode & "╭" & repeatString( "─", boxWidth ) & "╮" & variables.RESET & char(10)
+		out &= bcCode & "│" & variables.RESET & "  " & tcCode & variables.BOLD & arguments.title & variables.RESET
+		out &= repeatString( " ", boxWidth - len( arguments.title ) - 2 ) & bcCode & " │" & variables.RESET & char(10)
+
+		// separator line (only when there's content)
+		if ( arguments.lines.len() ) {
+			out &= bcCode & "│" & variables.RESET & repeatString( " ", boxWidth + 2 ) & bcCode & "│" & variables.RESET & char(10)
+		}
+
+		for ( var line in arguments.lines ) {
+			var pad = repeatString( " ", boxWidth - len( line ) )
+			out &= bcCode & "│" & variables.RESET & "  " & line & pad & bcCode & " │" & variables.RESET & char(10)
+		}
+
+		out &= bcCode & "╰" & repeatString( "─", boxWidth ) & "╯" & variables.RESET
+		return out
+	}
+
+	/**
+	 * Draws a ╭─╮ full-width banner with no title, only content lines.
+	 */
+	string function banner( required array lines, any borderColor = "" ) {
+		var bc = len( arguments.borderColor ) ? arguments.borderColor : ( variables.theme.border ?: "color42" )
+		var bcCode = ansi( bc )
+		var maxLen = 0
+		for ( var line in arguments.lines ) { maxLen = max( maxLen, len( line ) ) }
+		var boxWidth = maxLen + 4
+		var out = ""
+		out &= bcCode & "╭" & repeatString( "─", boxWidth ) & "╮" & variables.RESET & char(10)
+		for ( var line in arguments.lines ) {
+			var pad = repeatString( " ", boxWidth - len( line ) )
+			out &= bcCode & "│" & variables.RESET & "  " & line & pad & bcCode & " │" & variables.RESET & char(10)
+		}
+		out &= bcCode & "╰" & repeatString( "─", boxWidth ) & "╯" & variables.RESET
+		return out
+	}
+
+	/**
+	 * Draws a ┌─┐ border box (ASCII variant, for PrettyCli compat).
+	 */
+	string function boxAscii( required string text ) {
+		var lines = listToArray( replace( arguments.text, char(13), "", "all" ), char(10), true )
+		var width = 0
+		for ( var line in lines ) { width = max( width, len( line ) ) }
+		var out = "┌" & repeatString( "─", width + 2 ) & "┐"
+		for ( var line in lines ) {
+			out &= char(10) & "│ " & line & repeatString( " ", width - len( line ) ) & " │"
+		}
+		return out & char(10) & "└" & repeatString( "─", width + 2 ) & "┘"
+	}
+
+	/**
+	 * Prints (not returns) a coloured box.
+	 */
+	void function printBox( required string title, required array lines, any borderColor = "", any titleColor = "color226" ) {
+		println( box( arguments.title, arguments.lines, arguments.borderColor, arguments.titleColor ) )
+	}
+
+	/**
+	 * Prints (not returns) a full-width banner.
+	 */
+	void function printBanner( required array lines, any borderColor = "" ) {
+		println( banner( arguments.lines, arguments.borderColor ) )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// NanoBox logo
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Prints the NanoBox ASCII logo with the chosen gradient (or a random one).
+	 *
+	 * @gradientName  One of: Ocean, Fire, Sunset, Purple, Mint, Gray, Electric.
+	 *                Pass empty string for a random gradient.
+	 */
+	void function showLogo( string gradientName = "" ) {
+		var name = arguments.gradientName
+		if ( !len( name ) || !variables.GRADIENTS.keyExists( name ) ) {
+			var keys = variables.GRADIENTS.keyArray()
+			name = keys[ randRange( 1, keys.len() ) ]
+		}
+		var gradient = variables.GRADIENTS[ name ]
+		println( "" )
+		for ( var i = 1; i <= variables.LOGO_LINES.len(); i++ ) {
+			printLine( "   " & variables.LOGO_LINES[ i ], gradient[ i ] )
+		}
+		printLine( "            AI Agent Platform · BoxLang", "color248" )
+		println( "" )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Gradient text
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Prints text with a per-character colour gradient.
+	 *
+	 * @text    The string to render
+	 * @colors  Array of colour descriptors (will be distributed across chars)
+	 */
+	void function printGradient( required string text, required array colors ) {
+		var chars = listToArray( arguments.text, "" )
+		var n = arguments.colors.len()
+		var out = ""
+		for ( var i = 1; i <= chars.len(); i++ ) {
+			var ci = min( ceiling( (i / chars.len()) * n ), n )
+			out &= ansi( arguments.colors[ ci ] ) & chars[ i ]
+		}
+		println( out & variables.RESET )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Progress bar
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Returns a rendered progress bar string.
+	 *
+	 * @completed  Number of completed items
+	 * @total      Total items
+	 * @color      Override bar colour; when empty, auto-picks by percentage
+	 * @width      Bar character width (default 40)
+	 * @return     "[████░░░░] 50%  (5/10)" string
+	 */
+	string function progressBar( required numeric completed, required numeric total, any color = "", numeric width = 40 ) {
+		var pct = arguments.total > 0 ? round( (arguments.completed / arguments.total) * 100 ) : 0
+		var filled = round( (pct / 100) * arguments.width )
+		var bar = ""
+		for ( var i = 1; i <= arguments.width; i++ ) { bar &= i <= filled ? "█" : "░" }
+
+		var c = len( arguments.color ) ? arguments.color
+			: pct >= 75 ? "color46"
+			: pct >= 50 ? "color208"
+			: pct >= 25 ? "color214"
+			: "color226"
+
+		return ansi( c ) & "[" & bar & "] " & pct & "%" & variables.RESET & "  (" & arguments.completed & "/" & arguments.total & ")"
+	}
+
+	/** Prints the progress bar. */
+	void function showProgress( required numeric completed, required numeric total, any color = "", numeric width = 40 ) {
+		println( progressBar( arguments.completed, arguments.total, arguments.color, arguments.width ) )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Spinner
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Returns the braille spinner character at position `step` (wraps automatically).
+	 */
+	string function getSpinner( numeric step = 0 ) {
+		return variables.SPINNER_FRAMES[ (arguments.step % variables.SPINNER_FRAMES.len()) + 1 ]
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Table rendering
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Renders an array of rows as a bordered ASCII table (PrettyCli-compatible API).
+	 *
+	 * @headers  Column header labels
+	 * @rows     Array of arrays; each inner array must have one element per header
+	 * @options  Reserved for future options (colour themes, etc.)
+	 * @return   Multi-line table string
+	 */
+	string function table( required array headers, required array rows, struct options = {} ) {
+		var widths = []
+		var normalizedRows = []
+		for ( var h in arguments.headers ) { widths.append( len( toString( h ) ) ) }
+		for ( var row in arguments.rows ) {
+			var norm = []
+			for ( var i = 1; i <= arguments.headers.len(); i++ ) {
+				var v = toString( row[i] ?: "" )
+				norm.append( v )
+				widths[i] = max( widths[i], len(v) )
+			}
+			normalizedRows.append( norm )
+		}
+		var border = "+"
+		for ( var w in widths ) { border &= repeatString( "-", w + 2 ) & "+" }
+		var out = border & char(10)
+		out &= renderTableRow( arguments.headers, widths ) & char(10) & border
+		for ( var row in normalizedRows ) { out &= char(10) & renderTableRow( row, widths ) }
+		return out & char(10) & border
+	}
+
+	/**
+	 * Renders a struct as a two-column Key/Value table.
+	 */
+	string function kvTable( required struct data, struct options = {} ) {
+		var rows = []
+		for ( var key in arguments.data ) { rows.append( [ key, toString( arguments.data[key] ) ] ) }
+		return table( [ "Key", "Value" ], rows, arguments.options )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Text utilities
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Truncates text to maxWidth characters, appending "…" when cut.
+	 */
+	string function truncate( required string text, required numeric maxWidth ) {
+		if ( len( arguments.text ) <= arguments.maxWidth ) { return arguments.text }
+		if ( arguments.maxWidth <= 1 ) { return left( arguments.text, arguments.maxWidth ) }
+		return left( arguments.text, arguments.maxWidth - 1 ) & "…"
+	}
+
+	/**
+	 * Word-wraps text into lines no longer than maxWidth characters.
+	 * Returns an array of line strings.
+	 */
+	array function wrap( required string text, required numeric maxWidth ) {
+		var lines = []
+		var current = ""
+		for ( var word in listToArray( arguments.text, " " ) ) {
+			if ( current != "" && len( current & " " & word ) > arguments.maxWidth ) {
+				lines.append( current )
+				current = word
+			} else {
+				current = current == "" ? word : current & " " & word
+			}
+		}
+		if ( len( current ) ) { lines.append( current ) }
+		return lines
+	}
+
+	/**
+	 * Prepends spaces to indent text by the given number of levels (4 spaces each).
+	 */
+	string function indent( required string text, numeric level = 1 ) {
+		return repeatString( "    ", arguments.level ) & arguments.text
+	}
+
+	/**
+	 * Pads a string to exactly `width` characters with spaces.
+	 */
+	string function padRight( required string text, required numeric width ) {
+		var s = arguments.text
+		if ( len(s) >= arguments.width ) { return s }
+		return s & repeatString( " ", arguments.width - len(s) )
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Interactive prompts
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Prompts the user for input and returns the trimmed response.
+	 * Falls back to `default` when the user presses Enter with no input.
+	 */
+	string function prompt( required string label, string default = "" ) {
+		var def = len( arguments.default ) ? " [#arguments.default#]" : ""
+		print( "  " & arguments.label & def & ": ", "color226" )
+		var input = CLIRead().trim()
+		if ( !len( input ) && len( arguments.default ) ) { return arguments.default }
+		return input
+	}
+
+	/**
+	 * Yes/no prompt.  Returns true for y/yes inputs.
+	 */
+	boolean function confirm( required string label, boolean defaultYes = true ) {
+		var hint = arguments.defaultYes ? "Y/n" : "y/N"
+		print( "  " & arguments.label & " (" & hint & "): ", "color226" )
+		var input = CLIRead().trim().lcase()
+		if ( !len( input ) ) { return arguments.defaultYes }
+		return input == "y" || input == "yes"
+	}
+
+	/**
+	 * Numbered-list selection prompt.  Returns the selected value.
+	 * Each option is a struct with `label`, `value`, and optional `description`.
+	 *
+	 * @allowCustom  When true, an "Other (type your own)" entry is appended.
+	 */
+	string function select( required string label, required array options, boolean allowCustom = true ) {
+		println( "  " & style( arguments.label, "color226" ) )
+		for ( var i = 1; i <= arguments.options.len(); i++ ) {
+			var opt = arguments.options[i]
+			println( "    [#i#] " & opt.label )
+			if ( len( opt.description ?: "" ) ) {
+				println( "         " & dim( opt.description ) )
+			}
+		}
+		if ( arguments.allowCustom ) {
+			println( "    [#arguments.options.len() + 1#] Other (type your own)" )
+		}
+		print( "  Enter choice (1-#arguments.options.len() + ( arguments.allowCustom ? 1 : 0 )#): ", "color226" )
+		var input = CLIRead().trim()
+		var num = isNumeric( input ) ? int( input ) : 0
+		if ( num >= 1 && num <= arguments.options.len() ) { return arguments.options[ num ].value }
+		if ( arguments.allowCustom && num == arguments.options.len() + 1 ) {
+			print( "  Enter custom value: ", "color226" )
+			return CLIRead().trim()
+		}
+		if ( arguments.allowCustom && len( input ) ) { return input }
+		return arguments.options[1].value
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Private helpers
+	// ══════════════════════════════════════════════════════════════════════
+
+	private string function renderTableRow( required array values, required array widths ) {
+		var out = "|"
+		for ( var i = 1; i <= arguments.widths.len(); i++ ) {
+			var v = toString( arguments.values[i] ?: "" )
+			out &= " " & v & repeatString( " ", arguments.widths[i] - len(v) + 1 ) & "|"
+		}
+		return out
+	}
+
+}

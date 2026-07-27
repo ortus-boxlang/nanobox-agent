@@ -2,11 +2,11 @@
  * InteractiveChat — REPL session manager for the NanoBox interactive chat loop.
  *
  * Maintains conversation history, session persistence via SessionManager, usage
- * tracking, and a set of slash commands ({@code /help}, {@code /model}, {@code /new},
- * etc.).  Each call to {@link #execute} processes one line of user input.
+ * tracking, and the full slash command suite (~50 commands across 12 categories).
+ * All business logic is delegated to the existing command classes — no duplication.
  *
  * @author Ortus Solutions
- * @version 0.1.0
+ * @version 0.2.0
  * @since 0.1.0
  */
 class {
@@ -21,6 +21,17 @@ class {
 	property history;
 	property usage;
 
+	// Optional injected command instances (set via setCommands())
+	property agentCommand;
+	property memoryCommand;
+	property skillCommand;
+	property vaultCommand;
+	property sessionCommand;
+	property mcpCommand;
+	property tokenCommand;
+	property modelCommand;
+	property cronCommand;
+
 	/**
 	 * @command         ChatCommand instance used to call the LLM
 	 * @sessionManager  SessionManager for persisting conversation turns
@@ -28,27 +39,48 @@ class {
 	 * @cliOutput       Optional PrettyCli instance (reserved for future use)
 	 */
 	function init( required any command, required any sessionManager, required any configManager, any cliOutput = null ) {
-		variables.chatCommand = arguments.command
-		variables.sessions = arguments.sessionManager
-		variables.config = arguments.configManager
-		variables.sessionId = ""
-		variables.title = "New chat"
-		variables.titleManual = false
-		variables.lastQuery = ""
-		variables.lastResponse = ""
-		variables.history = []
-		variables.usage = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+		variables.chatCommand    = arguments.command
+		variables.sessions       = arguments.sessionManager
+		variables.config         = arguments.configManager
+		variables.sessionId      = ""
+		variables.title          = "New chat"
+		variables.titleManual    = false
+		variables.lastQuery      = ""
+		variables.lastResponse   = ""
+		variables.history        = []
+		variables.usage          = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+		// Command instances default to null; CommandRuntime injects them
+		variables.agentCommand   = null
+		variables.memoryCommand  = null
+		variables.skillCommand   = null
+		variables.vaultCommand   = null
+		variables.sessionCommand = null
+		variables.mcpCommand     = null
+		variables.tokenCommand   = null
+		variables.modelCommand   = null
+		variables.cronCommand    = null
 		return this
 	}
 
 	/**
+	 * Injects pre-built command instances so slash commands can delegate to them.
+	 * Call from CommandRuntime before entering the event loop.
+	 */
+	void function setCommands( struct commands = {} ) {
+		for ( var key in arguments.commands ) {
+			if ( variables.keyExists( key ) ) {
+				variables[ key ] = arguments.commands[ key ]
+			}
+		}
+	}
+
+	/** Returns the current session display title (updated after each LLM turn). */
+	string function getTitle() { return variables.title }
+
+	/**
 	 * Processes a single line of user input.
-	 *
-	 * Empty input is a no-op.  Lines starting with {@code /} are routed to the slash-command
+	 * Empty input is a no-op.  Lines starting with "/" are routed to the slash-command
 	 * handler; everything else is sent to the LLM.
-	 *
-	 * @input  Raw user input string
-	 * @return Action result struct with at least action and success keys
 	 */
 	struct function execute( required string input ) {
 		var line = trim( arguments.input )
@@ -59,27 +91,23 @@ class {
 
 	/**
 	 * Starts the chat session, creating a new SQLite session record if one does not exist.
-	 *
-	 * @interactive  When true, the session was started from the interactive REPL (default true)
-	 * @return       Struct with success, sessionId, title, and interactive keys
 	 */
 	struct function start( boolean interactive = true ) {
 		if ( !len( variables.sessionId ) ) {
-			var created = variables.sessions.create( variables.title, variables.config.get( "bx-ai.defaultProvider", "" ), variables.config.get( "bx-ai.defaultModel", "" ) )
+			var created = variables.sessions.create(
+				variables.title,
+				variables.config.get( "bx-ai.defaultProvider", "" ),
+				variables.config.get( "bx-ai.defaultModel", "" )
+			)
 			variables.sessionId = created.id
 		}
 		return { success: true, sessionId: variables.sessionId, title: variables.title, interactive: arguments.interactive }
 	}
 
-	/**
-	 * Sends a user query to the LLM and appends both turns to the session.
-	 *
-	 * Auto-generates a session title from the first query when the title has not been
-	 * manually set.  Accumulates token usage across the conversation.
-	 *
-	 * @query  User prompt text
-	 * @return Struct with success, action, sessionId, content, model, namedModel, and usage keys
-	 */
+	// ══════════════════════════════════════════════════════════════════════
+	// LLM dispatch
+	// ══════════════════════════════════════════════════════════════════════
+
 	private struct function send( required string query ) {
 		if ( !len( variables.sessionId ) ) { start() }
 		var result = variables.chatCommand.execute( arguments.query, { sessionId: variables.sessionId } )
@@ -88,106 +116,515 @@ class {
 			variables.title = left( slugify( arguments.query ), 60 )
 			variables.sessions.rename( variables.sessionId, variables.title )
 		}
-		variables.sessions.appendMessage( variables.sessionId, { role: "user", content: arguments.query } )
+		variables.sessions.appendMessage( variables.sessionId, { role: "user",      content: arguments.query } )
 		variables.sessions.appendMessage( variables.sessionId, { role: "assistant", content: result.content ?: "" } )
-		variables.lastQuery = arguments.query
+		variables.lastQuery    = arguments.query
 		variables.lastResponse = result.content ?: ""
-		variables.history.append( { role: "user", content: arguments.query } )
+		variables.history.append( { role: "user",      content: arguments.query } )
 		variables.history.append( { role: "assistant", content: variables.lastResponse } )
 		variables.usage.requests++
 		if ( isStruct( result.usage ?: {} ) ) {
-			variables.usage.inputTokens += result.usage.prompt_tokens ?: result.usage.input_tokens ?: 0
+			variables.usage.inputTokens  += result.usage.prompt_tokens     ?: result.usage.input_tokens  ?: 0
 			variables.usage.outputTokens += result.usage.completion_tokens ?: result.usage.output_tokens ?: 0
-			variables.usage.totalTokens += result.usage.total_tokens ?: 0
+			variables.usage.totalTokens  += result.usage.total_tokens ?: 0
 		}
-		return { success: true, action: "response", sessionId: variables.sessionId, content: variables.lastResponse, model: result.model, namedModel: result.namedModel, usage: variables.usage }
+		return {
+			success:    true,
+			action:     "response",
+			sessionId:  variables.sessionId,
+			content:    variables.lastResponse,
+			model:      result.model,
+			namedModel: result.namedModel,
+			usage:      variables.usage
+		}
 	}
 
-	/**
-	 * Routes a slash command to the appropriate private handler.
-	 *
-	 * @line  Full input line including the leading slash (e.g. "/model claude-3-5-sonnet")
-	 * @return Action result struct for the slash command
-	 */
+	// ══════════════════════════════════════════════════════════════════════
+	// Slash command dispatcher
+	// ══════════════════════════════════════════════════════════════════════
+
 	private struct function command( required string line ) {
-		var parts = listToArray( mid( arguments.line, 2, len( arguments.line ) - 1 ), " " )
-		var name = lCase( parts.first() )
-		var value = parts.len() > 1 ? arrayToList( parts.slice( 2 ), " " ) : ""
+		var parts = listToArray( trim( mid( arguments.line, 2, len( arguments.line ) - 1 ) ), " " )
+		var name  = lCase( parts.first() )
+		var args  = parts.len() > 1 ? arrayToList( parts.slice(2), " " ) : ""
+		var sub   = parts.len() > 1 ? lCase( parts[2] ) : ""
+		var rest  = parts.len() > 2 ? arrayToList( parts.slice(3), " " ) : ""
+
 		switch ( name ) {
-			case "help": return help()
-			case "model": return model( value )
-			case "new": return newSession()
-			case "clear": variables.history = []; return { success: true, action: "clear" }
-			case "retry": if ( !len( variables.lastQuery ) ) { return { success: false, error: "There is no previous query" } }; return send( variables.lastQuery )
-			case "undo": return undo()
-			case "title": return setTitle( value )
-			case "status": return status()
-			case "sessions": return { success: true, action: "sessions", sessions: variables.sessions.list() }
-			case "resume": return resume( value )
-			case "usage": return { success: true, action: "usage", usage: variables.usage }
+			// ── Core chat ──────────────────────────────────────────────
+			case "help":     return help()
+			case "new":      return newSession()
+			case "clear":    variables.history = []; return { success: true, action: "clear" }
+			case "retry":    return !len( variables.lastQuery ) ? { success: false, error: "No previous query to retry" } : send( variables.lastQuery )
+			case "undo":     return undo()
+			case "title":    return setTitle( args )
 			case "compress": return { success: true, action: "compress", message: "Context compression is not required for this session." }
 			case "quit":
-			case "exit": return { success: true, action: "exit", exit: true }
-			default: return { success: false, error: "Unknown chat command: /#name#. Use /help." }
+			case "exit":     return { success: true, action: "exit", exit: true }
+
+			// ── Sessions ───────────────────────────────────────────────
+			case "sessions": return { success: true, action: "sessions", sessions: variables.sessions.list() }
+			case "resume":   return resume( args )
+			case "session":  return dispatchSession( sub, rest )
+
+			// ── Status / usage ─────────────────────────────────────────
+			case "status":   return status()
+			case "usage":    return { success: true, action: "usage", usage: variables.usage }
+			case "tokens":   return dispatchTokens( sub )
+
+			// ── Model / provider ───────────────────────────────────────
+			case "model":    return dispatchModel( sub, rest )
+			case "provider": return dispatchProvider( args )
+
+			// ── TUI settings ───────────────────────────────────────────
+			case "theme":    return dispatchTheme( args )
+			case "themes":   return dispatchThemes()
+			case "stream":   return dispatchStream( args )
+			case "wrap":     return dispatchWrap( args )
+			case "temperature": return dispatchTemperature( args )
+
+			// ── Agents ─────────────────────────────────────────────────
+			case "agent":    return dispatchAgent( sub, rest )
+
+			// ── Memory ─────────────────────────────────────────────────
+			case "memory":   return dispatchMemory( sub, rest )
+
+			// ── Skills ─────────────────────────────────────────────────
+			case "skill":    return dispatchSkill( sub, rest )
+
+			// ── Tools ──────────────────────────────────────────────────
+			case "tool":     return dispatchTool( sub, rest )
+
+			// ── Vault ──────────────────────────────────────────────────
+			case "vault":    return dispatchVault( sub, rest )
+
+			// ── MCP ────────────────────────────────────────────────────
+			case "mcp":      return dispatchMcp( sub, rest )
+
+			// ── Cron ───────────────────────────────────────────────────
+			case "cron":     return dispatchCron( sub, rest )
+
+			// ── Media ──────────────────────────────────────────────────
+			case "image":    return dispatchImage( args )
+			case "speak":    return dispatchSpeak( args )
+
+			// ── System ─────────────────────────────────────────────────
+			case "system":   return dispatchSystem( args )
+			case "config":   return dispatchConfig( sub, rest )
+			case "security": return dispatchSecurity( sub, rest )
+			case "log":      return dispatchLog( sub, rest )
+			case "gateway":  return dispatchGateway( sub, rest )
+			case "script":   return dispatchScript( sub, rest )
+			case "browser":  return dispatchBrowser( sub, rest )
+			case "export":   return dispatchExport( args )
+
+			default:
+				return { success: false, error: "Unknown chat command: /#name#. Use /help." }
 		}
 	}
 
-	/**
-	 * Returns the list of available slash commands.
-	 *
-	 * @return Struct with action="help" and a commands array
-	 */
-	private struct function help() { return { success: true, action: "help", commands: [ "/help", "/model [name]", "/new", "/clear", "/retry", "/undo", "/title <name>", "/usage", "/status", "/sessions", "/resume <id>", "/compress", "/quit", "/exit" ] } }
+	// ══════════════════════════════════════════════════════════════════════
+	// Core handlers
+	// ══════════════════════════════════════════════════════════════════════
 
-	/**
-	 * Gets or sets the active model via ModelCommand.
-	 *
-	 * @name  Model name or named model alias; empty string returns the current model
-	 * @return ModelCommand result struct
-	 */
-	private struct function model( string name = "" ) {
-		var modelCommand = new "cli.commands.ModelCommand"( variables.config )
-		if ( !len( arguments.name ) ) { return modelCommand.execute( "current", {} ) }
-		return modelCommand.execute( "set", { namedModel: arguments.name, model: arguments.name } )
+	private struct function help() {
+		return { success: true, action: "help" }
 	}
 
-	/**
-	 * Sets or returns the session title.
-	 *
-	 * When {@code value} is empty, returns the current title.  When non-empty, sets the
-	 * title, marks it as manually set, and renames the SQLite session record.
-	 *
-	 * @value  New title string; empty returns the current title
-	 * @return Struct with action="title" and title keys
-	 */
-	private struct function setTitle( required string value ) { if ( !len( arguments.value ) ) { return { success: true, action: "title", title: variables.title } }; if ( !len( variables.sessionId ) ) { start( false ) }; variables.title = arguments.value; variables.titleManual = true; variables.sessions.rename( variables.sessionId, variables.title ); return { success: true, action: "title", title: variables.title } }
+	private struct function setTitle( required string value ) {
+		if ( !len( arguments.value ) ) { return { success: true, action: "title", title: variables.title } }
+		if ( !len( variables.sessionId ) ) { start( false ) }
+		variables.title = arguments.value
+		variables.titleManual = true
+		variables.sessions.rename( variables.sessionId, variables.title )
+		return { success: true, action: "title", title: variables.title }
+	}
 
-	/**
-	 * Returns the current session status.
-	 *
-	 * @return Struct with session ID, title, history length, provider, model, namedModel, and usage
-	 */
-	private struct function status() { return { success: true, action: "status", sessionId: variables.sessionId, title: variables.title, history: variables.history.len(), provider: variables.config.get( "bx-ai.defaultProvider", "" ), model: variables.config.get( "bx-ai.defaultModel", "" ), namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ), usage: variables.usage } }
+	private struct function status() {
+		return {
+			success:    true,
+			action:     "status",
+			sessionId:  variables.sessionId,
+			title:      variables.title,
+			history:    variables.history.len(),
+			provider:   variables.config.get( "bx-ai.defaultProvider", "" ),
+			model:      variables.config.get( "bx-ai.defaultModel", "" ),
+			namedModel: variables.config.get( "bx-ai.defaultNamedModel", "" ),
+			usage:      variables.usage
+		}
+	}
 
-	/**
-	 * Starts a fresh session, resetting all conversation state.
-	 *
-	 * @return Struct with action="new" and the new sessionId
-	 */
-	private struct function newSession() { var created = variables.sessions.create( "New chat", variables.config.get( "bx-ai.defaultProvider", "" ), variables.config.get( "bx-ai.defaultModel", "" ) ); variables.sessionId = created.id; variables.title = "New chat"; variables.titleManual = false; variables.history = []; variables.lastQuery = ""; variables.lastResponse = ""; variables.usage = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }; return { success: true, action: "new", sessionId: variables.sessionId } }
+	private struct function newSession() {
+		var created = variables.sessions.create(
+			"New chat",
+			variables.config.get( "bx-ai.defaultProvider", "" ),
+			variables.config.get( "bx-ai.defaultModel", "" )
+		)
+		variables.sessionId    = created.id
+		variables.title        = "New chat"
+		variables.titleManual  = false
+		variables.history      = []
+		variables.lastQuery    = ""
+		variables.lastResponse = ""
+		variables.usage        = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+		return { success: true, action: "new", sessionId: variables.sessionId }
+	}
 
-	/**
-	 * Removes the most recent user+assistant exchange from the in-memory history.
-	 *
-	 * @return Struct with action="undo" and remaining history length, or error if nothing to undo
-	 */
-	private struct function undo() { if ( variables.history.len() < 2 ) { return { success: false, error: "There is no exchange to undo" } }; variables.history.deleteAt( variables.history.len() ); variables.history.deleteAt( variables.history.len() ); return { success: true, action: "undo", history: variables.history.len() } }
+	private struct function undo() {
+		if ( variables.history.len() < 2 ) { return { success: false, error: "Nothing to undo" } }
+		variables.history.deleteAt( variables.history.len() )
+		variables.history.deleteAt( variables.history.len() )
+		return { success: true, action: "undo", history: variables.history.len() }
+	}
 
-	/**
-	 * Resumes a previously saved session by ID.
-	 *
-	 * @id  Session UUID or alias to resume
-	 * @return Struct with action="resume", sessionId, and title keys
-	 */
-	private struct function resume( required string id ) { var existing = variables.sessions.get( arguments.id ); if ( structIsEmpty( existing ) ) { return { success: false, error: "Session not found: #arguments.id#" } }; variables.sessionId = existing.id; variables.title = existing.title; variables.titleManual = true; return { success: true, action: "resume", sessionId: variables.sessionId, title: variables.title } }
+	private struct function resume( required string id ) {
+		var existing = variables.sessions.get( arguments.id )
+		if ( structIsEmpty( existing ) ) { return { success: false, error: "Session not found: #arguments.id#" } }
+		variables.sessionId   = existing.id
+		variables.title       = existing.title
+		variables.titleManual = true
+		return { success: true, action: "resume", sessionId: variables.sessionId, title: variables.title }
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Session sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchSession( required string sub, required string rest ) {
+		var cmd = !isNull( variables.sessionCommand ) ? variables.sessionCommand : null
+		switch ( arguments.sub ) {
+			case "search": return cmd != null ? cmd.execute( "search", { query: arguments.rest } ) : { success: false, error: "SessionCommand not available" }
+			case "rename":
+				var rparts = listToArray( arguments.rest, " " )
+				return cmd != null ? cmd.execute( "rename", { id: rparts[1] ?: "", title: rparts.len() > 1 ? arrayToList( rparts.slice(2), " " ) : "" } ) : { success: false, error: "SessionCommand not available" }
+			case "stats":  return cmd != null ? cmd.execute( "stats", {} ) : { success: false, error: "SessionCommand not available" }
+			case "export": return cmd != null ? cmd.execute( "export", { id: arguments.rest } ) : { success: false, error: "SessionCommand not available" }
+			case "delete": return cmd != null ? cmd.execute( "delete", { id: arguments.rest } ) : { success: false, error: "SessionCommand not available" }
+			default: return { success: true, action: "sessions", sessions: variables.sessions.list() }
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Token sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchTokens( required string sub ) {
+		var cmd = !isNull( variables.tokenCommand ) ? variables.tokenCommand : null
+		if ( !isNull( cmd ) ) {
+			var period = arguments.sub == "today" ? "today" : "all"
+			return cmd.execute( period, {} )
+		}
+		// Fallback to in-session usage
+		return { success: true, action: "usage", usage: variables.usage }
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Model sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchModel( required string sub, required string rest ) {
+		var cmd = !isNull( variables.modelCommand )
+			? variables.modelCommand
+			: new "cli.commands.ModelCommand"( variables.config )
+		switch ( arguments.sub ) {
+			case "list":
+			case "refresh":  return cmd.execute( "list", {} )
+			case "status":   return cmd.execute( "status", {} )
+			case "add":
+			case "save":
+				var mparts = listToArray( arguments.rest, " " )
+				return cmd.execute( "add", { name: mparts[1] ?: "", provider: mparts[2] ?: "", model: mparts[3] ?: "" } )
+			case "set":      return cmd.execute( "set", { namedModel: arguments.rest, model: arguments.rest } )
+			case "":
+			case "current":  return cmd.execute( "current", {} )
+			default:
+				// Bare "/model <name>" sets the model
+				return cmd.execute( "set", { namedModel: arguments.sub & ( len(arguments.rest) ? " " & arguments.rest : "" ), model: arguments.sub } )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Provider
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchProvider( required string args ) {
+		if ( !len( arguments.args ) ) {
+			return { success: true, action: "provider", provider: variables.config.get( "bx-ai.defaultProvider", "" ) }
+		}
+		variables.config.set( "bx-ai.defaultProvider", arguments.args )
+		return { success: true, action: "provider", provider: arguments.args, message: "Provider set to: #arguments.args#" }
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// TUI settings
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchTheme( required string args ) {
+		if ( !len( arguments.args ) ) {
+			var current = variables.config.get( "nanobox.tui.theme", "boxlang" )
+			return { success: true, action: "theme", theme: new "cli.TuiTheme"().get( current ), current: current }
+		}
+		var theme = new "cli.TuiTheme"().apply( arguments.args, variables.config )
+		return { success: true, action: "theme", theme: theme, current: theme.name, message: "Theme set to: #theme.name#" }
+	}
+
+	private struct function dispatchThemes() {
+		var tm = new "cli.TuiTheme"()
+		var current = variables.config.get( "nanobox.tui.theme", "boxlang" )
+		return { success: true, action: "themes", themes: tm.listAll(), current: current }
+	}
+
+	private struct function dispatchStream( required string args ) {
+		var enabled = !len( arguments.args ) || lCase( arguments.args ) == "on"
+		variables.config.set( "nanobox.tui.streaming", enabled )
+		return { success: true, action: "stream", streaming: enabled, message: "Streaming " & ( enabled ? "enabled" : "disabled" ) }
+	}
+
+	private struct function dispatchWrap( required string args ) {
+		if ( !len( arguments.args ) || lCase( arguments.args ) == "on" ) {
+			variables.config.set( "nanobox.tui.wordWrap", true )
+			return { success: true, action: "wrap", wordWrap: true }
+		}
+		if ( lCase( arguments.args ) == "off" ) {
+			variables.config.set( "nanobox.tui.wordWrap", false )
+			return { success: true, action: "wrap", wordWrap: false }
+		}
+		if ( isNumeric( arguments.args ) ) {
+			variables.config.set( "nanobox.tui.wrapWidth", int( arguments.args ) )
+			return { success: true, action: "wrap", wrapWidth: int( arguments.args ) }
+		}
+		return { success: false, error: "Usage: /wrap [on|off|<width>]" }
+	}
+
+	private struct function dispatchTemperature( required string args ) {
+		if ( !len( arguments.args ) ) {
+			return { success: true, action: "temperature", temperature: variables.config.get( "bx-ai.temperature", 1.0 ) }
+		}
+		if ( !isNumeric( arguments.args ) ) { return { success: false, error: "Usage: /temperature <0.0-2.0>" } }
+		var t = max( 0, min( 2, arguments.args ) )
+		variables.config.set( "bx-ai.temperature", t )
+		return { success: true, action: "temperature", temperature: t }
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Agent sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchAgent( required string sub, required string rest ) {
+		var cmd = !isNull( variables.agentCommand ) ? variables.agentCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "AgentCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":  return cmd.execute( "list",  {} )
+			case "show":  return cmd.execute( "show",  { name: arguments.rest } )
+			case "run":
+				var rparts = listToArray( arguments.rest, " " )
+				return cmd.execute( "run", { name: rparts[1] ?: "", query: arrayToList( rparts.slice(2), " " ) } )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Memory sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchMemory( required string sub, required string rest ) {
+		var cmd = !isNull( variables.memoryCommand ) ? variables.memoryCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "MemoryCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":
+				return cmd.execute( "list", len(arguments.rest) ? { category: arguments.rest } : {} )
+			case "add":
+				var mparts = listToArray( arguments.rest, " " )
+				return cmd.execute( "add", { topic: mparts[1] ?: "", entry: arrayToList( mparts.slice(2), " " ) } )
+			case "search": return cmd.execute( "search", { query: arguments.rest } )
+			case "delete": return cmd.execute( "delete", { id: arguments.rest } )
+			case "clear":  return cmd.execute( "clear",  len(arguments.rest) ? { category: arguments.rest } : {} )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Skill sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchSkill( required string sub, required string rest ) {
+		var cmd = !isNull( variables.skillCommand ) ? variables.skillCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "SkillCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":    return cmd.execute( "list",    {} )
+			case "search":  return cmd.execute( "search",  { query: arguments.rest } )
+			case "install":
+			case "find":    return cmd.execute( "install", { slug: arguments.rest } )
+			case "remove":  return cmd.execute( "remove",  { name: arguments.rest } )
+			case "refresh": return cmd.execute( "refresh", {} )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Tool sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchTool( required string sub, required string rest ) {
+		// Tools are managed via config
+		switch ( arguments.sub ) {
+			case "list":    return { success: true, action: "tool_list", tools: variables.config.get( "nanobox.tools", {} ) }
+			case "enable":  variables.config.set( "nanobox.tools." & arguments.rest & ".enabled", true );  return { success: true, action: "tool_enable",  tool: arguments.rest }
+			case "disable": variables.config.set( "nanobox.tools." & arguments.rest & ".enabled", false ); return { success: true, action: "tool_disable", tool: arguments.rest }
+			default: return { success: true, action: "tool_list", tools: variables.config.get( "nanobox.tools", {} ) }
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Vault sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchVault( required string sub, required string rest ) {
+		var cmd = !isNull( variables.vaultCommand ) ? variables.vaultCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "VaultCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":   return cmd.execute( "list",   len(arguments.rest) ? { category: arguments.rest } : {} )
+			case "search": return cmd.execute( "search", { query: arguments.rest } )
+			case "show":   return cmd.execute( "show",   { id: arguments.rest } )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// MCP sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchMcp( required string sub, required string rest ) {
+		var cmd = !isNull( variables.mcpCommand ) ? variables.mcpCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "MCPCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":  return cmd.execute( "list",  {} )
+			case "start": return cmd.execute( "start", { name: arguments.rest } )
+			case "stop":  return cmd.execute( "stop",  { name: arguments.rest } )
+			case "test":  return cmd.execute( "test",  { name: arguments.rest } )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Cron sub-commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchCron( required string sub, required string rest ) {
+		var cmd = !isNull( variables.cronCommand ) ? variables.cronCommand : null
+		if ( isNull( cmd ) ) { return { success: false, error: "CronCommand not available" } }
+		switch ( arguments.sub ) {
+			case "list":   return cmd.execute( "list",   {} )
+			case "run":    return cmd.execute( "run",    { name: arguments.rest } )
+			case "pause":  return cmd.execute( "pause",  { name: arguments.rest } )
+			case "resume": return cmd.execute( "resume", { name: arguments.rest } )
+			default: return cmd.execute( "list", {} )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Media commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchImage( required string args ) {
+		try {
+			var cmd = new "cli.commands.ImageCommand"( variables.config )
+			return cmd.execute( "generate", { prompt: arguments.args } )
+		} catch ( any e ) {
+			return { success: false, error: "Image generation not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchSpeak( required string args ) {
+		try {
+			var cmd = new "cli.commands.SpeakCommand"( variables.config )
+			return cmd.execute( "speak", { text: arguments.args } )
+		} catch ( any e ) {
+			return { success: false, error: "Text-to-speech not available: " & e.message }
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// System commands
+	// ══════════════════════════════════════════════════════════════════════
+
+	private struct function dispatchSystem( required string args ) {
+		if ( !len( arguments.args ) ) {
+			return { success: true, action: "system", systemPrompt: variables.config.get( "bx-ai.systemPrompt", "" ) }
+		}
+		variables.config.set( "bx-ai.systemPrompt", arguments.args )
+		return { success: true, action: "system", systemPrompt: arguments.args, message: "System prompt updated" }
+	}
+
+	private struct function dispatchConfig( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.ConfigCommand"( variables.config )
+			if ( !len( arguments.sub ) ) { return cmd.execute( "show", {} ) }
+			if ( !len( arguments.rest ) ) { return cmd.execute( "get", { key: arguments.sub } ) }
+			return cmd.execute( "set", { key: arguments.sub, value: arguments.rest } )
+		} catch ( any e ) {
+			return { success: false, error: "ConfigCommand not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchSecurity( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.SecurityCommand"( variables.config )
+			return cmd.execute( len(arguments.sub) ? arguments.sub : "status", {} )
+		} catch ( any e ) {
+			return { success: false, action: "security", message: "Security command not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchLog( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.LogCommand"( variables.config )
+			return cmd.execute( len(arguments.sub) ? arguments.sub : "list", len(arguments.rest) ? { name: arguments.rest } : {} )
+		} catch ( any e ) {
+			return { success: false, error: "LogCommand not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchGateway( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.GatewayCommand"( variables.config )
+			if ( arguments.sub == "send" ) {
+				var gparts = listToArray( arguments.rest, " " )
+				return cmd.execute( "send", { name: gparts[1] ?: "", recipient: gparts[2] ?: "", message: arrayToList( gparts.slice(3), " " ) } )
+			}
+			return cmd.execute( len(arguments.sub) ? arguments.sub : "list", {} )
+		} catch ( any e ) {
+			return { success: false, error: "GatewayCommand not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchScript( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.ScriptCommand"( variables.config )
+			return cmd.execute( len(arguments.sub) ? arguments.sub : "list", len(arguments.rest) ? { name: arguments.rest } : {} )
+		} catch ( any e ) {
+			return { success: false, error: "ScriptCommand not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchBrowser( required string sub, required string rest ) {
+		try {
+			var cmd = new "cli.commands.BrowserCommand"( variables.config )
+			return cmd.execute( len(arguments.sub) ? arguments.sub : "status", len(arguments.rest) ? { url: arguments.rest } : {} )
+		} catch ( any e ) {
+			return { success: false, error: "BrowserCommand not available: " & e.message }
+		}
+	}
+
+	private struct function dispatchExport( required string args ) {
+		var format = len( arguments.args ) ? lCase( arguments.args ) : "text"
+		if ( !len( variables.sessionId ) ) { return { success: false, error: "No active session to export" } }
+		try {
+			var cmd = new "cli.commands.SessionCommand"( variables.config )
+			return cmd.execute( "export", { id: variables.sessionId, format: format } )
+		} catch ( any e ) {
+			return { success: false, error: "Export not available: " & e.message }
+		}
+	}
+
 }

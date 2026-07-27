@@ -1,74 +1,390 @@
 /**
- * InteractiveChatRenderer — terminal rendering helper for the NanoBox REPL.
+ * InteractiveChatRenderer — Three-panel TUI renderer for the NanoBox REPL.
  *
- * Produces ANSI-coloured strings for the chat header, user turns, assistant turns,
- * and slash command output.  Color can be disabled for plain-text environments.
+ * Uses LanternaScreen for panel layout and Terminal + MarkdownRenderer for
+ * styled output.  Falls back gracefully to plain ANSI mode when Lanterna is
+ * not available (Lanterna JAR missing, CI environment, piped output, etc.).
+ *
+ * Panel layout (Lanterna mode):
+ *
+ *   ╭──────────────────────────── ◈ NanoBox ───────────────────────────────╮
+ *   │  <session> · <provider> · <model> · /help for commands               │
+ *   ╰───────────────────────────────────────────────────────────────────────╯
+ *   ╭─── Sessions ──────╮╭─── Chat ──────────────────────────────────────────╮
+ *   │ ▶ session-name    ││ NanoBox › response …                              │
+ *   │   older-session   ││ You › query                                        │
+ *   │  ──────────────── ││                                                    │
+ *   │ Model: sonnet     ││                                                    │
+ *   │ Tokens: 1k↑ 200↓  ││                                                    │
+ *   ╰───────────────────╯╰────────────────────────────────────────────────────╯
+ *   ╭─── Input ──────────────────────────────────────────────────────────────╮
+ *   │ You › _                                                                │
+ *   ╰────────────────────────────────────────────────────────────────────────╯
  *
  * @author Ortus Solutions
- * @version 0.1.0
- * @since 0.1.0
+ * @version 0.2.0
+ * @since 0.2.0
  */
 class {
+
 	property chat;
-	property colors;
+	property theme;
+	property terminal;
+	property markdown;
+	property screen;
+	property useLanterna;
+	property sidebarWidth;
+	property inputRows;
 
 	/**
-	 * @interactiveChat  InteractiveChat instance (reserved for future context access)
-	 * @colorsEnabled    When true (default), ANSI escape codes are applied
+	 * @interactiveChat  InteractiveChat instance
+	 * @theme            TuiTheme struct
+	 * @screen           LanternaScreen instance (null = ANSI-only mode)
+	 * @wrapWidth        Override word-wrap width (0 = auto from terminal)
 	 */
-	function init( required any interactiveChat, boolean colorsEnabled = true ) { variables.chat = arguments.interactiveChat; variables.colors = arguments.colorsEnabled; return this }
+	function init(
+		required any interactiveChat,
+		struct theme = {},
+		any screen = null,
+		numeric wrapWidth = 0
+	) {
+		variables.chat         = arguments.interactiveChat
+		variables.theme        = arguments.theme
+		variables.terminal     = new "cli.Terminal"( arguments.theme )
+		variables.markdown     = new "cli.MarkdownRenderer"( variables.terminal, arguments.theme, arguments.wrapWidth > 0 ? arguments.wrapWidth : 80 )
+		variables.screen       = arguments.screen
+		variables.useLanterna  = !isNull( arguments.screen ) && arguments.screen.isRunning()
+		variables.sidebarWidth = 22
+		variables.inputRows    = 3
+		return this
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// High-level panel renderers (Lanterna mode)
+	// ══════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Renders the session header box shown at the start of each interactive session.
+	 * Redraws the entire three-panel layout.
+	 * Call after any state change to keep the screen consistent.
 	 *
-	 * @state  Struct with title, provider, model (or namedModel) keys
-	 * @return Formatted box string with session title, provider/model, and hint text
+	 * @state  Struct with: title, provider, model, namedModel, sessions,
+	 *         currentSessionId, sidebarCursor, messages, inputBuffer,
+	 *         cursorPos, usage
 	 */
-	string function renderHeader( required struct state ) {
-		var title = arguments.state.title ?: "New chat"
-		var model = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
-		var provider = arguments.state.provider ?: "not configured"
-		return box( "NanoBox · #title#\n#provider# / #model#\n/help for commands · /exit to quit" )
+	void function renderAll( required struct state ) {
+		if ( !variables.useLanterna ) { return }
+		var sz = variables.screen.getSize()
+		variables.screen.clear()
+		renderHeaderPanel( arguments.state, sz )
+		renderSidebarPanel( arguments.state, sz )
+		renderChatPanel( arguments.state, sz )
+		renderInputPanel( arguments.state, sz )
+		variables.screen.refresh()
 	}
 
 	/**
-	 * Renders a user turn with a coloured "You" prefix.
-	 *
-	 * @text  User's message text
-	 * @return Formatted string with ANSI cyan "You ›" prefix
+	 * Redraws only the input bar (cheap update while the user types).
 	 */
-	string function renderUser( required string text ) { return "\n" & style( "You", "cyan" ) & " › " & arguments.text }
+	void function renderInputOnly( required struct state ) {
+		if ( !variables.useLanterna ) { return }
+		var sz = variables.screen.getSize()
+		renderInputPanel( arguments.state, sz )
+		variables.screen.refresh()
+	}
 
 	/**
-	 * Renders an assistant turn with a coloured "NanoBox" prefix.
-	 *
-	 * @text  Assistant response content
-	 * @return Formatted string with ANSI green "NanoBox ›" prefix
+	 * Redraws only the chat area and sidebar (after a response arrives).
 	 */
-	string function renderAssistant( required string text ) { return "\n" & style( "NanoBox", "green" ) & " ›\n" & arguments.text }
+	void function renderChatOnly( required struct state ) {
+		if ( !variables.useLanterna ) { return }
+		var sz = variables.screen.getSize()
+		renderSidebarPanel( arguments.state, sz )
+		renderChatPanel( arguments.state, sz )
+		variables.screen.refresh()
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// ANSI fallback renderers (used when Lanterna is unavailable)
+	// ══════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Renders the output of a slash command for terminal display.
-	 *
-	 * @result  Action result struct from InteractiveChat.execute()
-	 * @return  Formatted string; for help, a newline-joined command list; otherwise JSON
+	 * Renders the session header box (ANSI mode).
+	 * Returns the formatted string so CommandRuntime can println() it.
 	 */
-	string function renderCommand( required struct result ) { if ( arguments.result.action == "help" ) { return arrayToList( arguments.result.commands, "\n" ) }; return jsonSerialize( arguments.result ) }
+	string function renderHeader( required struct state ) {
+		var title    = arguments.state.title    ?: "New chat"
+		var model    = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
+		var provider = arguments.state.provider ?: "not configured"
+		var lines = [
+			"◈ NanoBox  ·  #title#",
+			"#provider# / #model#",
+			"/help for commands  ·  /exit to quit"
+		]
+		return variables.terminal.banner( lines, variables.theme.border ?: "color42" )
+	}
 
 	/**
-	 * Draws a Unicode box border around multi-line text content.
-	 *
-	 * @text  Content to wrap; newlines create additional rows
-	 * @return Box-bordered string using Unicode box-drawing characters
+	 * Renders a user turn with a coloured "You" prefix (ANSI mode).
 	 */
-	private string function box( required string text ) { var lines = listToArray( replace( arguments.text, char( 13 ), "", "all" ), char( 10 ), true ); var width = 0; for ( var line in lines ) { width = max( width, len( line ) ) }; var output = "┌" & repeatString( "─", width + 2 ) & "┐"; for ( var line in lines ) { output &= char( 10 ) & "│ " & line & repeatString( " ", width - len( line ) ) & " │" }; return output & char( 10 ) & "└" & repeatString( "─", width + 2 ) & "┘" }
+	string function renderUser( required string text ) {
+		return char(10) & variables.terminal.style( "You", variables.theme.user ?: "color226" ) & " › " & arguments.text
+	}
 
 	/**
-	 * Applies an ANSI color code to text when colors are enabled.
-	 *
-	 * @text   Text to style
-	 * @color  Named color: "cyan", "green", "yellow", "red", or "dim"
-	 * @return ANSI-wrapped text, or the original text if colors are disabled
+	 * Renders an assistant turn with markdown-rendered content (ANSI mode).
 	 */
-	private string function style( required string text, required string color ) { if ( !variables.colors ) { return arguments.text }; var codes = { cyan: "36", green: "32", yellow: "33", red: "31", dim: "2" }; return char( 27 ) & "[" & codes[ arguments.color ] & "m" & arguments.text & char( 27 ) & "[0m" }
+	string function renderAssistant( required string text ) {
+		var label = variables.terminal.style( "NanoBox", variables.theme.assistant ?: "color42" )
+		var rendered = variables.markdown.render( arguments.text, variables.markdown.wrapWidth )
+		return char(10) & label & " ›" & char(10) & rendered
+	}
+
+	/**
+	 * Renders slash command results in a typed, human-friendly format (ANSI mode).
+	 */
+	string function renderCommand( required struct result ) {
+		var action = arguments.result.action ?: "unknown"
+		switch ( action ) {
+			case "help":
+				return renderHelp( arguments.result )
+			case "sessions":
+				return renderSessions( arguments.result )
+			case "usage":
+				return renderUsage( arguments.result )
+			case "status":
+				return renderStatus( arguments.result )
+			case "theme":
+			case "themes":
+				return renderThemes( arguments.result )
+			case "title":
+				return variables.terminal.info( "Title: " & ( arguments.result.title ?: "" ) )
+			case "new":
+				return variables.terminal.success( "New session started: " & ( arguments.result.sessionId ?: "" ) )
+			case "clear":
+				return variables.terminal.success( "History cleared" )
+			case "undo":
+				return variables.terminal.success( "Undone — #arguments.result.history ?: 0# messages remain" )
+			case "resume":
+				return variables.terminal.success( "Resumed session: " & ( arguments.result.title ?: arguments.result.sessionId ?: "" ) )
+			case "empty":
+				return ""
+			default:
+				if ( !( arguments.result.success ?: true ) ) {
+					return variables.terminal.error( arguments.result.error ?: "Unknown error" )
+				}
+				// Generic typed-struct renderer
+				return variables.terminal.kvTable( arguments.result.filter( (k,v) => ![ "success", "action" ].containsNoCase( k ) ) )
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Typed result renderers
+	// ══════════════════════════════════════════════════════════════════════
+
+	string function renderHelp( required struct result ) {
+		var t = variables.terminal
+		var groups = {
+			"Chat":    [ "/help", "/model [name]", "/provider [name]", "/new", "/clear", "/retry", "/undo", "/title <name>", "/compress", "/quit", "/exit" ],
+			"Session": [ "/sessions", "/session search <q>", "/session rename <id> <name>", "/session stats", "/session export [id]", "/session delete <id>", "/resume <id>" ],
+			"AI":      [ "/agent list", "/agent show <name>", "/agent run <name> [q]", "/stream [on|off]", "/temperature [0-2]" ],
+			"Memory":  [ "/memory list [cat]", "/memory add <topic> <text>", "/memory search <q>", "/memory delete <id>", "/memory clear [cat]" ],
+			"Models":  [ "/model list", "/model status", "/model add <name> <prov> <model>" ],
+			"Skills":  [ "/skill list", "/skill search <q>", "/skill install <slug>", "/skill remove <name>" ],
+			"Tools":   [ "/tool list", "/tool enable <key>", "/tool disable <key>" ],
+			"Vault":   [ "/vault list [cat]", "/vault search <q>" ],
+			"MCP":     [ "/mcp list", "/mcp start <name>", "/mcp stop <name>", "/mcp test <name>" ],
+			"Cron":    [ "/cron list", "/cron run <name>", "/cron pause <name>", "/cron resume <name>" ],
+			"TUI":     [ "/theme [name]", "/themes", "/wrap [width|on|off]" ],
+			"System":  [ "/system [text]", "/config [key] [value]", "/tokens [today]", "/status", "/usage", "/export [json|text]", "/security status", "/gateway list", "/log list" ]
+		}
+		var out = char(10) & t.style( "NanoBox Chat Commands", "color226", true ) & char(10)
+		out &= t.ansi( "color248" ) & repeatString( "─", 60 ) & t.RESET & char(10)
+		for ( var group in groups ) {
+			out &= char(10) & t.style( group, variables.theme.accent ?: "color42", true ) & char(10)
+			for ( var cmd in groups[ group ] ) {
+				out &= "  " & t.ansi( "color226" ) & cmd & t.RESET & char(10)
+			}
+		}
+		return out
+	}
+
+	string function renderSessions( required struct result ) {
+		var sessions = arguments.result.sessions ?: []
+		if ( sessions.isEmpty() ) { return variables.terminal.info( "No sessions found." ) }
+		var rows = sessions.map( s => [
+			variables.terminal.truncate( s.id ?: "", 8 ),
+			variables.terminal.truncate( s.title ?: "Untitled", 40 ),
+			s.provider ?: "",
+			s.updatedAt ?: s.createdAt ?: ""
+		])
+		return variables.terminal.table( [ "ID", "Title", "Provider", "Updated" ], rows )
+	}
+
+	string function renderUsage( required struct result ) {
+		var u = arguments.result.usage ?: {}
+		var out = char(10) & variables.terminal.style( "Token Usage", "color226", true ) & char(10)
+		out &= variables.terminal.progressBar( u.inputTokens ?: 0, max( u.totalTokens ?: 1, 1 ) ) & "  input" & char(10)
+		out &= variables.terminal.progressBar( u.outputTokens ?: 0, max( u.totalTokens ?: 1, 1 ) ) & "  output" & char(10)
+		out &= variables.terminal.kvTable({
+			"Requests":      u.requests ?: 0,
+			"Input tokens":  u.inputTokens ?: 0,
+			"Output tokens": u.outputTokens ?: 0,
+			"Total tokens":  u.totalTokens ?: 0
+		})
+		return out
+	}
+
+	string function renderStatus( required struct result ) {
+		var r = arguments.result
+		return variables.terminal.box(
+			"Session Status",
+			[
+				"Session:  " & ( r.sessionId ?: "none" ),
+				"Title:    " & ( r.title ?: "New chat" ),
+				"Provider: " & ( r.provider ?: "not configured" ),
+				"Model:    " & ( r.namedModel ?: r.model ?: "not configured" ),
+				"History:  " & ( r.history ?: 0 ) & " messages",
+				"Requests: " & ( r.usage.requests ?: 0 ),
+				"Tokens:   " & ( r.usage.totalTokens ?: 0 )
+			]
+		)
+	}
+
+	string function renderThemes( required struct result ) {
+		var allThemes = result.themes ?: []
+		if ( allThemes.isEmpty() ) {
+			return variables.terminal.info( "Theme: " & ( result.theme.name ?: "boxlang" ) )
+		}
+		var t = variables.terminal
+		var out = char(10) & t.style( "Available Themes", "color226", true ) & char(10)
+		for ( var th in allThemes ) {
+			var bc = th.border ?: ""
+			var marker = th.name == ( result.current ?: "" ) ? "▶ " : "  "
+			out &= marker & t.style( t.padRight( th.name, 12 ), bc ) & "  "
+			out &= t.ansi( bc ) & "████" & t.RESET & "  "
+			out &= t.dim( th.dark ? "dark" : "light" ) & char(10)
+		}
+		return out
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Private Lanterna panel implementations
+	// ══════════════════════════════════════════════════════════════════════
+
+	private void function renderHeaderPanel( required struct state, required struct sz ) {
+		var title    = arguments.state.title    ?: "New chat"
+		var model    = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
+		var provider = arguments.state.provider ?: "not configured"
+		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  /help "
+		var borderCode = resolveColorCode( variables.theme.border ?: "color42" )
+		var accentCode = resolveColorCode( variables.theme.accent ?: "color226" )
+
+		variables.screen.drawText( 0, 0, "╭" & repeatString( "─", arguments.sz.columns - 2 ) & "╮", borderCode )
+		var padded = text & repeatString( " ", max( 0, arguments.sz.columns - len(text) - 4 ) )
+		variables.screen.drawText( 0, 1, "│ ", borderCode )
+		variables.screen.drawText( 2, 1, padded, accentCode )
+		variables.screen.drawText( arguments.sz.columns - 2, 1, " │", borderCode )
+		variables.screen.drawText( 0, 2, "╰" & repeatString( "─", arguments.sz.columns - 2 ) & "╯", borderCode )
+	}
+
+	private void function renderSidebarPanel( required struct state, required struct sz ) {
+		var headerHeight = 3
+		var panelTop  = headerHeight
+		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
+		var panelW    = variables.sidebarWidth
+		var bc = resolveColorCode( variables.theme.border ?: "color42" )
+		var sessions  = arguments.state.sessions ?: []
+		var curId     = arguments.state.currentSessionId ?: ""
+		var cursor    = arguments.state.sidebarCursor ?: 1
+		var usage     = arguments.state.usage ?: {}
+
+		// Sidebar box outline
+		variables.screen.drawBox( 0, panelTop, panelW, panelH, bc )
+		variables.screen.drawText( 1, panelTop, "─ Sessions ─", bc )
+
+		// Session list
+		var listH = panelH - 6  // reserve bottom for stats
+		for ( var i = 1; i <= min( sessions.len(), listH - 1 ); i++ ) {
+			var s    = sessions[i]
+			var row  = panelTop + i
+			var isCurrent = s.id == curId
+			var isCursor  = i == cursor
+			var prefix = isCursor ? "▶ " : "  "
+			var label  = variables.terminal.truncate( s.title ?: "Untitled", panelW - 5 )
+			var code   = isCurrent ? resolveColorCode( variables.theme.assistant ?: "color42" ) : 255
+			variables.screen.drawText( 1, row, prefix & label, code )
+		}
+
+		// Stats at bottom
+		var statsRow = panelTop + panelH - 5
+		variables.screen.drawText( 1, statsRow,     "──────────────────", bc )
+		variables.screen.drawText( 1, statsRow + 1, variables.terminal.truncate( "Model: " & ( arguments.state.namedModel ?: arguments.state.model ?: "–" ), panelW - 3 ) )
+		variables.screen.drawText( 1, statsRow + 2, variables.terminal.truncate( usage.inputTokens ?: 0 & "↑ " & usage.outputTokens ?: 0 & "↓", panelW - 3 ) )
+	}
+
+	private void function renderChatPanel( required struct state, required struct sz ) {
+		var headerHeight = 3
+		var panelTop  = headerHeight
+		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
+		var chatLeft  = variables.sidebarWidth
+		var chatW     = arguments.sz.columns - variables.sidebarWidth
+		var bc = resolveColorCode( variables.theme.border ?: "color42" )
+		var messages  = arguments.state.messages ?: []
+
+		// Chat box outline
+		variables.screen.drawBox( chatLeft, panelTop, chatW, panelH, bc )
+		variables.screen.drawText( chatLeft + 1, panelTop, "─ Chat ", bc )
+
+		// Render messages from the bottom up (most recent last)
+		var contentW = chatW - 4
+		var row = panelTop + panelH - 2
+		var msgIdx = messages.len()
+		while ( row > panelTop + 1 && msgIdx > 0 ) {
+			var msg = messages[ msgIdx ]
+			var isUser = (msg.role ?: "") == "user"
+			var label  = isUser ? "You" : "NanoBox"
+			var lColor = isUser
+				? resolveColorCode( variables.theme.user ?: "color226" )
+				: resolveColorCode( variables.theme.assistant ?: "color42" )
+			var wrappedLines = variables.terminal.wrap( msg.content ?: "", contentW )
+			// Render wrapped lines bottom-up
+			for ( var li = wrappedLines.len(); li >= 1 && row > panelTop + 1; li-- ) {
+				variables.screen.drawText( chatLeft + 2, row, wrappedLines[li], "" )
+				row--
+			}
+			// Label line
+			if ( row > panelTop + 1 ) {
+				variables.screen.drawText( chatLeft + 2, row, label & " ›", lColor )
+				row -= 2  // blank line before message
+			}
+			msgIdx--
+		}
+	}
+
+	private void function renderInputPanel( required struct state, required struct sz ) {
+		var panelTop = arguments.sz.rows - variables.inputRows
+		var bc = resolveColorCode( variables.theme.border ?: "color42" )
+		var promptColor = resolveColorCode( variables.theme.prompt ?: "color42" )
+
+		variables.screen.drawBox( 0, panelTop, arguments.sz.columns, variables.inputRows, bc )
+		variables.screen.drawText( 1, panelTop, "─ Input ", bc )
+
+		var prompt  = "You › "
+		var inputBuf = arguments.state.inputBuffer ?: ""
+		var line = prompt & inputBuf
+		variables.screen.drawText( 2, panelTop + 1, prompt, promptColor )
+		variables.screen.drawText( 2 + len(prompt), panelTop + 1, inputBuf )
+
+		// Position cursor after typed text
+		variables.screen.setCursorPosition( 2 + len(prompt) + len(inputBuf), panelTop + 1 )
+	}
+
+	// ── Private colour resolver ───────────────────────────────────────────
+
+	private numeric function resolveColorCode( any colorRef ) {
+		if ( isNumeric( colorRef ) ) { return int( colorRef ) }
+		var num = replaceNoCase( toString( colorRef ), "color", "" )
+		return isNumeric( num ) ? int( num ) : 255
+	}
+
 }
