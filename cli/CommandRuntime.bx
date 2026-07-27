@@ -373,6 +373,8 @@ class {
 					sidebarCursor:    0,
 					sidebarFocus:     false,
 					sidebarVisible:   true,
+					showHelp:         false,
+					scrollOffset:     0,
 					messages:         [],
 					inputBuffer:      "",
 					cursorPos:        0,
@@ -385,6 +387,8 @@ class {
 				var sidebarFocus   = false
 				var sidebarCursor  = 0
 				var sidebarVisible = true
+				var showHelp       = false
+				var scrollOffset   = 0
 
 				while ( true ) {
 					var key = screen.readInput()
@@ -403,6 +407,101 @@ class {
 							state.sidebarFocus = false
 						}
 						renderer.renderAll( state )
+						continue
+					}
+
+					// ── F1 — toggle help modal (any focus) ───────────────────────
+					if ( key.type == "F1" ) {
+						showHelp       = !showHelp
+						state.showHelp = showHelp
+						renderer.renderAll( state )
+						continue
+					}
+
+					// ── Escape — close help modal (any focus) ─────────────────────
+					if ( key.type == "Escape" && showHelp ) {
+						showHelp       = false
+						state.showHelp = false
+						renderer.renderAll( state )
+						continue
+					}
+
+					// ── PageUp / PageDown — scroll chat (any focus) ───────────────
+					if ( key.type == "PageUp" ) {
+						scrollOffset       = scrollOffset + 5
+						state.scrollOffset = scrollOffset
+						renderer.renderChatOnly( state )
+						continue
+					}
+					if ( key.type == "PageDown" ) {
+						scrollOffset       = max( 0, scrollOffset - 5 )
+						state.scrollOffset = scrollOffset
+						renderer.renderChatOnly( state )
+						continue
+					}
+
+					// ── Ctrl+N — new session ──────────────────────────────────────
+					if ( key.type == "Character" && key.character == "n" && key.ctrl ) {
+						var newResp = interactive.execute( "/new" )
+						state.title            = interactive.getTitle() ?: state.title
+						state.currentSessionId = newResp.sessionId ?: state.currentSessionId
+						state.messages         = []
+						state.usage            = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+						scrollOffset           = 0
+						state.scrollOffset     = 0
+						try { state.sessions = sessMgr.list( 10, 0 ) } catch ( any e ) {}
+						renderer.renderAll( state )
+						continue
+					}
+
+					// ── Ctrl+L — clear history ────────────────────────────────────
+					if ( key.type == "Character" && key.character == "l" && key.ctrl ) {
+						interactive.execute( "/clear" )
+						state.messages     = []
+						scrollOffset       = 0
+						state.scrollOffset = 0
+						renderer.renderChatOnly( state )
+						continue
+					}
+
+					// ── Ctrl+R — retry last message ───────────────────────────────
+					if ( key.type == "Character" && key.character == "r" && key.ctrl ) {
+						var retryResp = interactive.execute( "/retry" )
+						if ( retryResp.action == "response" ) {
+							state.messages.append( { role: "user",      content: interactive.getTitle() ?: "" } )
+							state.messages.append( { role: "assistant", content: retryResp.content ?: "" } )
+							if ( isStruct( retryResp.usage ?: "" ) ) { state.usage = retryResp.usage }
+						}
+						renderer.renderChatOnly( state )
+						continue
+					}
+
+					// ── Ctrl+Z — undo last turn ───────────────────────────────────
+					if ( key.type == "Character" && key.character == "z" && key.ctrl ) {
+						interactive.execute( "/undo" )
+						if ( state.messages.len() >= 2 ) {
+							state.messages.deleteAt( state.messages.len() )
+							state.messages.deleteAt( state.messages.len() )
+						}
+						renderer.renderChatOnly( state )
+						continue
+					}
+
+					// ── Ctrl+S — export session ───────────────────────────────────
+					if ( key.type == "Character" && key.character == "s" && key.ctrl ) {
+						interactive.execute( "/export json" )
+						state.messages.append( { role: "command", action: "export",
+							result: { success: true, action: "export", message: "Session exported." } } )
+						renderer.renderChatOnly( state )
+						continue
+					}
+
+					// ── Ctrl+U — clear input line (bash-style) ────────────────────
+					if ( key.type == "Character" && key.character == "u" && key.ctrl ) {
+						inputBuffer       = ""
+						state.inputBuffer = ""
+						state.cursorPos   = 0
+						renderer.renderInputOnly( state )
 						continue
 					}
 
@@ -441,6 +540,22 @@ class {
 						sidebarFocus       = true
 						state.sidebarFocus = true
 						renderer.renderAll( state )
+
+					} else if ( key.type == "ArrowUp" && !len( inputBuffer ) ) {
+						// Recall last user message when input is empty (like terminal history)
+						var lastUserContent = ""
+						for ( var mi = state.messages.len(); mi >= 1; mi-- ) {
+							if ( ( state.messages[mi].role ?: "" ) == "user" ) {
+								lastUserContent = state.messages[mi].content ?: ""
+								break
+							}
+						}
+						if ( len( lastUserContent ) ) {
+							inputBuffer       = lastUserContent
+							state.inputBuffer = inputBuffer
+							state.cursorPos   = len( inputBuffer )
+							renderer.renderInputOnly( state )
+						}
 
 					} else if ( key.type == "Character" && !key.ctrl && !key.alt ) {
 						inputBuffer      &= key.character

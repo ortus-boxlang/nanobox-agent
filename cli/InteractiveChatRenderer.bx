@@ -79,6 +79,7 @@ class {
 		renderSidebarPanel( arguments.state, sz )
 		renderChatPanel( arguments.state, sz )
 		renderInputPanel( arguments.state, sz )
+		if ( arguments.state.showHelp ?: false ) { renderHelpModal( arguments.state, sz ) }
 		variables.screen.refresh()
 	}
 
@@ -275,7 +276,7 @@ class {
 		var title    = arguments.state.title    ?: "New chat"
 		var model    = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
 		var provider = arguments.state.provider ?: "not configured"
-		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  /help  ·  ^B sidebar "
+		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  F1 shortcuts  ·  ^B sidebar "
 		var borderCode = resolveColorCode( variables.theme.border ?: "color42" )
 		var accentCode = resolveColorCode( variables.theme.accent ?: "color226" )
 
@@ -339,7 +340,7 @@ class {
 
 		// Render messages from the bottom up (most recent last)
 		var contentW = chatW - 4
-		var row = panelTop + panelH - 2
+		var row = panelTop + panelH - 2 - int( arguments.state.scrollOffset ?: 0 )
 		var msgIdx = messages.len()
 		while ( row > panelTop + 1 && msgIdx > 0 ) {
 			var msg = messages[ msgIdx ]
@@ -379,6 +380,98 @@ class {
 
 		// Position cursor after typed text
 		variables.screen.setCursorPosition( 2 + len(prompt) + len(inputBuf), panelTop + 1 )
+	}
+
+	/**
+	 * Renders a centered help modal overlay listing all keyboard shortcuts.
+	 * Drawn on top of the existing panels — caller must refresh() after.
+	 */
+	private void function renderHelpModal( required struct state, required struct sz ) {
+		var bc  = resolveColorCode( variables.theme.border  ?: "color42" )
+		var ac  = resolveColorCode( variables.theme.accent  ?: "color226" )
+		var dc  = resolveColorCode( variables.theme.dim     ?: "color248" )
+		var hc  = resolveColorCode( variables.theme.user    ?: "color226" )
+
+		var modalW = min( 74, arguments.sz.columns - 4 )
+		var modalH = 24
+		var mCol   = int( ( arguments.sz.columns - modalW ) / 2 )
+		var mRow   = int( ( arguments.sz.rows    - modalH ) / 2 )
+		var half   = int( modalW / 2 ) - 1
+
+		// Modal border
+		variables.screen.drawBox( mCol, mRow, modalW, modalH, bc )
+		variables.screen.drawText( mCol + 2, mRow, "─ Keyboard Shortcuts ", ac, "", true )
+
+		// ── Left column: Navigation + View ────────────────────────────────
+		var lCol = mCol + 2
+		var r    = mRow + 2
+
+		// Navigation
+		variables.screen.drawText( lCol, r, "Navigation", hc, "", true );  r++
+		variables.screen.drawText( lCol, r, repeatString( "─", half - 2 ), dc );  r++
+		var navItems = [
+			[ "Tab",       "Focus sessions sidebar" ],
+			[ "↑ / ↓",     "Navigate sessions" ],
+			[ "Enter",     "Resume session" ],
+			[ "Escape",    "Unfocus / close modal" ],
+			[ "Ctrl+B",    "Toggle sidebar" ]
+		]
+		for ( var item in navItems ) {
+			variables.screen.drawText( lCol,      r, variables.terminal.padRight( item[1], 11 ), ac )
+			variables.screen.drawText( lCol + 12, r, item[2], dc )
+			r++
+		}
+		r++
+
+		// View
+		variables.screen.drawText( lCol, r, "View", hc, "", true );  r++
+		variables.screen.drawText( lCol, r, repeatString( "─", half - 2 ), dc );  r++
+		var viewItems = [
+			[ "F1",        "This shortcuts modal" ],
+			[ "PageUp",    "Scroll chat up" ],
+			[ "PageDown",  "Scroll chat down" ],
+			[ "Ctrl+C",    "Exit NanoBox" ]
+		]
+		for ( var item in viewItems ) {
+			variables.screen.drawText( lCol,      r, variables.terminal.padRight( item[1], 11 ), ac )
+			variables.screen.drawText( lCol + 12, r, item[2], dc )
+			r++
+		}
+
+		// ── Right column: Chat + Slash commands ───────────────────────────
+		var rCol = mCol + half + 2
+		r = mRow + 2
+
+		// Chat
+		variables.screen.drawText( rCol, r, "Chat", hc, "", true );  r++
+		variables.screen.drawText( rCol, r, repeatString( "─", half - 2 ), dc );  r++
+		var chatItems = [
+			[ "Ctrl+N",    "New session" ],
+			[ "Ctrl+R",    "Retry message" ],
+			[ "Ctrl+Z",    "Undo last turn" ],
+			[ "Ctrl+L",    "Clear history" ],
+			[ "Ctrl+S",    "Export session" ],
+			[ "Ctrl+U",    "Clear input" ],
+			[ "↑ (empty)", "Recall last query" ]
+		]
+		for ( var item in chatItems ) {
+			variables.screen.drawText( rCol,      r, variables.terminal.padRight( item[1], 11 ), ac )
+			variables.screen.drawText( rCol + 12, r, item[2], dc )
+			r++
+		}
+		r++
+
+		// Slash commands
+		variables.screen.drawText( rCol, r, "Slash Commands", hc, "", true );  r++
+		variables.screen.drawText( rCol, r, repeatString( "─", half - 2 ), dc );  r++
+		variables.screen.drawText( rCol, r, "/help  /themes  /model", dc );  r++
+		variables.screen.drawText( rCol, r, "/agent /memory /skill",  dc );  r++
+		variables.screen.drawText( rCol, r, "/vault /mcp    /cron …", dc );  r++
+
+		// Footer
+		var footer    = "  Press F1 or Escape to close  "
+		var footerCol = mCol + int( ( modalW - len( footer ) ) / 2 )
+		variables.screen.drawText( footerCol, mRow + modalH - 2, footer, dc )
 	}
 
 	// ── Private colour resolver ───────────────────────────────────────────
