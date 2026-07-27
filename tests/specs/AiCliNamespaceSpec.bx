@@ -9,7 +9,7 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "rejects an empty chat query", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/chat-#createUUID()#" )
-				var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: {} } )
+				var result = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: {} } )
 				expect( result.success ).toBeFalse()
 			} )
 		} )

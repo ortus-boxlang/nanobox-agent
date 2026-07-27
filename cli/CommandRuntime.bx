@@ -42,7 +42,7 @@ class {
 		var args = positionalArguments( command, action, arguments.parsed.positionals, arguments.parsed.options ?: {} )
 		switch ( command ) {
 			case "config":
-				if ( action == "provider" ) { return new "models.providers.ProviderCommand"( variables.config ).execute( args.action ?: "list", args ) }
+				if ( action == "provider" ) { return new "cli.commands.ProviderCommand"( variables.config ).execute( args.action ?: "list", args ) }
 				if ( action == "model" ) { return new "cli.commands.ModelCommand"( variables.config ).execute( args.action ?: "current", args ) }
 				return new "cli.commands.ConfigCommand"( variables.config ).execute( action ?: "show", args )
 			case "session": return new "cli.commands.SessionCommand"( new "models.sessions.SessionManager"() ).execute( action ?: "list", args )

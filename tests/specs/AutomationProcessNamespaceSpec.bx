@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "executes cron, web, worker, mcp, and script actions through runtime", () => {
 				var home = getTempDirectory() & "/automation-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "cron", "list" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "mcp", "list" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "script", "list" ], options: {} } ).success ).toBeTrue()

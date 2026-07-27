@@ -2,7 +2,7 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "PrettyCli", () => {
 			it( "renders tables, boxes, and text helpers", () => {
-				var cli = new "models.util.PrettyCli"( false )
+				var cli = new "cli.util.PrettyCli"( false )
 				expect( cli.table( [ "Name" ], [ [ "LM Studio" ] ] ) ).toInclude( "LM Studio" )
 				expect( cli.box( "Hello" ) ).toInclude( "Hello" )
 				expect( cli.truncate( "abcdef", 5 ) ).toBe( "abcd…" )

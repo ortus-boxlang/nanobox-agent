@@ -50,7 +50,7 @@ class {
 	) {
 		variables.chat         = arguments.interactiveChat
 		variables.theme        = arguments.theme
-		variables.terminal     = new "models.util.Terminal"( arguments.theme )
+		variables.terminal     = new "cli.util.Terminal"( arguments.theme )
 		variables.markdown     = new "cli.util.MarkdownRenderer"( variables.terminal, arguments.theme, arguments.wrapWidth > 0 ? arguments.wrapWidth : 80 )
 		variables.screen       = arguments.screen
 		variables.useLanterna  = !isNull( arguments.screen ) && arguments.screen.isRunning()

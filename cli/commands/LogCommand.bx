@@ -20,7 +20,7 @@ class {
 	 */
 	function init( required any logManager, any cli ) {
 		variables.manager = arguments.logManager
-		variables.cli = arguments.cli ?: new "models.util.PrettyCli"()
+		variables.cli = arguments.cli ?: new "cli.util.PrettyCli"()
 		return this
 	}
 

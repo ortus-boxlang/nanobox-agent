@@ -16,7 +16,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns setup-required instead of prompting for noninteractive empty chat", () => {
 				var home = getTempDirectory() & "/interactive-empty-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: { z: true } } )
+				var result = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: { z: true } } )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "query" )
 			} )

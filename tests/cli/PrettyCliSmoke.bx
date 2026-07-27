@@ -2,7 +2,7 @@ import models.util.PrettyCli
 
 class {
 	function main( array args = [] ) {
-		var cli = new "models.util.PrettyCli"( false )
+		var cli = new "cli.util.PrettyCli"( false )
 		var table = cli.table( [ "Name", "State" ], [ [ "LM Studio", "Ready" ] ] )
 		if ( find( "LM Studio", table ) == 0 ) { throw( "table should contain row" ) }
 		if ( find( "State", table ) == 0 ) { throw( "table should contain header" ) }

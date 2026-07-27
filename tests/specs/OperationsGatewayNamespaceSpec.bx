@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "executes backup, update, and gateway actions through runtime", () => {
 				var home = getTempDirectory() & "/ops-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "backup", "status" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "update", "status" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "gateway", "status" ], options: {} } ).success ).toBeTrue()

@@ -4,8 +4,8 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns all configured models and named models through runtime", () => {
 				var home = getTempDirectory() & "/model-active-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
-				var provider = new "models.providers.ProviderCommand"( config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
+				var provider = new "cli.commands.ProviderCommand"( config )
 				var model = new "cli.commands.ModelCommand"( config )
 				provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
 				provider.execute( "set", { name: "lmstudio" } )
@@ -18,7 +18,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "does not expose provider secrets in status", () => {
 				var home = getTempDirectory() & "/provider-secret-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var provider = new "models.providers.ProviderCommand"( config )
+				var provider = new "cli.commands.ProviderCommand"( config )
 				provider.execute( "add", { name: "openai", type: "openai", apiKey: "super-secret-not-output" } )
 				var status = provider.execute( "status", {} )
 				expect( jsonSerialize( status ) ).notToInclude( "super-secret-not-output" )
