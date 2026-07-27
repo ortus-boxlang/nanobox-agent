@@ -275,7 +275,7 @@ class {
 		var title    = arguments.state.title    ?: "New chat"
 		var model    = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
 		var provider = arguments.state.provider ?: "not configured"
-		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  /help "
+		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  /help  ·  ^B sidebar "
 		var borderCode = resolveColorCode( variables.theme.border ?: "color42" )
 		var accentCode = resolveColorCode( variables.theme.accent ?: "color226" )
 
@@ -288,6 +288,7 @@ class {
 	}
 
 	private void function renderSidebarPanel( required struct state, required struct sz ) {
+		if ( !( arguments.state.sidebarVisible ?: true ) ) { return }
 		var headerHeight = 3
 		var panelTop  = headerHeight
 		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
@@ -326,8 +327,9 @@ class {
 		var headerHeight = 3
 		var panelTop  = headerHeight
 		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
-		var chatLeft  = variables.sidebarWidth
-		var chatW     = arguments.sz.columns - variables.sidebarWidth
+		var showSidebar = arguments.state.sidebarVisible ?: true
+		var chatLeft  = showSidebar ? variables.sidebarWidth : 0
+		var chatW     = showSidebar ? arguments.sz.columns - variables.sidebarWidth : arguments.sz.columns
 		var bc = resolveColorCode( variables.theme.border ?: "color42" )
 		var messages  = arguments.state.messages ?: []
 

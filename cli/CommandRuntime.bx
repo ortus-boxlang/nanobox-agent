@@ -372,6 +372,7 @@ class {
 					currentSessionId: started.sessionId,
 					sidebarCursor:    0,
 					sidebarFocus:     false,
+					sidebarVisible:   true,
 					messages:         [],
 					inputBuffer:      "",
 					cursorPos:        0,
@@ -380,9 +381,10 @@ class {
 
 				renderer.renderAll( state )
 
-				var inputBuffer   = ""
-				var sidebarFocus  = false
-				var sidebarCursor = 0
+				var inputBuffer    = ""
+				var sidebarFocus   = false
+				var sidebarCursor  = 0
+				var sidebarVisible = true
 
 				while ( true ) {
 					var key = screen.readInput()
@@ -390,6 +392,18 @@ class {
 					// ── Exit ───────────────────────────────────────────────
 					if ( key.type == "EOF" || ( key.type == "Character" && key.character == "c" && key.ctrl ) ) {
 						break
+					}
+
+					// ── Ctrl+B — toggle sidebar visibility (works from either focus) ──
+					if ( key.type == "Character" && key.character == "b" && key.ctrl ) {
+						sidebarVisible         = !sidebarVisible
+						state.sidebarVisible   = sidebarVisible
+						if ( !sidebarVisible && sidebarFocus ) {
+							sidebarFocus       = false
+							state.sidebarFocus = false
+						}
+						renderer.renderAll( state )
+						continue
 					}
 
 					// ── Sidebar focus: arrow navigation + Enter to resume ──
@@ -423,7 +437,7 @@ class {
 					}
 
 					// ── Input focus: typing ────────────────────────────────
-					if ( key.type == "Tab" ) {
+					if ( key.type == "Tab" && sidebarVisible ) {
 						sidebarFocus       = true
 						state.sidebarFocus = true
 						renderer.renderAll( state )
