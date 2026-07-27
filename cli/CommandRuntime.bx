@@ -309,7 +309,7 @@ class {
 		)
 
 		// ── Build InteractiveChat + inject slash-command dependencies ──────
-		var interactive = new "cli.InteractiveChat"( chatCommand, new "models.sessions.SessionManager"(), variables.config )
+		var interactive = new "cli.util.InteractiveChat"( chatCommand, new "models.sessions.SessionManager"(), variables.config )
 		try {
 			interactive.setCommands( {
 				agentCommand:   new "cli.commands.AgentCommand"(
@@ -338,12 +338,12 @@ class {
 		var started = interactive.start( true )
 
 		// ── Load TUI theme ─────────────────────────────────────────────────
-		var tuiTheme = new "cli.TuiTheme"()
+		var tuiTheme = new "cli.util.TuiTheme"()
 		var theme    = tuiTheme.current( variables.config )
 		var wrapWidth = val( tuiConfig.wrapWidth ?: 0 )
 
 		// ── Attempt Lanterna startup ───────────────────────────────────────
-		var screen      = new "cli.LanternaScreen"()
+		var screen      = new "cli.util.LanternaScreen"()
 		var useLanterna = false
 		try {
 			screen.startScreen()
@@ -352,7 +352,7 @@ class {
 			// Headless or JAR missing — ANSI fallback below
 		}
 
-		var renderer = new "cli.InteractiveChatRenderer"( interactive, theme, useLanterna ? screen : null, wrapWidth )
+		var renderer = new "cli.util.InteractiveChatRenderer"( interactive, theme, useLanterna ? screen : null, wrapWidth )
 
 		// ══════════════════════════════════════════════════════════════════
 		// LANTERNA EVENT LOOP

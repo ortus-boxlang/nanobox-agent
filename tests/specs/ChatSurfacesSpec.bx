@@ -15,7 +15,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "supports interactive slash commands without a provider call", () => {
 				var home = getTempDirectory() & "/chat-slash-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var chat = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), new "models.sessions.SessionManager"(), config )
+				var chat = new "cli.util.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), new "models.sessions.SessionManager"(), config )
 				chat.start( false )
 				expect( chat.execute( "/help" ).success ).toBeTrue()
 				expect( chat.execute( "/model" ).success ).toBeTrue()

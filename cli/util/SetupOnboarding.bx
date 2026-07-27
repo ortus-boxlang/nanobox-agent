@@ -13,7 +13,7 @@ class {
 	property name="t";
 
 	function init() {
-		variables.t = new "cli.Terminal"()
+		variables.t = new "models.util.Terminal"()
 		return this
 	}
 

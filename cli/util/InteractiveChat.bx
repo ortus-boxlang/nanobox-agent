@@ -458,14 +458,14 @@ class {
 	private struct function dispatchTheme( required string args ) {
 		if ( !len( arguments.args ) ) {
 			var current = variables.config.get( "nanobox.tui.theme", "boxlang" )
-			return { success: true, action: "theme", theme: new "cli.TuiTheme"().get( current ), current: current }
+			return { success: true, action: "theme", theme: new "cli.util.TuiTheme"().get( current ), current: current }
 		}
-		var theme = new "cli.TuiTheme"().apply( arguments.args, variables.config )
+		var theme = new "cli.util.TuiTheme"().apply( arguments.args, variables.config )
 		return { success: true, action: "theme", theme: theme, current: theme.name, message: "Theme set to: #theme.name#" }
 	}
 
 	private struct function dispatchThemes() {
-		var tm = new "cli.TuiTheme"()
+		var tm = new "cli.util.TuiTheme"()
 		var current = variables.config.get( "nanobox.tui.theme", "boxlang" )
 		return { success: true, action: "themes", themes: tm.listAll(), current: current }
 	}

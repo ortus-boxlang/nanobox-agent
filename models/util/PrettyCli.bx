@@ -14,7 +14,7 @@ class {
 
 	function init( boolean colorsEnabled = true ) {
 		variables.colorsEnabled = arguments.colorsEnabled
-		variables.t = new "cli.Terminal"()
+		variables.t = new "models.util.Terminal"()
 		return this
 	}
 
