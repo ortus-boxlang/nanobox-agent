@@ -364,31 +364,37 @@ class {
 				try { sessions = sessMgr.list( 10, 0 ) } catch ( any e ) {}
 
 				var state = {
-					title:            started.title,
-					provider:         variables.config.get( "bx-ai.defaultProvider", "" ),
-					model:            variables.config.get( "bx-ai.defaultModel", "" ),
-					namedModel:       variables.config.get( "bx-ai.defaultNamedModel", "" ),
-					sessions:         sessions,
-					currentSessionId: started.sessionId,
-					sidebarCursor:    0,
-					sidebarFocus:     false,
-					sidebarVisible:   true,
-					showHelp:         false,
-					scrollOffset:     0,
-					messages:         [],
-					inputBuffer:      "",
-					cursorPos:        0,
-					usage:            { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+					title:             started.title,
+					provider:          variables.config.get( "bx-ai.defaultProvider", "" ),
+					model:             variables.config.get( "bx-ai.defaultModel", "" ),
+					namedModel:        variables.config.get( "bx-ai.defaultNamedModel", "" ),
+					sessions:          sessions,
+					currentSessionId:  started.sessionId,
+					sidebarCursor:     0,
+					sidebarFocus:      false,
+					sidebarVisible:    true,
+					sidebarSearchMode: false,
+					sidebarFilter:     "",
+					showHelp:          false,
+					scrollOffset:      0,
+					messages:          [],
+					inputBuffer:       "",
+					cursorPos:         0,
+					usage:             { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
 				}
 
+				screen.enableMouse()
 				renderer.renderAll( state )
 
-				var inputBuffer    = ""
-				var sidebarFocus   = false
-				var sidebarCursor  = 0
-				var sidebarVisible = true
-				var showHelp       = false
-				var scrollOffset   = 0
+				var inputBuffer       = ""
+				var sidebarFocus      = false
+				var sidebarSearchMode = false
+				var sidebarFilter     = ""
+				var sidebarCursor     = 0
+				var sidebarVisible    = true
+				var showHelp          = false
+				var scrollOffset      = 0
+				var streamingEnabled  = tuiConfig.streaming ?: true
 
 				while ( true ) {
 					var key = screen.readInput()
@@ -396,6 +402,46 @@ class {
 					// ── Exit ───────────────────────────────────────────────
 					if ( key.type == "EOF" || ( key.type == "Character" && key.character == "c" && key.ctrl ) ) {
 						break
+					}
+
+					// ── Mouse events ──────────────────────────────────────────────
+					if ( key.type == "MouseEvent" ) {
+						var mCol = key.mouseCol ?: 0
+						var mRow = key.mouseRow ?: 0
+						var mAct = key.mouseAction ?: ""
+						var sz   = screen.getSize()
+						var hdrH  = 3
+						var inpRows = renderer.getInputRows( state )
+						var inpTop  = sz.rows - inpRows
+
+						if ( mAct == "SCROLL_UP" ) {
+							scrollOffset       = scrollOffset + 2
+							state.scrollOffset = scrollOffset
+							renderer.renderChatOnly( state )
+						} else if ( mAct == "SCROLL_DOWN" ) {
+							scrollOffset       = max( 0, scrollOffset - 2 )
+							state.scrollOffset = scrollOffset
+							renderer.renderChatOnly( state )
+						} else if ( mAct == "CLICK_DOWN" || mAct == "CLICK_RELEASE" ) {
+							if ( mRow >= inpTop ) {
+								// Click in input area — release sidebar focus
+								if ( sidebarFocus ) { sidebarFocus = false; state.sidebarFocus = false; renderer.renderAll( state ) }
+							} else if ( sidebarVisible && mCol < 22 && mRow > hdrH ) {
+								// Click in sidebar — move cursor to clicked session row
+								var clickedIdx = mRow - hdrH - 1
+								if ( clickedIdx >= 0 && clickedIdx < state.sessions.len() ) {
+									sidebarCursor       = clickedIdx
+									state.sidebarCursor = sidebarCursor
+								}
+								sidebarFocus       = true
+								state.sidebarFocus = true
+								renderer.renderAll( state )
+							} else if ( mRow > hdrH ) {
+								// Click in chat — release sidebar focus
+								if ( sidebarFocus ) { sidebarFocus = false; state.sidebarFocus = false; renderer.renderAll( state ) }
+							}
+						}
+						continue
 					}
 
 					// ── Ctrl+B — toggle sidebar visibility (works from either focus) ──
@@ -505,9 +551,58 @@ class {
 						continue
 					}
 
+					// ── Ctrl+Y — copy last assistant response to clipboard ─────────
+					if ( key.type == "Character" && key.character == "y" && key.ctrl ) {
+						var lastAsstContent = ""
+						for ( var mi = state.messages.len(); mi >= 1; mi-- ) {
+							if ( ( state.messages[mi].role ?: "" ) == "assistant" ) {
+								lastAsstContent = state.messages[mi].content ?: ""
+								break
+							}
+						}
+						if ( len( lastAsstContent ) ) {
+							screen.copyToClipboard( lastAsstContent )
+							state.messages.append( { role: "command", action: "copy",
+								result: { success: true, action: "copy", message: "Response copied to clipboard." } } )
+							renderer.renderChatOnly( state )
+						}
+						continue
+					}
+
+					// ── Sidebar focus: search mode ────────────────────────────────
+					if ( sidebarFocus && sidebarSearchMode ) {
+						if ( key.type == "Escape" ) {
+							sidebarSearchMode       = false; state.sidebarSearchMode = false
+							sidebarFilter           = "";    state.sidebarFilter     = ""
+							sidebarCursor           = 0;    state.sidebarCursor     = 0
+							renderer.renderAll( state )
+						} else if ( key.type == "Backspace" && len( sidebarFilter ) > 0 ) {
+							sidebarFilter       = left( sidebarFilter, len( sidebarFilter ) - 1 )
+							state.sidebarFilter = sidebarFilter
+							sidebarCursor       = 0; state.sidebarCursor = 0
+							renderer.renderAll( state )
+						} else if ( key.type == "Character" && !key.ctrl && !key.alt ) {
+							sidebarFilter       &= key.character
+							state.sidebarFilter = sidebarFilter
+							sidebarCursor       = 0; state.sidebarCursor = 0
+							renderer.renderAll( state )
+						} else if ( key.type == "Enter" ) {
+							// Accept filter, return to normal sidebar navigation
+							sidebarSearchMode       = false; state.sidebarSearchMode = false
+							renderer.renderAll( state )
+						}
+						continue
+					}
+
 					// ── Sidebar focus: arrow navigation + Enter to resume ──
 					if ( sidebarFocus ) {
-						if ( key.type == "ArrowUp" && sidebarCursor > 0 ) {
+						if ( key.type == "Character" && key.character == "/" && !key.ctrl && !key.alt ) {
+							// Enter search mode
+							sidebarSearchMode       = true; state.sidebarSearchMode = true
+							sidebarFilter           = "";   state.sidebarFilter     = ""
+							sidebarCursor           = 0;   state.sidebarCursor     = 0
+							renderer.renderAll( state )
+						} else if ( key.type == "ArrowUp" && sidebarCursor > 0 ) {
 							sidebarCursor--
 							state.sidebarCursor = sidebarCursor
 							renderer.renderAll( state )
@@ -516,20 +611,27 @@ class {
 							state.sidebarCursor = sidebarCursor
 							renderer.renderAll( state )
 						} else if ( key.type == "Enter" && state.sessions.len() > 0 ) {
-							var sel = state.sessions[ sidebarCursor + 1 ]
-							try {
-								var resumeResp = interactive.execute( "/resume " & sel.id )
-								state.currentSessionId = sel.id
-								state.title            = sel.title ?: state.title
-								state.messages         = []
-								state.usage            = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
-							} catch ( any e ) {}
-							sidebarFocus       = false
-							state.sidebarFocus = false
+							var visibleSessions = len( sidebarFilter )
+								? state.sessions.filter( s -> findNoCase( sidebarFilter, s.title ?: "" ) > 0 )
+								: state.sessions
+							if ( visibleSessions.len() > sidebarCursor ) {
+								var sel = visibleSessions[ sidebarCursor + 1 ]
+								try {
+									interactive.execute( "/resume " & sel.id )
+									state.currentSessionId = sel.id
+									state.title            = sel.title ?: state.title
+									state.messages         = []
+									scrollOffset           = 0; state.scrollOffset = 0
+									state.usage            = { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+								} catch ( any e ) {}
+							}
+							sidebarFocus = false; state.sidebarFocus = false
+							sidebarSearchMode = false; state.sidebarSearchMode = false
+							sidebarFilter = ""; state.sidebarFilter = ""
 							renderer.renderAll( state )
 						} else if ( key.type == "Escape" || key.type == "Tab" ) {
-							sidebarFocus       = false
-							state.sidebarFocus = false
+							sidebarFocus       = false; state.sidebarFocus = false
+							sidebarSearchMode  = false; state.sidebarSearchMode = false
 							renderer.renderAll( state )
 						}
 						continue
@@ -565,38 +667,126 @@ class {
 
 					} else if ( key.type == "Backspace" ) {
 						if ( len( inputBuffer ) > 0 ) {
-							inputBuffer      = left( inputBuffer, len( inputBuffer ) - 1 )
+							inputBuffer       = left( inputBuffer, len( inputBuffer ) - 1 )
 							state.inputBuffer = inputBuffer
 							state.cursorPos   = len( inputBuffer )
 							renderer.renderInputOnly( state )
 						}
 
+					} else if ( key.type == "Enter" && key.shift ) {
+						// Shift+Enter: insert newline for multi-line input
+						inputBuffer      &= chr(10)
+						state.inputBuffer = inputBuffer
+						state.cursorPos   = len( inputBuffer )
+						renderer.renderInputOnly( state )
+
 					} else if ( key.type == "Enter" ) {
 						var userInput = trim( inputBuffer )
-						inputBuffer      = ""
+						inputBuffer       = ""
 						state.inputBuffer = ""
 						state.cursorPos   = 0
+						// Reset scroll to bottom (#3)
+						scrollOffset       = 0
+						state.scrollOffset = 0
 
 						if ( !len( userInput ) ) { continue }
 
-						// Optimistic: show user turn + thinking placeholder
+						// Show user turn + thinking placeholder
 						state.messages.append( { role: "user", content: userInput } )
-						state.messages.append( { role: "assistant", content: "  ⠙  Thinking…" } )
+						state.messages.append( { role: "assistant", content: "⠋  Thinking…" } )
+						var assistantMsgIdx = state.messages.len()
 						renderer.renderChatOnly( state )
 
-						// Dispatch (blocking)
-						var response = interactive.execute( userInput )
+						var response = {}
+						var isSlashCommand = left( userInput, 1 ) == "/"
 
-						// Replace placeholder with real content
-						var lastIdx = state.messages.len()
-						if ( response.exit ?: false ) { break }
-						if ( response.action == "response" ) {
-							state.messages[ lastIdx ] = { role: "assistant", content: response.content ?: "" }
-						} else if ( response.action == "empty" ) {
-							state.messages.deleteAt( lastIdx )
-							state.messages.deleteAt( state.messages.len() )
+						if ( streamingEnabled && !isSlashCommand ) {
+							// ── STREAMING PATH (#1 + #2) ─────────────────────────────────
+							try {
+								var streamResp = interactive.executeStreaming( userInput )
+								var streamBuf  = streamResp.streamBuf
+								var fullContent = ""
+								var spinFrames  = [ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" ]
+								var spinIdx     = 1
+
+								while ( !streamBuf.done || !streamBuf.chunks.isEmpty() ) {
+									var chunk = streamBuf.chunks.poll()
+									if ( !isNull( chunk ) && len( chunk ) ) {
+										fullContent &= chunk
+										state.messages[ assistantMsgIdx ] = { role: "assistant", content: fullContent & "▊" }
+										renderer.renderChatOnly( state )
+									} else {
+										// Animate spinner while waiting for next chunk
+										spinIdx = ( spinIdx % spinFrames.len() ) + 1
+										state.messages[ assistantMsgIdx ] = {
+											role:    "assistant",
+											content: ( len( fullContent ) ? fullContent & " " : "" ) & spinFrames[ spinIdx ]
+										}
+										renderer.renderChatOnly( state )
+										sleep( 80 )
+									}
+									// Allow Ctrl+C to break mid-stream
+									var pKey = screen.pollInput()
+									if ( pKey.type == "EOF" || ( pKey.type == "Character" && pKey.character == "c" && pKey.ctrl ) ) {
+										streamBuf.done = true
+										break
+									}
+								}
+								// Drain any remaining chunks
+								var remaining = streamBuf.chunks.poll()
+								while ( !isNull( remaining ) ) {
+									fullContent &= remaining
+									remaining = streamBuf.chunks.poll()
+								}
+								interactive.finalizeStreaming( fullContent )
+								state.messages[ assistantMsgIdx ] = { role: "assistant", content: fullContent }
+								response = { success: true, action: "response", content: fullContent, usage: interactive.getUsage() }
+							} catch ( any e ) {
+								state.messages[ assistantMsgIdx ] = { role: "assistant", content: "✗ Streaming error: " & e.message }
+								response = { success: false, error: e.message, action: "error" }
+							}
+
 						} else {
-							state.messages[ lastIdx ] = { role: "command", action: response.action ?: "result", result: response }
+							// ── BLOCKING PATH with animated spinner (#2) ──────────────────
+							var spinActive  = createObject( "java", "java.util.concurrent.atomic.AtomicBoolean" ).init( true )
+							var spinFrames2 = [ "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" ]
+
+							var spinThread = createObject( "java", "java.lang.Thread" ).init(
+								() -> {
+									var fi = 0
+									while ( spinActive.get() ) {
+										fi = ( fi + 1 ) % 10
+										state.messages[ assistantMsgIdx ] = { role: "assistant", content: spinFrames2[ fi + 1 ] & "  Thinking…" }
+										renderer.renderChatOnly( state )
+										try { createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", 100 ) ) } catch ( any e2 ) { break }
+									}
+								}
+							)
+							spinThread.setDaemon( true )
+							spinThread.start()
+
+							try {
+								response = interactive.execute( userInput )
+							} catch ( any e ) {
+								response = { success: false, error: e.message, action: "error" }
+							} finally {
+								spinActive.set( false )
+								try { spinThread.join( javaCast( "long", 500 ) ) } catch ( any e2 ) {}
+							}
+
+							// Replace placeholder
+							var lastIdx = state.messages.len()
+							if ( response.exit ?: false ) { break }
+							if ( response.action == "response" ) {
+								state.messages[ lastIdx ] = { role: "assistant", content: response.content ?: "" }
+							} else if ( response.action == "empty" ) {
+								state.messages.deleteAt( lastIdx )
+								state.messages.deleteAt( state.messages.len() )
+							} else if ( response.action == "error" || !( response.success ?: true ) ) {
+								state.messages[ lastIdx ] = { role: "assistant", content: "✗ " & ( response.error ?: "Unknown error" ) }
+							} else {
+								state.messages[ lastIdx ] = { role: "command", action: response.action ?: "result", result: response }
+							}
 						}
 
 						// Refresh usage + session list

@@ -64,6 +64,34 @@ class {
 		}
 	}
 
+	/**
+	 * Enables mouse click and scroll-wheel capture.
+	 * Silently ignored when the terminal or Lanterna version does not support mouse.
+	 */
+	void function enableMouse() {
+		try {
+			var terminal = variables.screen.getTerminal()
+			var MouseCaptureMode = createObject( "java", "com.googlecode.lanterna.terminal.MouseCaptureMode" )
+			terminal.setMouseCaptureMode( MouseCaptureMode.CLICK_RELEASE )
+		} catch ( any e ) {}
+	}
+
+	/**
+	 * Copies text to the system clipboard via the OSC 52 terminal escape sequence.
+	 * Works in most modern terminal emulators (iTerm2, kitty, Windows Terminal, etc.).
+	 * Silently ignored when the terminal does not support OSC 52.
+	 *
+	 * @text  Plain text to place on the clipboard
+	 */
+	void function copyToClipboard( required string text ) {
+		try {
+			var encoded = binaryEncode( charsetDecode( arguments.text, "UTF-8" ), "base64" )
+				.replace( chr(13) & chr(10), "" ).replace( chr(10), "" ).replace( chr(13), "" )
+			createObject( "java", "java.lang.System" ).out.print( chr(27) & "]52;c;" & encoded & chr(7) )
+			createObject( "java", "java.lang.System" ).out.flush()
+		} catch ( any e ) {}
+	}
+
 	// ══════════════════════════════════════════════════════════════════════
 	// Terminal info
 	// ══════════════════════════════════════════════════════════════════════
@@ -223,22 +251,20 @@ class {
 	 * Reads one keystroke (blocking).
 	 *
 	 * @return Struct:
-	 *   type       — string form of KeyType (e.g. "Character", "ArrowUp", "Enter", "Backspace", "Escape", "EOF", "F1"…)
-	 *   character  — the typed character as a string, or "" for non-character keys
-	 *   ctrl       — boolean, true when Ctrl is held
-	 *   alt        — boolean, true when Alt is held
-	 *   shift      — boolean, true when Shift is held
+	 *   type        — string form of KeyType (e.g. "Character", "ArrowUp", "Enter", "Backspace",
+	 *                 "Escape", "EOF", "F1"…, "MouseEvent")
+	 *   character   — the typed character as a string, or "" for non-character keys
+	 *   ctrl        — boolean, true when Ctrl is held
+	 *   alt         — boolean, true when Alt is held
+	 *   shift       — boolean, true when Shift is held
+	 *   mouseCol    — (MouseEvent only) 0-based column of the click
+	 *   mouseRow    — (MouseEvent only) 0-based row of the click
+	 *   mouseAction — (MouseEvent only) "CLICK_DOWN", "CLICK_RELEASE", "SCROLL_UP", "SCROLL_DOWN", "MOVE"
 	 */
 	struct function readInput() {
 		var ks = variables.screen.readInput()
 		if ( isNull( ks ) ) { return { type: "none", character: "", ctrl: false, alt: false, shift: false } }
-		return {
-			type:      ks.getKeyType().toString(),
-			character: isNull( ks.getCharacter() ) ? "" : ks.getCharacter().toString(),
-			ctrl:      ks.isCtrlDown(),
-			alt:       ks.isAltDown(),
-			shift:     ks.isShiftDown()
-		}
+		return parseKeyStroke( ks )
 	}
 
 	/**
@@ -248,8 +274,30 @@ class {
 	struct function pollInput() {
 		var ks = variables.screen.pollInput()
 		if ( isNull( ks ) ) { return { type: "none", character: "", ctrl: false, alt: false, shift: false } }
+		return parseKeyStroke( ks )
+	}
+
+	private struct function parseKeyStroke( required any ks ) {
+		var keyType = ks.getKeyType().toString()
+		if ( keyType == "MouseEvent" ) {
+			try {
+				return {
+					type:        "MouseEvent",
+					character:   "",
+					ctrl:        false,
+					alt:         false,
+					shift:       false,
+					mouseCol:    ks.getColumn(),
+					mouseRow:    ks.getRow(),
+					mouseAction: ks.getActionType().toString()
+				}
+			} catch ( any e ) {
+				return { type: "MouseEvent", character: "", ctrl: false, alt: false, shift: false,
+					mouseCol: 0, mouseRow: 0, mouseAction: "CLICK_DOWN" }
+			}
+		}
 		return {
-			type:      ks.getKeyType().toString(),
+			type:      keyType,
 			character: isNull( ks.getCharacter() ) ? "" : ks.getCharacter().toString(),
 			ctrl:      ks.isCtrlDown(),
 			alt:       ks.isAltDown(),

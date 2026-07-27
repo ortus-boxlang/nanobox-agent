@@ -139,6 +139,102 @@ class {
 		}
 	}
 
+	/** Returns the current session usage counters (requests, inputTokens, outputTokens, totalTokens). */
+	struct function getUsage() { return variables.usage }
+
+	/**
+	 * Starts an async streaming LLM request in a BoxLang background thread.
+	 * Returns immediately with a shared state buffer the caller can poll.
+	 *
+	 * The background thread writes token chunks to streamBuf.chunks (a ConcurrentLinkedQueue),
+	 * sets streamBuf.done = true when finished, and streamBuf.error on failure.
+	 *
+	 * After the caller drains the queue, it must call finalizeStreaming() to persist the response.
+	 */
+	struct function executeStreaming( required string query ) {
+		if ( !len( variables.sessionId ) ) { start() }
+
+		// Build full message history for the provider
+		var streamMessages = variables.history.map( m -> { role: m.role, content: m.content } )
+		streamMessages.append( { role: "user", content: arguments.query } )
+
+		// Collect provider params
+		var streamParams  = {}
+		var streamOptions = {}
+		try {
+			var m = variables.config.get( "bx-ai.defaultModel", "" )
+			if ( len(m) ) { streamParams.model = m }
+			var t = variables.config.get( "bx-ai.temperature", "" )
+			if ( isNumeric(t) ) { streamParams.temperature = val(t) }
+			var p = variables.config.get( "bx-ai.defaultProvider", "" )
+			if ( len(p) ) { streamOptions.provider = p }
+		} catch ( any e ) {}
+
+		// Thread-safe chunk queue
+		var chunks = createObject( "java", "java.util.concurrent.ConcurrentLinkedQueue" ).init()
+		var streamBuf = { chunks: chunks, done: false, error: "" }
+
+		// Record user message immediately (before the async thread starts)
+		if ( !variables.titleManual && variables.title == "New chat" ) {
+			variables.title = left( slugify( arguments.query ), 60 )
+			try { variables.sessions.rename( variables.sessionId, variables.title ) } catch ( any e ) {}
+		}
+		try { variables.sessions.appendMessage( variables.sessionId, { role: "user", content: arguments.query } ) } catch ( any e ) {}
+		variables.lastQuery = arguments.query
+		variables.history.append( { role: "user", content: arguments.query } )
+		variables.usage.requests++
+
+		// Fire background thread
+		thread action="run" name="nanobox_stream_#replace( createUUID(), '-', '', 'ALL' )#"
+			streamBuf=streamBuf msgs=streamMessages prms=streamParams opts=streamOptions {
+			try {
+				aiChatStream(
+					attributes.msgs,
+					function( chunk ) {
+						var text = ""
+						if ( isSimpleValue(chunk) ) {
+							text = toString(chunk)
+						} else if ( isStruct(chunk) ) {
+							text = chunk.content ?: chunk.text ?: ""
+							if ( !len(text) && chunk.keyExists("delta") && isStruct(chunk.delta) ) {
+								text = chunk.delta.content ?: chunk.delta.text ?: ""
+							}
+							if ( !len(text) && chunk.keyExists("choices") && isArray(chunk.choices) && chunk.choices.len() > 0 ) {
+								var d = chunk.choices[1].delta ?: {}
+								text = isStruct(d) ? ( d.content ?: "" ) : ""
+							}
+						}
+						if ( len(text) ) { attributes.streamBuf.chunks.offer(text) }
+					},
+					attributes.prms,
+					attributes.opts
+				)
+			} catch ( any e ) {
+				attributes.streamBuf.error = e.message
+			} finally {
+				attributes.streamBuf.done = true
+			}
+		}
+
+		return { success: true, action: "streaming", streamBuf: streamBuf, sessionId: variables.sessionId }
+	}
+
+	/**
+	 * Called after streaming completes to persist the assistant response to session and history.
+	 * @content   Full concatenated response text
+	 * @usageData Optional token usage struct from the provider
+	 */
+	void function finalizeStreaming( required string content, struct usageData = {} ) {
+		variables.lastResponse = arguments.content
+		variables.history.append( { role: "assistant", content: arguments.content } )
+		try { variables.sessions.appendMessage( variables.sessionId, { role: "assistant", content: arguments.content } ) } catch ( any e ) {}
+		if ( !arguments.usageData.isEmpty() ) {
+			variables.usage.inputTokens  += arguments.usageData.prompt_tokens     ?: arguments.usageData.input_tokens  ?: 0
+			variables.usage.outputTokens += arguments.usageData.completion_tokens ?: arguments.usageData.output_tokens ?: 0
+			variables.usage.totalTokens  += arguments.usageData.total_tokens ?: 0
+		}
+	}
+
 	// ══════════════════════════════════════════════════════════════════════
 	// Slash command dispatcher
 	// ══════════════════════════════════════════════════════════════════════

@@ -69,11 +69,12 @@ class {
 	 *
 	 * @state  Struct with: title, provider, model, namedModel, sessions,
 	 *         currentSessionId, sidebarCursor, messages, inputBuffer,
-	 *         cursorPos, usage
+	 *         cursorPos, usage, sidebarSearchMode, sidebarFilter
 	 */
 	void function renderAll( required struct state ) {
 		if ( !variables.useLanterna ) { return }
 		var sz = variables.screen.getSize()
+		variables.inputRows = computeInputRows( arguments.state.inputBuffer ?: "" )
 		variables.screen.clear()
 		renderHeaderPanel( arguments.state, sz )
 		renderSidebarPanel( arguments.state, sz )
@@ -89,6 +90,15 @@ class {
 	void function renderInputOnly( required struct state ) {
 		if ( !variables.useLanterna ) { return }
 		var sz = variables.screen.getSize()
+		var prevRows = variables.inputRows
+		variables.inputRows = computeInputRows( arguments.state.inputBuffer ?: "" )
+		// If height changed, repaint the entire layout so panels resize correctly
+		if ( variables.inputRows != prevRows ) {
+			variables.screen.clear()
+			renderHeaderPanel( arguments.state, sz )
+			renderSidebarPanel( arguments.state, sz )
+			renderChatPanel( arguments.state, sz )
+		}
 		renderInputPanel( arguments.state, sz )
 		variables.screen.refresh()
 	}
@@ -99,9 +109,24 @@ class {
 	void function renderChatOnly( required struct state ) {
 		if ( !variables.useLanterna ) { return }
 		var sz = variables.screen.getSize()
+		variables.inputRows = computeInputRows( arguments.state.inputBuffer ?: "" )
 		renderSidebarPanel( arguments.state, sz )
 		renderChatPanel( arguments.state, sz )
 		variables.screen.refresh()
+	}
+
+	/**
+	 * Returns the current input-panel height (rows) so external callers
+	 * (CommandRuntime) can compute panel boundaries for mouse hit-testing.
+	 */
+	numeric function getInputRows( required struct state ) {
+		return computeInputRows( arguments.state.inputBuffer ?: "" )
+	}
+
+	private numeric function computeInputRows( required string inputBuf ) {
+		if ( !len( arguments.inputBuf ) ) { return 3 }
+		var lineCount = listLen( arguments.inputBuf, chr(10) )
+		return min( 7, max( 3, lineCount + 2 ) )
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
@@ -276,45 +301,68 @@ class {
 		var title    = arguments.state.title    ?: "New chat"
 		var model    = arguments.state.namedModel ?: arguments.state.model ?: "not configured"
 		var provider = arguments.state.provider ?: "not configured"
-		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  F1 shortcuts  ·  ^B sidebar "
+		// API status dot: green when both provider and model are configured
+		var apiOk      = len( arguments.state.provider ?: "" ) && len( arguments.state.model ?: "" )
+		var dotCode    = apiOk ? 42 : 196  // color42=green, color196=red
 		var borderCode = resolveColorCode( variables.theme.border ?: "color42" )
 		var accentCode = resolveColorCode( variables.theme.accent ?: "color226" )
+		var dimCode    = resolveColorCode( variables.theme.dim    ?: "color248" )
 
 		variables.screen.drawText( 0, 0, "╭" & repeatString( "─", arguments.sz.columns - 2 ) & "╮", borderCode )
-		var padded = text & repeatString( " ", max( 0, arguments.sz.columns - len(text) - 4 ) )
 		variables.screen.drawText( 0, 1, "│ ", borderCode )
-		variables.screen.drawText( 2, 1, padded, accentCode )
+
+		// Draw status dot, then content text
+		variables.screen.drawText( 2, 1, "●", dotCode )
+		var text = " ◈ NanoBox  ·  #title#  ·  #provider# / #model#  ·  F1 help  ·  ^B sidebar "
+		var available = arguments.sz.columns - 4 - 1  // -1 for the dot
+		var padded = left( text, available ) & repeatString( " ", max( 0, available - len(text) ) )
+		variables.screen.drawText( 3, 1, padded, accentCode )
 		variables.screen.drawText( arguments.sz.columns - 2, 1, " │", borderCode )
 		variables.screen.drawText( 0, 2, "╰" & repeatString( "─", arguments.sz.columns - 2 ) & "╯", borderCode )
 	}
 
 	private void function renderSidebarPanel( required struct state, required struct sz ) {
 		if ( !( arguments.state.sidebarVisible ?: true ) ) { return }
-		var headerHeight = 3
-		var panelTop  = headerHeight
-		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
-		var panelW    = variables.sidebarWidth
-		var bc = resolveColorCode( variables.theme.border ?: "color42" )
-		var sessions  = arguments.state.sessions ?: []
-		var curId     = arguments.state.currentSessionId ?: ""
-		var cursor    = arguments.state.sidebarCursor ?: 1
-		var usage     = arguments.state.usage ?: {}
+		var headerHeight    = 3
+		var panelTop        = headerHeight
+		var panelH          = arguments.sz.rows - headerHeight - variables.inputRows
+		var panelW          = variables.sidebarWidth
+		var bc              = resolveColorCode( variables.theme.border    ?: "color42" )
+		var ac              = resolveColorCode( variables.theme.accent    ?: "color226" )
+		var dc              = resolveColorCode( variables.theme.dim       ?: "color248" )
+		var sessions        = arguments.state.sessions ?: []
+		var curId           = arguments.state.currentSessionId ?: ""
+		var cursor          = arguments.state.sidebarCursor + 1  // state is 0-based, render is 1-based
+		var usage           = arguments.state.usage ?: {}
+		var searchMode      = arguments.state.sidebarSearchMode ?: false
+		var searchFilter    = lCase( arguments.state.sidebarFilter ?: "" )
+
+		// Filter sessions when search is active
+		if ( searchMode && len( searchFilter ) ) {
+			sessions = sessions.filter( s -> findNoCase( searchFilter, s.title ?: "" ) > 0 )
+		}
 
 		// Sidebar box outline
 		variables.screen.drawBox( 0, panelTop, panelW, panelH, bc )
-		variables.screen.drawText( 1, panelTop, "─ Sessions ─", bc )
+		var heading = searchMode ? "─ Search: " & left( arguments.state.sidebarFilter ?: "", panelW - 12 ) & "_ " : "─ Sessions ─"
+		variables.screen.drawText( 1, panelTop, heading, searchMode ? ac : bc )
 
 		// Session list
-		var listH = panelH - 6  // reserve bottom for stats
+		var listH = panelH - 6  // reserve bottom rows for stats
 		for ( var i = 1; i <= min( sessions.len(), listH - 1 ); i++ ) {
-			var s    = sessions[i]
-			var row  = panelTop + i
+			var s        = sessions[i]
+			var row      = panelTop + i
 			var isCurrent = s.id == curId
 			var isCursor  = i == cursor
-			var prefix = isCursor ? "▶ " : "  "
-			var label  = variables.terminal.truncate( s.title ?: "Untitled", panelW - 5 )
-			var code   = isCurrent ? resolveColorCode( variables.theme.assistant ?: "color42" ) : 255
-			variables.screen.drawText( 1, row, prefix & label, code )
+			var prefix    = isCursor ? "▶ " : "  "
+			var label     = variables.terminal.truncate( s.title ?: "Untitled", panelW - 5 )
+			var code      = isCurrent ? resolveColorCode( variables.theme.assistant ?: "color42" ) : 255
+			variables.screen.drawText( 1, row, prefix & label, code, isCursor ? resolveColorCode("color236") : "" )
+		}
+
+		// No results hint when search has no matches
+		if ( searchMode && sessions.isEmpty() ) {
+			variables.screen.drawText( 2, panelTop + 2, "(no matches)", dc )
 		}
 
 		// Stats at bottom
@@ -326,33 +374,64 @@ class {
 
 	private void function renderChatPanel( required struct state, required struct sz ) {
 		var headerHeight = 3
-		var panelTop  = headerHeight
-		var panelH    = arguments.sz.rows - headerHeight - variables.inputRows
+		var panelTop   = headerHeight
+		var panelH     = arguments.sz.rows - headerHeight - variables.inputRows
 		var showSidebar = arguments.state.sidebarVisible ?: true
-		var chatLeft  = showSidebar ? variables.sidebarWidth : 0
-		var chatW     = showSidebar ? arguments.sz.columns - variables.sidebarWidth : arguments.sz.columns
-		var bc = resolveColorCode( variables.theme.border ?: "color42" )
-		var messages  = arguments.state.messages ?: []
+		var chatLeft   = showSidebar ? variables.sidebarWidth : 0
+		var chatW      = showSidebar ? arguments.sz.columns - variables.sidebarWidth : arguments.sz.columns
+		var bc         = resolveColorCode( variables.theme.border    ?: "color42" )
+		var dc         = resolveColorCode( variables.theme.dim       ?: "color248" )
+		var ac         = resolveColorCode( variables.theme.accent    ?: "color226" )
+		var messages   = arguments.state.messages ?: []
+		var scrollOff  = int( arguments.state.scrollOffset ?: 0 )
 
 		// Chat box outline
 		variables.screen.drawBox( chatLeft, panelTop, chatW, panelH, bc )
 		variables.screen.drawText( chatLeft + 1, panelTop, "─ Chat ", bc )
 
+		// Welcome / empty state
+		if ( messages.isEmpty() ) {
+			var wRow = panelTop + int( panelH / 2 ) - 2
+			var greet = "◈  Welcome to NanoBox"
+			var hint1 = "Type a message to start chatting"
+			var hint2 = "Use /help to see all slash commands"
+			variables.screen.drawText( chatLeft + int( (chatW - len(greet)) / 2 ), wRow,     greet, ac, "", true )
+			variables.screen.drawText( chatLeft + int( (chatW - len(hint1)) / 2 ), wRow + 2, hint1, dc )
+			variables.screen.drawText( chatLeft + int( (chatW - len(hint2)) / 2 ), wRow + 3, hint2, dc )
+			return
+		}
+
+		// Scroll indicator at the top when scrolled up
+		if ( scrollOff > 0 ) {
+			var indicator = " ↑ #scrollOff# rows above (PageDown to scroll back) "
+			variables.screen.drawText( chatLeft + int( (chatW - len(indicator)) / 2 ), panelTop + 1, indicator, dc )
+		}
+
 		// Render messages from the bottom up (most recent last)
 		var contentW = chatW - 4
-		var row = panelTop + panelH - 2 - int( arguments.state.scrollOffset ?: 0 )
+		var row = panelTop + panelH - 2 - scrollOff
 		var msgIdx = messages.len()
 		while ( row > panelTop + 1 && msgIdx > 0 ) {
-			var msg = messages[ msgIdx ]
+			var msg    = messages[ msgIdx ]
 			var isUser = (msg.role ?: "") == "user"
+			var isCmd  = (msg.role ?: "") == "command"
 			var label  = isUser ? "You" : "NanoBox"
 			var lColor = isUser
-				? resolveColorCode( variables.theme.user ?: "color226" )
+				? resolveColorCode( variables.theme.user      ?: "color226" )
 				: resolveColorCode( variables.theme.assistant ?: "color42" )
-			var wrappedLines = variables.terminal.wrap( msg.content ?: "", contentW )
+			var contentText = msg.content ?: ""
+			if ( isCmd ) {
+				// Command results: show action label + brief summary
+				var r = msg.result ?: {}
+				contentText = "[" & ( r.action ?: "command" ) & "]" &
+					( len( r.message ?: "" ) ? "  " & r.message : "" ) &
+					( r.success == false ? "  ✗ " & ( r.error ?: "failed" ) : "" )
+				label = "›"
+			}
+			var wrappedLines = variables.terminal.wrap( contentText, contentW )
 			// Render wrapped lines bottom-up
 			for ( var li = wrappedLines.len(); li >= 1 && row > panelTop + 1; li-- ) {
-				variables.screen.drawText( chatLeft + 2, row, wrappedLines[li], "" )
+				variables.screen.drawText( chatLeft + 2, row, left( wrappedLines[li], contentW ), isCmd ? dc : "" )
 				row--
 			}
 			// Label line
@@ -365,21 +444,46 @@ class {
 	}
 
 	private void function renderInputPanel( required struct state, required struct sz ) {
-		var panelTop = arguments.sz.rows - variables.inputRows
-		var bc = resolveColorCode( variables.theme.border ?: "color42" )
+		var panelTop    = arguments.sz.rows - variables.inputRows
+		var bc          = resolveColorCode( variables.theme.border ?: "color42" )
 		var promptColor = resolveColorCode( variables.theme.prompt ?: "color42" )
+		var dimColor    = resolveColorCode( variables.theme.dim    ?: "color248" )
+		var inputBuf    = arguments.state.inputBuffer ?: ""
+		var prompt      = "You › "
+		var promptLen   = len(prompt)
+		var contentW    = arguments.sz.columns - 4  // inside box padding
 
 		variables.screen.drawBox( 0, panelTop, arguments.sz.columns, variables.inputRows, bc )
+
+		// Token estimate in header (right-aligned)
+		var tokenEst = len(inputBuf) ? "~#ceiling( len(inputBuf) / 4 )# tokens" : ""
 		variables.screen.drawText( 1, panelTop, "─ Input ", bc )
+		if ( len(tokenEst) ) {
+			variables.screen.drawText( arguments.sz.columns - len(tokenEst) - 2, panelTop, tokenEst & " ", dimColor )
+		}
 
-		var prompt  = "You › "
-		var inputBuf = arguments.state.inputBuffer ?: ""
-		var line = prompt & inputBuf
-		variables.screen.drawText( 2, panelTop + 1, prompt, promptColor )
-		variables.screen.drawText( 2 + len(prompt), panelTop + 1, inputBuf )
+		// Render each input line (supports multi-line via Shift+Enter)
+		var lineArr = len(inputBuf) ? listToArray( inputBuf, chr(10), true ) : [""]
+		var visibleLines = min( lineArr.len(), variables.inputRows - 2 )
+		var startLine = lineArr.len() - visibleLines + 1  // show last N lines
 
-		// Position cursor after typed text
-		variables.screen.setCursorPosition( 2 + len(prompt) + len(inputBuf), panelTop + 1 )
+		for ( var li = 1; li <= visibleLines; li++ ) {
+			var lineText = lineArr[ startLine + li - 1 ]
+			var drawRow  = panelTop + li
+			if ( li == 1 ) {
+				variables.screen.drawText( 2, drawRow, prompt, promptColor )
+				variables.screen.drawText( 2 + promptLen, drawRow, left( lineText, contentW - promptLen ) )
+			} else {
+				variables.screen.drawText( 2, drawRow, repeatString( " ", promptLen ) )
+				variables.screen.drawText( 2 + promptLen, drawRow, left( lineText, contentW - promptLen ) )
+			}
+		}
+
+		// Cursor at end of last visible line
+		var lastLine  = lineArr[ lineArr.len() ]
+		var lastVisRow = panelTop + visibleLines
+		var cursorCol  = 2 + ( visibleLines == 1 ? promptLen : promptLen ) + min( len(lastLine), contentW - promptLen )
+		variables.screen.setCursorPosition( cursorCol, lastVisRow )
 	}
 
 	/**
