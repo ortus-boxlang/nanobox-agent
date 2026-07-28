@@ -29,7 +29,7 @@ class {
 		if ( isObject( arguments.prettyCli ) ) {
 			variables.prettyCli = arguments.prettyCli;
 		} else {
-			variables.prettyCli = new models.util.PrettyCli();
+			variables.prettyCli = new "cli.util.PrettyCli"();
 		}
 		variables.bufferSize = arguments.bufferSize;
 		variables.barWidth = arguments.barWidth;
