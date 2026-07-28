@@ -1,0 +1,125 @@
+/**
+ * SetupOnboarding — interactive terminal UI for the NanoBox setup wizard.
+ *
+ * Delegates all ANSI rendering to cli.Terminal for a single source of truth.
+ * The public API is unchanged so existing callers continue to work.
+ *
+ * @author Ortus Solutions
+ * @version 0.2.0
+ * @since 0.1.0
+ */
+class {
+
+	property name="t";
+
+	function init() {
+		variables.t = new "cli.util.Terminal"()
+		return this
+	}
+
+	// ── Public helpers ─────────────────────────────────────────────────────
+
+	void function clear() { variables.t.clear() }
+
+	void function printBold( required string text ) { variables.t.printBold( arguments.text ) }
+
+	void function printDim( required string text ) { variables.t.printDim( arguments.text ) }
+
+	void function printLine( required string text, any color = "" ) {
+		variables.t.printLine( arguments.text, arguments.color )
+	}
+
+	void function print( required string text, any color = "" ) {
+		variables.t.print( arguments.text, arguments.color )
+	}
+
+	/**
+	 * Prints a bordered box with a colored border and indented content.
+	 */
+	void function box( required string title, required array lines, any borderColor = "color75", any titleColor = "color226" ) {
+		println( variables.t.box( arguments.title, arguments.lines, arguments.borderColor, arguments.titleColor ) )
+	}
+
+	/**
+	 * Prints a full-width banner with colored border and no title.
+	 */
+	void function banner( required array lines, any borderColor = "color75" ) {
+		println( variables.t.banner( arguments.lines, arguments.borderColor ) )
+	}
+
+	/**
+	 * Prints the NanoBox logo with gradient colours.
+	 */
+	void function showNanoBoxLogo() {
+		variables.t.showLogo( "Ocean" )
+		variables.t.printLine( "            AI Agent Platform · BoxLang", "color248" )
+		println( "" )
+	}
+
+	/**
+	 * Prints a rainbow divider for section breaks.
+	 */
+	void function rainbowDivider( numeric length = 60 ) {
+		variables.t.rainbowDivider( arguments.length )
+	}
+
+	/**
+	 * Prints a step header with step number and title.
+	 */
+	void function step( required numeric number, required string title ) {
+		println( "" )
+		variables.t.printLine( "  Step #arguments.number#", "color248" )
+		box( "Step #arguments.number#: #arguments.title#", [] )
+		println( "" )
+	}
+
+	/**
+	 * Prints a simple horizontal divider.
+	 */
+	void function divider() {
+		variables.t.printColoredDivider( "─", 60, "color240" )
+	}
+
+	/**
+	 * Prompts the user for input with a colored prompt string.
+	 */
+	string function prompt( required string label, string default = "" ) {
+		return variables.t.prompt( arguments.label, arguments.default )
+	}
+
+	/**
+	 * Prompts the user to select from a numbered list of options.
+	 */
+	string function select( required string label, required array options, boolean allowCustom = true ) {
+		return variables.t.select( arguments.label, arguments.options, arguments.allowCustom )
+	}
+
+	/**
+	 * Yes/no prompt.  Returns true for y/yes.
+	 */
+	boolean function confirm( required string label, boolean defaultYes = true ) {
+		return variables.t.confirm( arguments.label, arguments.defaultYes )
+	}
+
+	/**
+	 * Prints a success message with a green check.
+	 */
+	void function success( required string message ) {
+		variables.t.printStatus( "success", arguments.message )
+	}
+
+	/**
+	 * Prints an info message with a blue info icon.
+	 */
+	void function info( required string message ) {
+		variables.t.printStatus( "info", arguments.message )
+	}
+
+	/**
+	 * Prints an error message with a red cross.
+	 */
+	void function error( required string message ) {
+		variables.t.printStatus( "error", arguments.message )
+	}
+
+}

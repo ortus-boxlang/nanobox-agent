@@ -68,7 +68,7 @@ class {
 			print( static.HELP_TEXT );
 			return;
 		}
-		var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), config )
+		var result = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( true ), config )
 			.execute( parsed );
 		if ( options.z ?: options[ "z" ] ?: false ) {
 			if ( isStruct( result ) && result.success ) {

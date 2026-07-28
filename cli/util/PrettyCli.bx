@@ -1,0 +1,48 @@
+/**
+ * PrettyCli — ANSI terminal formatting utilities (thin delegate to Terminal).
+ *
+ * Keeps the original public API so existing callers are unaffected.
+ * All rendering is now delegated to cli.Terminal for a single source of truth.
+ *
+ * @author Ortus Solutions
+ * @version 0.2.0
+ * @since 0.1.0
+ */
+class {
+
+	property colorsEnabled;
+
+	function init( boolean colorsEnabled = true ) {
+		variables.colorsEnabled = arguments.colorsEnabled
+		variables.t = new "cli.util.Terminal"()
+		return this
+	}
+
+	string function color( required string text, required string colorName ) {
+		if ( !variables.colorsEnabled ) { return arguments.text }
+		return variables.t.style( arguments.text, arguments.colorName )
+	}
+
+	string function red(     required string text ) { return variables.colorsEnabled ? variables.t.red( arguments.text )     : arguments.text }
+	string function green(   required string text ) { return variables.colorsEnabled ? variables.t.green( arguments.text )   : arguments.text }
+	string function yellow(  required string text ) { return variables.colorsEnabled ? variables.t.yellow( arguments.text )  : arguments.text }
+	string function blue(    required string text ) { return variables.colorsEnabled ? variables.t.blue( arguments.text )    : arguments.text }
+	string function dim(     required string text ) { return variables.colorsEnabled ? variables.t.dim( arguments.text )     : arguments.text }
+	string function bold(    required string text ) { return variables.colorsEnabled ? variables.t.bold( arguments.text )    : arguments.text }
+	string function success( required string message ) { return variables.colorsEnabled ? variables.t.success( arguments.message ) : "✓ " & arguments.message }
+	string function error(   required string message ) { return variables.colorsEnabled ? variables.t.error( arguments.message )   : "✗ " & arguments.message }
+	string function warn(    required string message ) { return variables.colorsEnabled ? variables.t.warn( arguments.message )    : "⚠ " & arguments.message }
+	string function info(    required string message ) { return variables.colorsEnabled ? variables.t.info( arguments.message )    : "ℹ " & arguments.message }
+	string function muted(   required string message ) { return variables.colorsEnabled ? variables.t.dim( arguments.message )     : arguments.message }
+
+	string function table(   required array headers, required array rows,   struct options = {} ) { return variables.t.table( arguments.headers, arguments.rows, arguments.options ) }
+	string function kvTable( required struct data,   struct options = {} )                        { return variables.t.kvTable( arguments.data, arguments.options ) }
+	string function box(     required string text,   struct options = {} )                        { return variables.t.boxAscii( arguments.text ) }
+	string function section( required string title )                                              { return "\n" & bold( arguments.title ) & "\n" & divider() }
+	string function divider( string character = "─", numeric length = 60 )                       { return repeatString( arguments.character, arguments.length ) }
+	string function truncate( required string text, required numeric maxWidth )                   { return variables.t.truncate( arguments.text, arguments.maxWidth ) }
+	array  function wrap(     required string text, required numeric maxWidth )                   { return variables.t.wrap( arguments.text, arguments.maxWidth ) }
+	string function indent(   required string text, numeric level = 1 )                           { return variables.t.indent( arguments.text, arguments.level ) }
+	void   function clear()                                                                       { CLIClear() }
+
+}

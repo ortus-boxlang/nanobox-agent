@@ -7,7 +7,7 @@ class extends="testbox.system.BaseSpec" {
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
 				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
 				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				var result = runtime.execute( { positionals: [ "chat", "Reply with exactly Z_RUNTIME_OK" ], options: { z: true } } )
 				expect( result.success ).toBeTrue()
 				expect( result.text ).toInclude( "Z_RUNTIME_OK" )
@@ -15,7 +15,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "supports interactive slash commands without a provider call", () => {
 				var home = getTempDirectory() & "/chat-slash-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var chat = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), new "models.sessions.SessionManager"(), config )
+				var chat = new "cli.util.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), new "models.sessions.SessionManager"(), config )
 				chat.start( false )
 				expect( chat.execute( "/help" ).success ).toBeTrue()
 				expect( chat.execute( "/model" ).success ).toBeTrue()

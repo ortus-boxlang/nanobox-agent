@@ -169,9 +169,27 @@ preflight_check "$CI_MODE"
 printf '\n'
 
 ###########################################################################
-# Step 3 — Verify bundled BoxLang modules
+# Step 3 — Download Lanterna TUI library
 ###########################################################################
-print_info "Step 3: Verifying bundled BoxLang modules..."
+print_info "Step 3: Downloading Lanterna TUI library..."
+LANTERNA_JAR="$SCRIPT_DIR/lib/java/lanterna-3.1.3.jar"
+if [[ -f "$LANTERNA_JAR" ]]; then
+	print_success "  lanterna-3.1.3.jar (already present)"
+else
+	mkdir -p "$SCRIPT_DIR/lib/java"
+	if curl -fsSL --retry 3 -o "$LANTERNA_JAR" \
+		"https://repo1.maven.org/maven2/com/googlecode/lanterna/lanterna/3.1.3/lanterna-3.1.3.jar"; then
+		print_success "  lanterna-3.1.3.jar downloaded"
+	else
+		print_warning "  Could not download Lanterna — interactive TUI features will be unavailable"
+	fi
+fi
+printf '\n'
+
+###########################################################################
+# Step 4 — Verify bundled BoxLang modules
+###########################################################################
+print_info "Step 4: Verifying bundled BoxLang modules..."
 modules_ok=true
 for mod in bx-ai bx-sqlite; do
 	if [[ -d "$SCRIPT_DIR/lib/modules/$mod" ]]; then
@@ -187,9 +205,9 @@ fi
 printf '\n'
 
 ###########################################################################
-# Step 4 — Create directory structure
+# Step 5 — Create directory structure
 ###########################################################################
-print_info "Step 4: Creating directory structure..."
+print_info "Step 5: Creating directory structure..."
 mkdir -p \
 	"$CONFIG_DIR" \
 	"$NANOBOX_HOME/agents" \
@@ -269,7 +287,10 @@ cat > "$BX_CONFIG" <<EOF
 			"driver": "sqlite",
 			"connectionString": "jdbc:sqlite:$DB_PATH"
 		}
-	}
+	},
+	"classPaths": [
+		"$( $LOCAL_MODE && echo "$SCRIPT_DIR/lib/java" || echo "$VERSION_DIR/lib/java" )"
+	]
 }
 EOF
 print_success "  Written to $BX_CONFIG"
@@ -294,7 +315,17 @@ print_info "Step 7: Writing default NanoBox configuration..."
 		"worker":   { "enabled": true, "debug": false },
 		"sessions": { "enabled": true, "maxSessions": 1000, "pruneAfterDays": 90 },
 		"cron":     { "enabled": true, "maxJobs": 50 },
-		"security": { "enabled": true, "autoDisable": true }
+		"security": { "enabled": true, "autoDisable": true },
+		"tui": {
+			"theme": "boxlang",
+			"streaming": true,
+			"wordWrap": true,
+			"wrapWidth": 0,
+			"statusBar": true,
+			"colors": true,
+			"markdownRender": true,
+			"sidebarWidth": 22
+		}
 	}
 }
 EOF

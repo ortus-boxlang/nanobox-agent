@@ -1,0 +1,237 @@
+/**
+ * MarkdownRenderer — Converts Markdown text to styled terminal output.
+ *
+ * Renders a subset of Markdown to ANSI escape sequences suitable for
+ * terminal display.  Uses a Terminal instance for colour resolution so
+ * output automatically respects the active TuiTheme.
+ *
+ * Supported syntax:
+ *   # H1 / ## H2 / ### H3          — headings with underlines
+ *   **bold** / *italic*             — inline emphasis
+ *   `inline code`                   — highlighted inline code
+ *   ```lang … ```                   — fenced code blocks with label
+ *   - item / * item                 — unordered list bullets
+ *   1. item                         — ordered list
+ *   | col | col |                   — pipe tables (delegates to Terminal.table)
+ *   > blockquote                    — dim prefix with ┃ leader
+ *   Blank line                      — paragraph separator
+ *   Plain text                      — word-wrapped to wrapWidth
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	property name="terminal";
+	property name="theme";
+	property name="wrapWidth";
+
+	function init( required any terminal, struct theme = {}, numeric wrapWidth = 80 ) {
+		variables.terminal  = arguments.terminal
+		variables.theme     = arguments.theme
+		variables.wrapWidth = arguments.wrapWidth
+		return this
+	}
+
+	/**
+	 * Renders Markdown text and returns an ANSI-coloured string ready to print.
+	 *
+	 * @text       Markdown input
+	 * @wrapWidth  Override the instance wrap width for this call (0 = use instance default)
+	 * @return     ANSI-formatted string
+	 */
+	string function render( required string text, numeric wrapWidth = 0 ) {
+		var width = arguments.wrapWidth > 0 ? arguments.wrapWidth : variables.wrapWidth
+		var lines = listToArray( replace( arguments.text, char(13), "", "all" ), char(10), true )
+		var out   = ""
+		var i     = 1
+
+		while ( i <= lines.len() ) {
+			var line = lines[i]
+			var trimmed = trim( line )
+
+			// ── Fenced code block ──────────────────────────────────────
+			if ( trimmed.startsWith( "```" ) ) {
+				var lang = trim( mid( trimmed, 4, len(trimmed) - 3 ) )
+				i++
+				var codeLines = []
+				while ( i <= lines.len() && !trim( lines[i] ).startsWith( "```" ) ) {
+					codeLines.append( lines[i] )
+					i++
+				}
+				out &= renderCodeBlock( codeLines, lang ) & char(10)
+				i++ // skip closing ```
+				continue
+			}
+
+			// ── Heading H1 ────────────────────────────────────────────
+			if ( trimmed.startsWith( "# " ) ) {
+				var txt = trim( mid( trimmed, 3, len(trimmed) ) )
+				out &= char(10)
+				out &= variables.terminal.style( txt, variables.theme.accent ?: "color226", true ) & char(10)
+				out &= variables.terminal.ansi( variables.theme.dim ?: "color248" ) & repeatString( "═", min( len(txt), width ) ) & variables.terminal.RESET & char(10)
+				i++; continue
+			}
+
+			// ── Heading H2 ────────────────────────────────────────────
+			if ( trimmed.startsWith( "## " ) ) {
+				var txt = trim( mid( trimmed, 4, len(trimmed) ) )
+				out &= char(10)
+				out &= variables.terminal.style( txt, variables.theme.accent ?: "color226", true ) & char(10)
+				out &= variables.terminal.ansi( variables.theme.dim ?: "color248" ) & repeatString( "─", min( len(txt), width ) ) & variables.terminal.RESET & char(10)
+				i++; continue
+			}
+
+			// ── Heading H3 ────────────────────────────────────────────
+			if ( trimmed.startsWith( "### " ) ) {
+				var txt = trim( mid( trimmed, 5, len(trimmed) ) )
+				out &= variables.terminal.style( txt, variables.theme.dim ?: "color248", true ) & char(10)
+				i++; continue
+			}
+
+			// ── Unordered list ────────────────────────────────────────
+			if ( reFind( "^[-*] ", trimmed ) ) {
+				var txt = trim( mid( trimmed, 3, len(trimmed) ) )
+				out &= "  " & variables.terminal.ansi( variables.theme.accent ?: "color42" ) & "•" & variables.terminal.RESET & " " & renderInline( txt ) & char(10)
+				i++; continue
+			}
+
+			// ── Ordered list ──────────────────────────────────────────
+			if ( reFind( "^\d+\. ", trimmed ) ) {
+				var m = reFind( "^(\d+)\. (.*)$", trimmed, 1, true )
+				if ( m.len[1] ) {
+					var num = mid( trimmed, m.pos[2], m.len[2] )
+					var txt = mid( trimmed, m.pos[3], m.len[3] )
+					out &= "  " & variables.terminal.ansi( variables.theme.dim ?: "color248" ) & num & "." & variables.terminal.RESET & " " & renderInline( txt ) & char(10)
+				}
+				i++; continue
+			}
+
+			// ── Blockquote ────────────────────────────────────────────
+			if ( trimmed.startsWith( "> " ) ) {
+				var txt = trim( mid( trimmed, 3, len(trimmed) ) )
+				out &= variables.terminal.ansi( variables.theme.dim ?: "color248" ) & "┃ " & variables.terminal.RESET & variables.terminal.dim( txt ) & char(10)
+				i++; continue
+			}
+
+			// ── Pipe table ────────────────────────────────────────────
+			if ( trimmed.startsWith( "|" ) && trimmed.endsWith( "|" ) ) {
+				var tableLines = []
+				while ( i <= lines.len() && trim( lines[i] ).startsWith( "|" ) ) {
+					tableLines.append( trim( lines[i] ) )
+					i++
+				}
+				out &= renderPipeTable( tableLines ) & char(10)
+				continue
+			}
+
+			// ── Blank line ────────────────────────────────────────────
+			if ( !len( trimmed ) ) {
+				out &= char(10)
+				i++; continue
+			}
+
+			// ── Horizontal rule ───────────────────────────────────────
+			if ( reFind( "^[-*_]{3,}$", trimmed ) ) {
+				out &= variables.terminal.ansi( variables.theme.dim ?: "color248" ) & repeatString( "─", width ) & variables.terminal.RESET & char(10)
+				i++; continue
+			}
+
+			// ── Plain paragraph ───────────────────────────────────────
+			var paraLines = variables.terminal.wrap( renderInline( trimmed ), width )
+			for ( var pl in paraLines ) { out &= pl & char(10) }
+			i++
+		}
+
+		return out
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// Private helpers
+	// ══════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Renders a fenced code block as a bordered box with an optional language label.
+	 */
+	private string function renderCodeBlock( required array codeLines, string lang = "" ) {
+		var bc = variables.theme.codeLabel ?: "color42"
+		var cc = variables.theme.code ?: "color236"
+		var maxLen = len( arguments.lang )
+		for ( var cl in arguments.codeLines ) { maxLen = max( maxLen, len( cl ) ) }
+		var boxWidth = maxLen + 4
+		var out = ""
+
+		// Top border with language label
+		out &= variables.terminal.ansi( bc ) & "╭" & repeatString( "─", boxWidth ) & "╮" & variables.terminal.RESET & char(10)
+		if ( len( arguments.lang ) ) {
+			out &= variables.terminal.ansi( bc ) & "│" & variables.terminal.RESET
+			out &= "  " & variables.terminal.style( arguments.lang, bc, true )
+			out &= repeatString( " ", boxWidth - len( arguments.lang ) - 2 )
+			out &= variables.terminal.ansi( bc ) & " │" & variables.terminal.RESET & char(10)
+		}
+
+		// Code lines
+		for ( var cl in arguments.codeLines ) {
+			var pad = repeatString( " ", boxWidth - len( cl ) )
+			out &= variables.terminal.ansi( bc ) & "│" & variables.terminal.RESET
+			out &= variables.terminal.ansi( cc ) & "  " & cl & pad & " " & variables.terminal.RESET
+			out &= variables.terminal.ansi( bc ) & "│" & variables.terminal.RESET & char(10)
+		}
+
+		// Bottom border
+		out &= variables.terminal.ansi( bc ) & "╰" & repeatString( "─", boxWidth ) & "╯" & variables.terminal.RESET
+		return out
+	}
+
+	/**
+	 * Applies inline Markdown formatting (**bold**, *italic*, `code`).
+	 */
+	private string function renderInline( required string text ) {
+		var s = arguments.text
+
+		// Bold: **text**
+		s = reReplaceNoCase( s, "\*\*(.+?)\*\*",
+			variables.terminal.BOLD & "\1" & variables.terminal.RESET, "all" )
+
+		// Italic: *text* (single asterisk, not already replaced by bold)
+		s = reReplaceNoCase( s, "(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)",
+			variables.terminal.ITALIC & "\1" & variables.terminal.RESET, "all" )
+
+		// Inline code: `code`
+		var codeColor = variables.terminal.ansi( variables.theme.codeLabel ?: "color42" )
+		s = reReplaceNoCase( s, "`(.+?)`",
+			codeColor & "▌" & variables.terminal.RESET & "\1" & codeColor & "▐" & variables.terminal.RESET, "all" )
+
+		return s
+	}
+
+	/**
+	 * Parses and renders a Markdown pipe table using Terminal.table().
+	 * Skips separator rows (---|---).
+	 */
+	private string function renderPipeTable( required array tableLines ) {
+		if ( arguments.tableLines.isEmpty() ) { return "" }
+		var headers = parsePipeRow( arguments.tableLines[1] )
+		var rows = []
+		for ( var i = 2; i <= arguments.tableLines.len(); i++ ) {
+			var row = parsePipeRow( arguments.tableLines[i] )
+			// Skip separator rows like |---|---|
+			if ( !reFind( "^[-: ]+$", row[1] ?: "" ) ) {
+				rows.append( row )
+			}
+		}
+		return variables.terminal.table( headers, rows )
+	}
+
+	private array function parsePipeRow( required string line ) {
+		var parts = listToArray( arguments.line, "|" )
+		var cells = []
+		for ( var p in parts ) {
+			var t = trim( p )
+			if ( len(t) ) { cells.append( t ) }
+		}
+		return cells
+	}
+
+}

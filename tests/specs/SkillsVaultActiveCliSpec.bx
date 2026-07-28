@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "routes skill and vault commands through runtime", () => {
 				var home = getTempDirectory() & "/active-skills-vault-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "skill", "create", "runtime-skill" ], options: { content: "Runtime skill" } } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "skill", "show", "runtime-skill" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "skill", "remove", "runtime-skill" ], options: {} } ).success ).toBeTrue()

@@ -12,7 +12,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( status.enabled ).toBeFalse()
 			} )
 			it( "routes enable and disable through the active runtime", () => {
-				var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( true ), new "models.system.ConfigManager"( getTempDirectory() & "/runtime-#createUUID()#" ) ).execute( { positionals: [ "skill", "activate", "enable", "runtime-skill" ], options: {} } )
+				var result = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( true ), new "models.system.ConfigManager"( getTempDirectory() & "/runtime-#createUUID()#" ) ).execute( { positionals: [ "skill", "activate", "enable", "runtime-skill" ], options: {} } )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "Skill not found" )
 			} )

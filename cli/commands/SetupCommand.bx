@@ -62,7 +62,7 @@ class {
 	 */
 	function init( required any configManager ) {
 		variables.config = arguments.configManager
-		variables.ui = new "cli.SetupOnboarding"()
+		variables.ui = new "cli.util.SetupOnboarding"()
 		return this
 	}
 

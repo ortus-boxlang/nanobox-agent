@@ -22,6 +22,16 @@
 			"maxSessions": 1000,
 			"enabled": true,
 			"pruneAfterDays": 90
+		},
+		"tui": {
+			"theme": "boxlang",
+			"streaming": true,
+			"wordWrap": true,
+			"wrapWidth": 0,
+			"statusBar": true,
+			"colors": true,
+			"markdownRender": true,
+			"sidebarWidth": 22
 		}
 	},
 	"bx-ai": {

@@ -5,7 +5,7 @@ class extends="testbox.system.BaseSpec" {
 				var home = getTempDirectory() & "/interactive-chat-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				var sessions = new "models.sessions.SessionManager"()
-				var chat = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), sessions, config )
+				var chat = new "cli.util.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), sessions, config )
 				var started = chat.start( false )
 				expect( started.success ).toBeTrue()
 				expect( chat.execute( "/help" ).action ).toBe( "help" )
@@ -16,7 +16,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns setup-required instead of prompting for noninteractive empty chat", () => {
 				var home = getTempDirectory() & "/interactive-empty-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var result = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: { z: true } } )
+				var result = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config ).execute( { positionals: [ "chat" ], options: { z: true } } )
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "query" )
 			} )

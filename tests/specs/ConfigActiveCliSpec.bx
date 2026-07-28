@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "executes config actions through the runtime", () => {
 				var home = getTempDirectory() & "/active-config-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				var runtime = new "cli.CommandRuntime"( new "models.util.PrettyCli"( false ), config )
+				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				expect( runtime.execute( { positionals: [ "config", "set", "cli.mode", "active" ], options: {} } ).success ).toBeTrue()
 				expect( runtime.execute( { positionals: [ "config", "get", "cli.mode" ], options: {} } ).value ).toBe( "active" )
 				expect( runtime.execute( { positionals: [ "config", "path" ], options: {} } ).path ).toInclude( "nanobox.json" )

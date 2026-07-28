@@ -8,7 +8,7 @@ class extends="testbox.system.BaseSpec" {
 					"executes every non-interactive command namespace",
 					() => {
 						var runtime = new "cli.CommandRuntime"(
-							new "models.util.PrettyCli"( false ),
+							new "cli.util.PrettyCli"( false ),
 							new "models.system.ConfigManager"(
 								"#getTempDirectory()#/cli-runtime-#createUUID()#"
 							)
@@ -62,7 +62,7 @@ class extends="testbox.system.BaseSpec" {
 					"executes positional and option gateway sends",
 					() => {
 						var runtime = new "cli.CommandRuntime"(
-							new "models.util.PrettyCli"( false ),
+							new "cli.util.PrettyCli"( false ),
 							new "models.system.ConfigManager"(
 								"#getTempDirectory()#/cli-gateway-#createUUID()#"
 							)

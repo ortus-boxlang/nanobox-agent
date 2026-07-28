@@ -1,0 +1,116 @@
+/**
+ * TuiTheme — TUI theme manager for NanoBox chat.
+ *
+ * Provides 6 built-in themes (3 dark, 3 light) and persists the active
+ * theme to the config key `nanobox.tui.theme` via ConfigManager.
+ *
+ * Theme struct shape:
+ * {
+ *   name, dark, border, prompt, assistant, user, accent, dim,
+ *   code, codeLabel, error, warn, success, info, logoGradient
+ * }
+ *
+ * @author Ortus Solutions
+ * @version 0.1.0
+ * @since 0.1.0
+ */
+class {
+
+	variables.THEMES = {
+		"boxlang": {
+			name: "boxlang", dark: true,
+			border: "color42", prompt: "color42", assistant: "color42",
+			user: "color226", accent: "color226", dim: "color248",
+			code: "color236", codeLabel: "color42",
+			error: "color196", warn: "color214", success: "color46", info: "color81",
+			logoGradient: "Ocean"
+		},
+		"matrix": {
+			name: "matrix", dark: true,
+			border: "color46", prompt: "color46", assistant: "color46",
+			user: "color226", accent: "color46", dim: "color240",
+			code: "color234", codeLabel: "color46",
+			error: "color196", warn: "color220", success: "color46", info: "color50",
+			logoGradient: "Mint"
+		},
+		"midnight": {
+			name: "midnight", dark: true,
+			border: "color141", prompt: "color141", assistant: "color141",
+			user: "color226", accent: "color177", dim: "color240",
+			code: "color237", codeLabel: "color141",
+			error: "color196", warn: "color214", success: "color46", info: "color105",
+			logoGradient: "Purple"
+		},
+		"dawn": {
+			name: "dawn", dark: false,
+			border: "color208", prompt: "color208", assistant: "color202",
+			user: "color130", accent: "color214", dim: "color245",
+			code: "color255", codeLabel: "color208",
+			error: "color160", warn: "color208", success: "color28", info: "color33",
+			logoGradient: "Sunset"
+		},
+		"arctic": {
+			name: "arctic", dark: false,
+			border: "color81", prompt: "color81", assistant: "color69",
+			user: "color25", accent: "color75", dim: "color245",
+			code: "color255", codeLabel: "color81",
+			error: "color160", warn: "color208", success: "color28", info: "color69",
+			logoGradient: "Gray"
+		},
+		"mono": {
+			name: "mono", dark: true,
+			border: "", prompt: "", assistant: "",
+			user: "", accent: "", dim: "",
+			code: "", codeLabel: "",
+			error: "", warn: "", success: "", info: "",
+			logoGradient: "Gray"
+		}
+	};
+
+	/**
+	 * Returns a theme struct by name.  Falls back to "boxlang" for unknown names.
+	 */
+	struct function get( required string name ) {
+		var n = lCase( trim( arguments.name ) )
+		return variables.THEMES.keyExists( n ) ? variables.THEMES[ n ] : variables.THEMES[ "boxlang" ]
+	}
+
+	/**
+	 * Returns the current theme by reading `nanobox.tui.theme` from config.
+	 * Falls back to the "boxlang" theme.
+	 */
+	struct function current( required any configManager ) {
+		var name = arguments.configManager.get( "nanobox.tui.theme", "boxlang" )
+		return get( name )
+	}
+
+	/**
+	 * Sets the active theme and persists it to config.
+	 *
+	 * @name           Theme name to apply
+	 * @configManager  ConfigManager instance for persistence
+	 * @return         The applied theme struct
+	 */
+	struct function apply( required string name, required any configManager ) {
+		var theme = get( arguments.name )
+		arguments.configManager.set( "nanobox.tui", { theme: theme.name } )
+		return theme
+	}
+
+	/**
+	 * Returns an array of all available theme names.
+	 */
+	array function list() {
+		return variables.THEMES.keyArray().sort( "text" )
+	}
+
+	/**
+	 * Returns all theme structs as an array, sorted by name.
+	 */
+	array function listAll() {
+		var result = []
+		for ( var name in list() ) { result.append( variables.THEMES[ name ] ) }
+		return result
+	}
+
+}

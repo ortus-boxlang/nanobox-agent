@@ -5,7 +5,7 @@ class extends="testbox.system.BaseSpec" {
 				var home = getTempDirectory() & "/chat-title-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				var sessions = new "models.sessions.SessionManager"()
-				var chat = new "cli.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), sessions, config )
+				var chat = new "cli.util.InteractiveChat"( new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ), sessions, config )
 				chat.start( false )
 				var title = chat.execute( "/title Manual Project" )
 				expect( title.title ).toBe( "Manual Project" )
@@ -14,8 +14,8 @@ class extends="testbox.system.BaseSpec" {
 			} )
 			it( "renders a Pi-style header and assistant message", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/chat-render-#createUUID()#" )
-				var chat = new "cli.InteractiveChat"( {}, new "models.sessions.SessionManager"(), config )
-				var renderer = new "cli.InteractiveChatRenderer"( chat, false )
+				var chat = new "cli.util.InteractiveChat"( {}, new "models.sessions.SessionManager"(), config )
+				var renderer = new "cli.util.InteractiveChatRenderer"( chat, false )
 				expect( renderer.renderHeader( { title: "Demo", provider: "lmstudio", model: "local" } ) ).toInclude( "Demo" )
 				expect( renderer.renderAssistant( "Hello" ) ).toInclude( "NanoBox" )
 			} )
