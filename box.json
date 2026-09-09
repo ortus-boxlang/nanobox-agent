@@ -8,10 +8,14 @@
         "bx-ai": "^3.3.2+17",
         "bx-sqlite": "^1.2.0+5"
     },
+    "devDependencies": {
+        "bx-sites": "1.0.0-snapshot"
+    },
     "installPaths": {
         "testbox": "lib/testbox/",
 		"bx-ai": "lib/modules/bx-ai/",
-		"bx-sqlite": "lib/modules/bx-sqlite/"
+		"bx-sqlite": "lib/modules/bx-sqlite/",
+		"bx-sites": "lib/modules/bx-sites/"
     },
     "testbox": {
         "runner": "./testbox/run"
@@ -19,6 +23,9 @@
     "scripts": {
         "test": "!./testbox/run --verbose",
         "test:unit": "!./testbox/run --directory=tests.specs --bundles-pattern=*Spec*.bx|*Test*.bx",
-        "format:check": "!boxlang format --check --source app/,cli/,tests/,.bx"
+        "format:check": "!boxlang format --check --source app/,cli/,tests/,.bx",
+        "docs:build": "!bxSites build",
+        "docs:serve": "!bxSites serve",
+        "docs:clean": "!bxSites clean"
     }
 }
