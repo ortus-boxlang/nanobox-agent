@@ -23,6 +23,9 @@ repo:
 
 lastUpdated: true
 
+versions:
+  default: "1.0.x"
+
 variables:
   project: "NanoBox"
   repoUrl: "https://github.com/ortus-boxlang/nanobox-agent"
