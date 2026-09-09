@@ -2,7 +2,7 @@
 title: "Installation"
 order: 2
 description: "Clone NanoBox and install it locally for development or globally for everyday use."
-icon: "📦"
+icon: "phosphor-duotone:package"
 ---
 
 # Installation

@@ -2,7 +2,7 @@
 title: "CLI Reference"
 order: 1
 description: "Full command reference for the nanobox CLI, organized by namespace, with global flags."
-icon: "⌨️"
+icon: "phosphor-duotone:terminal-window"
 ---
 
 # CLI Reference

@@ -2,7 +2,7 @@
 title: "Backup"
 order: 10
 description: "What NanoBox backs up, on what schedule, the backup CLI, and retention policy."
-icon: "💾"
+icon: "phosphor-duotone:floppy-disk"
 ---
 
 # Backup

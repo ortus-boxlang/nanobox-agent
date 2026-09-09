@@ -2,7 +2,7 @@
 title: "Configuration"
 order: 4
 description: "Provider API keys, the runtime config files, and the config CLI namespace."
-icon: "⚙️"
+icon: "phosphor-duotone:gear-six"
 ---
 
 # Configuration

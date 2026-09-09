@@ -2,7 +2,7 @@
 title: "Gateways"
 order: 8
 description: "Supported messaging platforms, gateway CLI commands, configuration, and human-in-the-loop behavior."
-icon: "📡"
+icon: "phosphor-duotone:broadcast"
 ---
 
 # Gateways

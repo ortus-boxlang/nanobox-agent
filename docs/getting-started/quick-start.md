@@ -2,7 +2,7 @@
 title: "Quick Start"
 order: 3
 description: "Verify your install, configure a provider, and run your first chat."
-icon: "🏁"
+icon: "phosphor-duotone:flag-checkered"
 ---
 
 # Quick Start

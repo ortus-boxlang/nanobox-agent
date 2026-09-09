@@ -2,7 +2,7 @@
 title: "Getting Started"
 order: 2
 description: "Prerequisites and an overview of installing and running NanoBox."
-icon: "🚀"
+icon: "phosphor-duotone:rocket"
 ---
 
 # Getting Started
@@ -19,8 +19,9 @@ providers.
 | BoxLang | Auto-installed by `install.sh` if not already present |
 | BoxLang modules | `bx-ai`, `bx-sqlite`, `testbox` -- auto-installed by `install.sh` |
 
-## Next steps
+## Getting Started tutorial
 
-1. **[Installation](installation.md)** -- clone the repo and run the installer, locally or globally.
-2. **[Quick Start](quick-start.md)** -- verify the install and run your first chat.
-3. **[Configuration](configuration.md)** -- set provider API keys and defaults.
+Work through the three lessons below in order -- your progress is tracked
+in your browser as you go.
+
+::: course id="getting-started" :::

@@ -2,7 +2,7 @@
 title: "Contributing"
 order: 5
 description: "Development setup, project structure, testing, build phases, and coding standards for NanoBox contributors."
-icon: "🤝"
+icon: "phosphor-duotone:handshake"
 ---
 
 # Contributing
