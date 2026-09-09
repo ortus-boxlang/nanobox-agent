@@ -135,21 +135,23 @@ nanobox/
 │   ├── Phase-10-CLI-Completion/ # Phase 10 status + README
 │   └── Phase-11-Interactive-Chat/ # Phase 11 status
 │
-├── docs/                        # Documentation
-│   ├── cli/                     # CLI namespace docs
-│   │   ├── README.md            # CLI overview
-│   │   ├── core.md              # Core lifecycle docs
-│   │   ├── chat.md              # Chat command docs
-│   │   ├── models.md            # Model/provider docs
-│   │   ├── config.md            # Config namespace docs
-│   │   ├── sessions.md          # Session management docs
-│   │   ├── agents.md            # Agent docs
-│   │   ├── skills.md            # Skill docs
-│   │   ├── tools.md             # Tool docs
-│   │   ├── vault.md             # Vault docs
-│   │   ├── cron.md              # Cron docs
-│   │   ├── gateway.md           # Gateway docs
-│   │   └── ...                  # Other namespace docs
+├── docs/                        # Documentation — a BxSites project (see /bxsites.yaml)
+│   ├── index.md                 # Home
+│   ├── getting-started/         # Install, quick start, configuration
+│   ├── architecture/            # System architecture
+│   ├── reference/                # Reference sections (nav auto-builds from this tree)
+│   │   ├── index.md             # Reference landing page
+│   │   ├── cli/                 # CLI namespace docs (core, chat, config, agents, skills, ...)
+│   │   ├── agents/               # Agent definition format
+│   │   ├── ai/                  # BoxLang module installation (bx-ai, bx-sqlite)
+│   │   ├── tools/               # Tool authoring
+│   │   ├── mcp/                 # MCP server registration
+│   │   ├── vault/               # Knowledge base
+│   │   ├── cron/                # Scheduled tasks
+│   │   ├── gateway/              # Messaging gateways
+│   │   ├── security/             # Sandbox, middleware, SecurityCzar
+│   │   └── backup/               # Backup/restore
+│   ├── contributing/            # Dev setup, testing, coding standards
 │   └── api/                     # Generated DocBox API docs (do not hand-edit)
 │
 ├── lib/modules/                 # Third-party BoxLang modules
@@ -218,7 +220,7 @@ Do not create new top-level directories without explicit approval. The current l
 | `worker/` | Long-running supervisor, scheduler execution, gateway runtime | `worker/core/Scheduler.bx`, `worker/core/WorkerSupervisor.bx`, `worker/cli/WorkerCommand.bx` |
 | `lib/modules/` | Third-party BoxLang modules | `bx-ai`, `bx-sqlite`, `testbox` |
 | `.plans/` | Phase plans, audit docs, CLI spec | `PLAN.md`, `CLI-SPEC.md`, `Phase-*/README.md` |
-| `docs/` | User-facing documentation, generated API docs | `docs/cli/*.md`, `docs/api/` (generated) |
+| `docs/` | User-facing documentation (BxSites project), generated API docs | `docs/reference/cli/*.md`, `docs/api/` (generated) |
 
 ---
 

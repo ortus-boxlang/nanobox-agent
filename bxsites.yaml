@@ -1,0 +1,29 @@
+name: "NanoBox"
+description: "NanoBox is a BoxLang-based autonomous agent CLI platform: chat, agents, tools, memory, and messaging gateways from a single binary."
+baseURL: "/"
+
+theme:
+  name: bootstrap
+  options:
+    colorMode: auto
+    navCollapsible: true
+    navExpandAll: false
+    tocPosition: sticky
+    breadcrumbs: true
+
+search: true
+
+markdown:
+  enableAdmonition: true
+  anchorLinks: true
+
+repo:
+  url: "https://github.com/ortus-boxlang/nanobox-agent"
+  editUri: "edit/main/docs/"
+
+lastUpdated: true
+
+variables:
+  project: "NanoBox"
+  repoUrl: "https://github.com/ortus-boxlang/nanobox-agent"
+  cliCommand: "nanobox"
