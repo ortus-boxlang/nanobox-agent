@@ -1,0 +1,7 @@
+getting-started:
+  title: "Getting Started with NanoBox"
+  description: "A guided walkthrough from install to your first AI chat session."
+  lessons:
+    - getting-started/installation.md
+    - getting-started/quick-start.md
+    - getting-started/configuration.md

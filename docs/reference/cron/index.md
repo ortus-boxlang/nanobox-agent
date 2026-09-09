@@ -2,7 +2,7 @@
 title: "Cron Jobs"
 order: 7
 description: "Scheduling background tasks on the NanoBox worker, plus the platform's built-in scheduled tasks."
-icon: "⏰"
+icon: "phosphor-duotone:clock"
 ---
 
 # Cron Jobs

@@ -2,7 +2,7 @@
 title: "Architecture"
 order: 3
 description: "How NanoBox's CLI, worker, and web UI entry points fit together, and the platform's stack layers and directory layout."
-icon: "🏗️"
+icon: "phosphor-duotone:buildings"
 ---
 
 # Architecture

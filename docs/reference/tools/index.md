@@ -2,7 +2,7 @@
 title: "Tools"
 order: 4
 description: "The three layers of NanoBox tools -- bx-ai built-ins, MCP tools, and user-defined tools -- and how to author custom tools."
-icon: "🛠️"
+icon: "phosphor-duotone:wrench"
 ---
 
 # Tools

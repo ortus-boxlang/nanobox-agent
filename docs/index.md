@@ -2,7 +2,7 @@
 title: "Home"
 order: 1
 description: "NanoBox is a BoxLang-based autonomous agent CLI platform: chat, agents, tools, memory, and messaging gateways from a single binary."
-icon: "⚡"
+icon: "phosphor-duotone:lightning"
 toc: false
 ---
 

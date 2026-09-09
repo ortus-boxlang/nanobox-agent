@@ -2,7 +2,7 @@
 title: "Agents"
 order: 2
 description: "How agent definitions are stored, the built-in agents, and how to create custom and sub-agents."
-icon: "🤖"
+icon: "phosphor-duotone:robot"
 ---
 
 # Agents

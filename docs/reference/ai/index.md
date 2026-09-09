@@ -2,7 +2,7 @@
 title: "AI & BoxLang Modules"
 order: 3
 description: "How NanoBox installs and loads project-local BoxLang modules such as bx-ai and bx-sqlite."
-icon: "🧩"
+icon: "phosphor-duotone:puzzle-piece"
 ---
 
 ## BoxLang Modules

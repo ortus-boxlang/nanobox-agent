@@ -2,7 +2,7 @@
 title: "Vault"
 order: 6
 description: "NanoBox's long-term knowledge base: directory structure, search, document import, and agent integration."
-icon: "🗄️"
+icon: "phosphor-duotone:vault"
 ---
 
 # Vault

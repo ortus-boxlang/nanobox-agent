@@ -2,7 +2,7 @@
 title: "MCP (Model Context Protocol)"
 order: 5
 description: "How NanoBox registers and uses MCP servers to extend agent capabilities."
-icon: "🔌"
+icon: "phosphor-duotone:plugs"
 ---
 
 # MCP (Model Context Protocol)

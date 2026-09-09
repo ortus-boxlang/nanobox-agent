@@ -2,7 +2,7 @@
 title: "Security"
 order: 9
 description: "NanoBox's three layers of security: the BoxLang runtime sandbox, SecurityMiddleware, and the scheduled SecurityCzar scanner."
-icon: "🔒"
+icon: "phosphor-duotone:shield-check"
 ---
 
 # Security

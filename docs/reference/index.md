@@ -2,7 +2,7 @@
 title: "Reference"
 order: 4
 description: "Command and configuration reference for every NanoBox namespace: CLI, agents, AI modules, tools, MCP, vault, cron, gateways, security, and backup."
-icon: "📚"
+icon: "phosphor-duotone:books"
 toc: false
 ---
 
