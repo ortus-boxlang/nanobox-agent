@@ -1,5 +1,7 @@
 class {
+
 	variables.thisDir = getDirectoryFromPath( getCurrentTemplatePath() )
+
 	this.mappings = {
 		"/testbox": variables.thisDir & "../lib/testbox",
 		"/tests"  : variables.thisDir,
@@ -7,4 +9,20 @@ class {
 		"/models" : variables.thisDir & "../models",
 		"/nanobox": variables.thisDir & "../"
 	}
+
+	// Same directory guarantee as the root Application.bx: SQLite will create the database
+	// file but not its parent directory. Declared here too so the suite carries its own
+	// datasource rather than depending on config/boxlang.json being loaded via BOXLANG_CONFIG.
+	variables.nanoboxData = createObject( "java", "java.lang.System" ).getProperty( "user.home", "" ) & "/.nanobox/data"
+	if ( !directoryExists( variables.nanoboxData ) ) {
+		directoryCreate( variables.nanoboxData, true )
+	}
+
+	this.datasources = {
+		nanobox: {
+			driver: "sqlite",
+			connectionString: "jdbc:sqlite:#variables.nanoboxData#/nanobox.db"
+		}
+	}
+
 }

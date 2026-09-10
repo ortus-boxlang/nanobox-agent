@@ -1,8 +1,18 @@
 class {
+
+	// SQLite creates the database file on demand, but not the directory holding it, so a
+	// runtime that has never had install.sh run against it (a fresh checkout, a test run,
+	// a user who cleared ~/.nanobox) fails every query with "unable to open database file".
+	variables.nanoboxData = createObject( "java", "java.lang.System" ).getProperty( "user.home", "" ) & "/.nanobox/data"
+	if ( !directoryExists( variables.nanoboxData ) ) {
+		directoryCreate( variables.nanoboxData, true )
+	}
+
 	this.datasources = {
 		nanobox: {
 			driver: "sqlite",
-			connectionString: "jdbc:sqlite:#createObject( "java", "java.lang.System" ).getProperty( "user.home", "" )#/.nanobox/data/nanobox.db"
+			connectionString: "jdbc:sqlite:#variables.nanoboxData#/nanobox.db"
 		}
 	}
+
 }
