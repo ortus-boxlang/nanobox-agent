@@ -1,0 +1,49 @@
+/**
+ * LiveProviders — reachability probes for the local providers the integration specs need.
+ *
+ * Several specs exercise a real OpenAI-compatible endpoint (LM Studio on
+ * localhost:1234). Those are genuine integration tests: when the endpoint is not
+ * running they have nothing to assert against, so they are skipped rather than
+ * failed. Start LM Studio and re-run to exercise them.
+ *
+ * @author Ortus Solutions
+ */
+class {
+
+	/**
+	 * The base URL every LM Studio backed spec points at.
+	 */
+	string function baseURL() {
+		return "http://localhost:1234/v1"
+	}
+
+	/**
+	 * True when a TCP listener answers on the LM Studio port.
+	 *
+	 * Probed with a raw socket rather than an HTTP call so the check stays fast and
+	 * bypasses any proxy configuration in the environment.
+	 *
+	 * @return Boolean reachability flag
+	 */
+	boolean function isAvailable() {
+		try {
+			var socket  = createObject( "java", "java.net.Socket" ).init()
+			var address = createObject( "java", "java.net.InetSocketAddress" ).init( "localhost", 1234 )
+			socket.connect( address, 500 )
+			socket.close()
+			return true
+		} catch ( any ignored ) {
+			return false
+		}
+	}
+
+	/**
+	 * TestBox skip flag: true when LM Studio is not reachable.
+	 *
+	 * @return Boolean skip flag
+	 */
+	boolean function skipUnlessAvailable() {
+		return !isAvailable()
+	}
+
+}

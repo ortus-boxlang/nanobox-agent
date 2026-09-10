@@ -1,7 +1,9 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Agent execution", () => {
-			it( "runs a real configured OpenAI-compatible agent", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "runs a real configured OpenAI-compatible agent", skip = live.skipUnlessAvailable(), body = () => {
 				var path = getTempDirectory() & "/agent-run-#createUUID()#"
 				var managerConfig = new "models.system.ConfigManager"( path & "/config" )
 				managerConfig.set( "bx-ai.defaultProvider", "lmstudio" )

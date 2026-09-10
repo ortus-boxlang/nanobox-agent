@@ -21,8 +21,8 @@
         "runner": "./lib/testbox/run"
     },
     "scripts": {
-        "test": "!./lib/testbox/run --verbose",
-        "test:unit": "!./lib/testbox/run --directory=tests.specs --bundles-pattern=*Spec*.bx|*Test*.bx",
+        "test": "!./scripts/test --verbose",
+        "test:unit": "!./scripts/test",
         "format:check": "!boxlang format --check --source app/,cli/,tests/,.bx",
         "docs:build": "!bxSites build",
         "docs:serve": "!bxSites serve",

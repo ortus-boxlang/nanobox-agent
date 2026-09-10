@@ -194,7 +194,9 @@ class {
 			return { success: false, error: "Registry install returned no SKILL.md content" }
 		}
 
-		var skillName = len( arguments.name ) ? arguments.name : ( skillData.name ?: skill.listLast( "/" ) );
+		// Registry slugs are namespaced by category with a tilde (category~skill). The local
+		// directory takes only the trailing skill segment; the manifest keeps the full slug.
+		var skillName = len( arguments.name ) ? arguments.name : ( skillData.name ?: skill.listLast( "~" ) );
 		if ( !validName( skillName ) ) {
 			return { success: false, error: "Invalid skill name: #skillName#" }
 		}

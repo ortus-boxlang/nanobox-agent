@@ -1,7 +1,9 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Chat model selection", () => {
-			it( "uses the configured default model", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "uses the configured default model", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-default-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
@@ -11,7 +13,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.success ).toBeTrue()
 				expect( result.model ).toBe( "qwen/qwen3.6-35b-a3b" )
 			} )
-			it( "uses a named model", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "uses a named model", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-named-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				config.set( "bx-ai.namedModels.local-coder", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.1 } } )

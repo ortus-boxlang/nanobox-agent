@@ -1,7 +1,9 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Chat surfaces", () => {
-			it( "supports response-only execution through the active runtime", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "supports response-only execution through the active runtime", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-z-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )

@@ -294,6 +294,16 @@ class {
 	 * @return  Struct with success flag, interactive=true, and sessionId
 	 */
 	private struct function interactiveChat( struct parsed = {} ) {
+		// Interactive chat reads keystrokes, so it needs a real terminal. Without one
+		// (a script, a CI job, a pipe) the read fails partway in; say so up front and
+		// point at the one-shot form instead.
+		if ( isNull( createObject( "java", "java.lang.System" ).console() ) ) {
+			return {
+				success: false,
+				error  : "Interactive chat requires a terminal. Use nanobox chat -q ""your question"" for a one-shot query."
+			}
+		}
+
 		var mwConfig  = variables.config.get( "nanobox.middleware", {} )
 		var tuiConfig = variables.config.get( "nanobox.tui", {} )
 

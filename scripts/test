@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#
+# Runs the NanoBox test suite.
+#
+# TestBox's BoxLang runner executes from lib/testbox/system/runners/, so the project's
+# own Application.bx never loads and the nanobox SQLite datasource would be missing.
+# Pointing BOXLANG_CONFIG at config/boxlang.json registers it globally for the run.
+#
+set -euo pipefail
+
+ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+export BOXLANG_CONFIG="${BOXLANG_CONFIG:-$ROOT/config/boxlang.json}"
+
+# SQLite creates the database file but not its parent directory.
+mkdir -p "$HOME/.nanobox/data"
+
+if [ "$#" -eq 0 ]; then
+	set -- --directory=tests.specs --bundles-pattern='*Spec*.bx|*Test*.bx'
+fi
+
+exec "$ROOT/lib/testbox/run" "$@"

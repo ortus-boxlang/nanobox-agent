@@ -1,5 +1,6 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Model and provider registry", () => {
 			it( "stores provider configuration and named models", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-registry-#createUUID()#" )
@@ -10,7 +11,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( model.execute( "status", {} ).namedModels[ "local-coder" ].provider ).toBe( "lmstudio" )
 				expect( model.execute( "current", {} ).namedModel ).toBe( "local-coder" )
 			} )
-			it( "discovers LM Studio models through openai-compatible bx-ai", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "discovers LM Studio models through openai-compatible bx-ai", skip = live.skipUnlessAvailable(), body = () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-discovery-#createUUID()#" )
 				var provider = new "cli.commands.ProviderCommand"( config )
 				var model = new "cli.commands.ModelCommand"( config )

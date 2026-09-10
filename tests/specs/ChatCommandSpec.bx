@@ -1,5 +1,6 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "ChatCommand", () => {
 			it( "reports missing provider without calling AI", () => {
 				var home = getTempDirectory() & "/chat-command-#createUUID()#"
@@ -10,7 +11,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "No AI provider" )
 			} )
-			it( "normalizes an OpenAI-compatible provider and preserves its base URL", () => {
+			// Integration spec: needs LM Studio listening on localhost:1234.
+			it( title = "normalizes an OpenAI-compatible provider and preserves its base URL", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-command-compatible-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
 				config.set( "bx-ai.defaultProvider", "lmstudio" )
