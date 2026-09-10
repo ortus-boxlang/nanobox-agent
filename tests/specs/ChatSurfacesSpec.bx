@@ -2,13 +2,13 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		var live = new "tests.support.LiveProviders"()
 		describe( "Chat surfaces", () => {
-			// Integration spec: needs LM Studio listening on localhost:1234.
+			// Live spec: drives a real OpenAI-compatible provider. Needs NOVITA_API_KEY.
 			it( title = "supports response-only execution through the active runtime", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-z-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				config.set( "bx-ai.defaultProvider", "lmstudio" )
-				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
-				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				config.set( "bx-ai.defaultProvider", live.providerName() )
+				config.set( "bx-ai.defaultModel", live.model() )
+				config.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var runtime = new "cli.CommandRuntime"( new "cli.util.PrettyCli"( false ), config )
 				var result = runtime.execute( { positionals: [ "chat", "Reply with exactly Z_RUNTIME_OK" ], options: { z: true } } )
 				expect( result.success ).toBeTrue()
