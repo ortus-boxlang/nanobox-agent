@@ -1,7 +1,7 @@
 {
     "name":"TestBox",
-    "version":"7.0.0+19",
-    "location":"https://downloads.ortussolutions.com/ortussolutions/testbox/7.0.0/testbox-7.0.0.zip",
+    "version":"7.1.0-snapshot",
+    "location":"https://downloads.ortussolutions.com/ortussolutions/testbox/7.1.0-snapshot/testbox-7.1.0-snapshot.zip",
     "author":"Ortus Solutions <info@ortussolutions.com>",
     "slug":"testbox",
     "type":"testing",

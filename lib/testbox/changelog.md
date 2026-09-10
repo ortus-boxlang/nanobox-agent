@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- BDD Class `skip` annotation support for skipping entire test classes.
+- Add expectation context support via `expect( value ).withContext( message )` that prepends semantic context to all failure messages including negated matchers and custom matchers.
+- Add collection expectation modes: `expectAny()`, `expectSome()`, and `expectNone()` alongside existing `expectAll()` with detailed failure summaries including element index/key and pass count reporting.
+- Add grouped assertions via `$assert.all()`, `assertAll()` that run multiple assertion closures and report every failure at once instead of stopping at the first.
+- Add new matchers: `toBeTruthy()`, `toBeFalsy()`, `toBeSameInstanceAs()`, `toHaveSize()`, `toThrowMatching()`, `toIncludeAll()`, `toIncludeAny()`, and `toIncludeNone()`.
+- Add set expectations: `toBeASet()`, `toEqualSet()`, `toBeSubsetOf()`, `toBeSupersetOf()`, `toBeDisjointFrom()`, `toHaveUnion()`, `toHaveIntersection()`, `toHaveDifference()`, and `toHaveSymmetricDifference()` for working with BoxLang Set objects.
+- Add range expectations: `toBeRange()`, `toContainValue()`, `toContainRange()`, `toBeInRange()`, `toBeBeforeRange()`, `toBeAfterRange()`, `toBeBounded()`, `toBeUnbounded()`, `toBeHalfBounded()`, `toBeIterable()`, `toBeAscending()`, `toBeDescending()`, `toHaveStep()`, and `toClampTo()` for BoxLang Range objects.
+- Add data navigator expectations: `toHavePath()`, `toHavePathValue()`, `toHavePathType()`, `toHavePathSatisfying()`, `path()`, and `queryPath()` for navigating and asserting against nested BoxLang data structures using dot-notation, array indexes, wildcards, filters, and recursive descent.
+- Add new assertion BIFs: `$assert.isTruthy()`, `$assert.isFalsy()`, `$assert.includesAll()`, `$assert.includesAny()`, and `$assert.includesNone()`.
+
+### Improvements
+
+- Improve matcher failure messages with optional contextual prefix for distinguishing chained expectations.
+- Improve `expectAll()` failure messages to include pass/fail counts and per-element failure details with index/key context.
+- Add `docs/whats-new-with-7.0.0.md` release page documenting all new assertion and expectation features.
+
+### Fixed
+
+- Fix custom matcher failure messages not routing through the expectation's internal fail method.
+
 ## [7.0.0] - 2026-03-17
 
 - <https://testbox.ortusbooks.com/readme/release-history/whats-new-with-7.0.0>
