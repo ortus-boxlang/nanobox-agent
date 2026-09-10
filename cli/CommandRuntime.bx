@@ -345,11 +345,17 @@ class {
 		// ── Attempt Lanterna startup ───────────────────────────────────────
 		var screen      = new "cli.util.LanternaScreen"()
 		var useLanterna = false
-		try {
-			screen.startScreen()
-			useLanterna = true
-		} catch ( any e ) {
-			// Headless or JAR missing — ANSI fallback below
+		// Only take over the terminal when there genuinely is one. System.console() is
+		// null whenever stdin/stdout are redirected - a test run, a CI job, a pipe - and
+		// starting the TUI there hands control to an event loop that blocks forever
+		// waiting on key input. The ANSI fallback below handles those cases.
+		if ( !isNull( createObject( "java", "java.lang.System" ).console() ) ) {
+			try {
+				screen.startScreen()
+				useLanterna = true
+			} catch ( any e ) {
+				// Terminal refused the alternate-screen buffer — ANSI fallback below
+			}
 		}
 
 		var renderer = new "cli.util.InteractiveChatRenderer"( interactive, theme, useLanterna ? screen : null, wrapWidth )

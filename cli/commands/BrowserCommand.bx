@@ -57,7 +57,11 @@ class {
 		var url = args.url ?: args[ 1 ] ?: ""
 		if ( !len( url ) ) { return { success: false, error: "A URL is required" } }
 		if ( !reFindNoCase( "^https?://", url ) ) { url = "https://" & url }
-		return variables.manager.navigate( url )
+		var result = variables.manager.navigate( url )
+		// Always report which URL was attempted, including on failure, so callers can
+		// tell a normalisation problem apart from a browser problem.
+		if ( isStruct( result ) && !len( result.url ?: "" ) ) { result.url = url }
+		return result
 	}
 
 	/**

@@ -323,8 +323,55 @@ class {
 	// Core handlers
 	// ══════════════════════════════════════════════════════════════════════
 
+	/**
+	 * Lists the slash commands the dispatcher accepts, so /help can actually render
+	 * them rather than returning an empty acknowledgement.
+	 */
 	private struct function help() {
-		return { success: true, action: "help" }
+		return {
+			success : true,
+			action  : "help",
+			commands: [
+				{ name: "help",        summary: "Show this command list" },
+				{ name: "new",         summary: "Start a new session" },
+				{ name: "clear",       summary: "Clear the conversation history" },
+				{ name: "retry",       summary: "Re-send the previous query" },
+				{ name: "undo",        summary: "Remove the last exchange" },
+				{ name: "title",       summary: "Show or set the session title" },
+				{ name: "compress",    summary: "Compress the conversation context" },
+				{ name: "sessions",    summary: "List recent sessions" },
+				{ name: "resume",      summary: "Resume a session by id" },
+				{ name: "session",     summary: "Session sub-commands" },
+				{ name: "status",      summary: "Show session and provider status" },
+				{ name: "usage",       summary: "Show token usage for this session" },
+				{ name: "tokens",      summary: "Token usage sub-commands" },
+				{ name: "model",       summary: "Show or change the model" },
+				{ name: "provider",    summary: "Show or change the provider" },
+				{ name: "theme",       summary: "Show or change the TUI theme" },
+				{ name: "themes",      summary: "List available themes" },
+				{ name: "stream",      summary: "Toggle response streaming" },
+				{ name: "wrap",        summary: "Set the output wrap width" },
+				{ name: "temperature", summary: "Show or set the model temperature" },
+				{ name: "agent",       summary: "Agent sub-commands" },
+				{ name: "memory",      summary: "Memory sub-commands" },
+				{ name: "skill",       summary: "Skill sub-commands" },
+				{ name: "tool",        summary: "Tool sub-commands" },
+				{ name: "vault",       summary: "Vault sub-commands" },
+				{ name: "mcp",         summary: "MCP server sub-commands" },
+				{ name: "cron",        summary: "Scheduled job sub-commands" },
+				{ name: "image",       summary: "Generate an image from a prompt" },
+				{ name: "speak",       summary: "Synthesise speech from text" },
+				{ name: "system",      summary: "Show or set the system prompt" },
+				{ name: "config",      summary: "Configuration sub-commands" },
+				{ name: "security",    summary: "Security sub-commands" },
+				{ name: "log",         summary: "Log sub-commands" },
+				{ name: "gateway",     summary: "Gateway sub-commands" },
+				{ name: "script",      summary: "Script sub-commands" },
+				{ name: "browser",     summary: "Browser automation sub-commands" },
+				{ name: "export",      summary: "Export the conversation" },
+				{ name: "quit",        summary: "Exit the chat (alias: /exit)" }
+			]
+		}
 	}
 
 	private struct function setTitle( required string value ) {

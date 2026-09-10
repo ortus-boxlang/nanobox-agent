@@ -15,7 +15,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "renders a Pi-style header and assistant message", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/chat-render-#createUUID()#" )
 				var chat = new "cli.util.InteractiveChat"( {}, new "models.sessions.SessionManager"(), config )
-				var renderer = new "cli.util.InteractiveChatRenderer"( chat, false )
+				var renderer = new "cli.util.InteractiveChatRenderer"( chat, {} )
 				expect( renderer.renderHeader( { title: "Demo", provider: "lmstudio", model: "local" } ) ).toInclude( "Demo" )
 				expect( renderer.renderAssistant( "Hello" ) ).toInclude( "NanoBox" )
 			} )

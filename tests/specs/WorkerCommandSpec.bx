@@ -4,7 +4,9 @@ class extends="testbox.system.BaseSpec" {
 			it( "starts, reports, and stops the worker through ProcessManager", () => {
 				var state = getTempDirectory() & "/worker-processes-#createUUID()#.json"
 				var manager = new "models.system.ProcessManager"( state )
-				var command = new "cli.commands.WorkerCommand"( manager, expandPath( "/tmp/test-worker.bx" ) )
+				// Second argument is the project root the supervisor resolves
+				// worker/nanobox-worker.bx against, not a script path.
+				var command = new "cli.commands.WorkerCommand"( manager, expandPath( "/nanobox" ) )
 				var started = command.execute( "start" )
 				expect( started.success ).toBeTrue()
 				expect( command.execute( "status" ).status ).toBe( "running" )

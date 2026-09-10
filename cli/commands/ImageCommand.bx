@@ -82,7 +82,7 @@ class {
 		var provider = arguments.options.provider ?: variables.configManager.get( "bx-ai.defaultProvider", "" )
 		var model = arguments.options.model ?: variables.configManager.get( "bx-ai.defaultModel", "" )
 		if ( !len( provider ) ) { return { success: false, error: "No AI provider configured. Run nanobox model setup or config provider add." } }
-		if ( !len( model ) ) { return { success: false, error: "No model configured. Run nanobox model setup or select a named model." } }
+		if ( !len( model ) ) { return { success: false, error: "No model configured. Run nanobox model setup or select a named model.", provider: provider } }
 		return { success: true, provider: provider, model: model, options: {}, namedModel: "" }
 	}
 
