@@ -12,12 +12,13 @@
 class {
 	property agentsPath;
 	property config;
-	property securityMiddleware;
+	property securityPolicy;
+	property blockedTools;
 
 	/**
 	 * @agentsPath       Directory containing agent Markdown files; defaults to ~/.nanobox/agents
 	 * @configManager    Optional ConfigManager for provider and model resolution at run time
-	 * @secretPatterns   Optional array of regex patterns for secret detection (defaults to common API key formats)
+	 * @secretPatterns   Deprecated; bx-ai's OutputGuardMiddleware owns secret detection now
 	 * @blockedTools     Optional array of tool names to block (empty means no tools blocked)
 	 * @allowlistPath    Optional path to OsToolMiddleware allowlist JSON file
 	 * @requireApproval  When true, dangerous OS tool calls require user approval (default: true)
@@ -25,7 +26,8 @@ class {
 	function init( string agentsPath = "", any configManager = null, array secretPatterns = [], array blockedTools = [], string allowlistPath = "", boolean requireApproval = true ) {
 		variables.agentsPath = len( arguments.agentsPath ) ? arguments.agentsPath : expandPath( "~/.nanobox/agents" )
 		variables.config = arguments.configManager
-		variables.securityMiddleware = new "models.middleware.SecurityMiddleware"( arguments.secretPatterns, arguments.blockedTools )
+		variables.blockedTools = arguments.blockedTools
+		variables.securityPolicy = new "models.security.SecurityPolicy"( arguments.configManager )
 		if ( !directoryExists( variables.agentsPath ) ) { directoryCreate( variables.agentsPath, true ) }
 		return this
 	}
@@ -101,11 +103,6 @@ class {
 		var definition = show( arguments.name )
 		if ( structIsEmpty( definition ) ) { return { success: false, error: "Agent not found: #arguments.name#" } }
 
-		// SecurityMiddleware: check query for secrets before LLM call
-		var llmContext = { messages: arguments.query }
-		var securityResult = variables.securityMiddleware.beforeLLMCall( llmContext )
-		if ( !securityResult.continue ) { return { success: false, error: securityResult.message } }
-
 		var logicalProvider = arguments.runtimeOptions.provider ?: ( variables.config != null ? variables.config.get( "bx-ai.defaultProvider", "" ) : "" )
 		var providerConfig = variables.config != null ? variables.config.get( "bx-ai.providers.#logicalProvider#", {} ) : {}
 		var serviceProvider = isStruct( providerConfig ) && lCase( providerConfig.type ?: "" ) == "openai-compatible" ? "openai-compatible" : logicalProvider
@@ -138,15 +135,19 @@ class {
 		}
 
 		try {
-			var response = aiAgent( definition.instructions, model, alwaysOn, lazy )
+			var agent = aiAgent(
+				name           : definition.metadata.name ?: arguments.name,
+				description    : definition.metadata.description ?: "",
+				instructions   : definition.instructions,
+				model          : model,
+				skills         : alwaysOn,
+				availableSkills: lazy,
+				middleware     : variables.securityPolicy.build( variables.blockedTools )
+			)
+			var response = agent.run( arguments.query )
 			var content = isStruct( response ) ? ( response.content ?: "" ) : response
 
-			// SecurityMiddleware: check response for leaked secrets
-			var responseContext = { response: content }
-			var postSecurityResult = variables.securityMiddleware.afterAgentRun( responseContext )
-			if ( !postSecurityResult.continue ) { return { success: false, error: postSecurityResult.message } }
-
-			return { success: true, response: content, agent: definition.name, model: modelId, provider: logicalProvider, raw: response }
+			return { success: true, response: content, agent: definition.metadata.name ?: arguments.name, model: modelId, provider: logicalProvider, raw: response }
 		} catch ( any exception ) { return { success: false, error: exception.message ?: toString( exception ) } }
 	}
 

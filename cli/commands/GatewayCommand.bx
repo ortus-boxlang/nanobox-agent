@@ -108,11 +108,9 @@ class {
 	 */
 	private struct function send( struct args ) {
 		var target = arguments.args.name ?: ""
-		var gateway = variables.registry.get( target )
-		if ( !isObject( gateway ) ) { return { success: false, error: "Gateway not found" } }
 		variables.logger.info( "Sending gateway message via #target#" )
-		var result = gateway.send( arguments.args.recipient ?: "", arguments.args.message ?: "" )
-		if ( !result.success ) { variables.logger.error( "Gateway send failed for #target#" ) }
+		var result = variables.registry.send( target, arguments.args.recipient ?: "", arguments.args.message ?: "" )
+		if ( !result.success ) { variables.logger.error( "Gateway send failed for #target#: #result.error ?: """"#" ) }
 		return result
 	}
 

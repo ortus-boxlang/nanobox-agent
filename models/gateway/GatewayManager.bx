@@ -1,0 +1,309 @@
+/**
+ * GatewayManager — owns NanoBox's messaging gateway lifecycle on top of bx-ai.
+ *
+ * Gateways themselves implement bx-ai's IGateway contract; this manager is the
+ * NanoBox-side layer around them: it resolves configuration (including ${ENV_VAR}
+ * credential references), instantiates and configures each platform adapter,
+ * mirrors them into bx-ai's aiGatewayRegistry() so the wider runtime can discover
+ * them, and exposes the connect/disconnect/send operations the CLI drives.
+ *
+ * @author Ortus Solutions
+ * @version 0.2.0
+ * @since 0.2.0
+ */
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+
+class {
+
+	property configManager;
+	property gateways;
+	property state;
+	property supported;
+
+	/**
+	 * @configManager  Optional ConfigManager for persisting gateway config; null disables persistence
+	 */
+	function init( any configManager = null ) {
+		variables.configManager = arguments.configManager
+		variables.gateways = {}
+		variables.state = {}
+		variables.supported = {
+			telegram            : "models.gateway.TelegramGateway",
+			email               : "models.gateway.EmailGateway",
+			discord             : "models.gateway.DiscordGateway",
+			slack               : "models.gateway.SlackGateway",
+			whatsapp            : "models.gateway.WhatsAppGateway",
+			"whatsapp-business" : "models.gateway.WhatsAppBusinessGateway",
+			signal              : "models.gateway.SignalGateway",
+			sms                 : "models.gateway.SMSGateway"
+		}
+		if ( !isNull( arguments.configManager ) ) {
+			loadConfigured()
+		}
+		return this
+	}
+
+	/**
+	 * Registers an already-built IGateway, both locally and in bx-ai's registry.
+	 *
+	 * @gateway  A bx-ai IGateway instance
+	 */
+	struct function register( required any gateway ) {
+		if ( !isInstanceOf( arguments.gateway, "IGateway" ) ) {
+			return { success: false, error: "Gateway must implement the bx-ai IGateway contract" }
+		}
+
+		var key = lCase( arguments.gateway.getName() )
+		variables.gateways[ key ] = arguments.gateway
+		variables.state[ key ] = variables.state[ key ] ?: { connectedSince: "", lastError: "" }
+		aiGatewayRegistry().register( arguments.gateway, "nanobox" )
+
+		return { success: true, name: key }
+	}
+
+	/**
+	 * Returns a registered gateway by name, or an empty struct when unknown.
+	 */
+	any function get( required string name ) {
+		return variables.gateways[ lCase( arguments.name ) ] ?: {}
+	}
+
+	/**
+	 * Status and capabilities for every registered gateway.
+	 */
+	array function list() {
+		return variables.gateways.keyArray().map( ( name ) => status( name ) )
+	}
+
+	/**
+	 * Current status of one gateway.
+	 *
+	 * @return Struct with name, connected, connectedSince, lastError, and capabilities
+	 */
+	struct function status( required string name ) {
+		var key = lCase( arguments.name )
+		var gateway = get( key )
+		if ( !isObject( gateway ) ) {
+			return { name: key, connected: false, connectedSince: "", lastError: "Gateway not found", capabilities: [] }
+		}
+
+		return {
+			name           : key,
+			connected      : gateway.isRunning(),
+			connectedSince : variables.state[ key ].connectedSince ?: "",
+			lastError      : variables.state[ key ].lastError ?: "",
+			capabilities   : gateway.getCapabilities()
+		}
+	}
+
+	/**
+	 * Starts a gateway. A gateway that cannot authenticate throws from onStart(), so it
+	 * stays not-running and the reason is recorded as lastError.
+	 */
+	struct function connect( required string name ) {
+		var key = lCase( arguments.name )
+		var gateway = get( key )
+		if ( !isObject( gateway ) ) {
+			return { success: false, error: "Gateway not found" }
+		}
+
+		try {
+			gateway.start()
+			variables.state[ key ].connectedSince = now()
+			variables.state[ key ].lastError = ""
+			return status( key )
+		} catch ( any exception ) {
+			variables.state[ key ].lastError = exception.message ?: "Gateway failed to start"
+			return status( key )
+		}
+	}
+
+	/**
+	 * Stops a gateway.
+	 */
+	struct function disconnect( required string name ) {
+		var key = lCase( arguments.name )
+		var gateway = get( key )
+		if ( !isObject( gateway ) ) {
+			return { success: false, error: "Gateway not found" }
+		}
+
+		gateway.stop()
+		variables.state[ key ].connectedSince = ""
+		return status( key )
+	}
+
+	/**
+	 * Sends a plain text message through a gateway.
+	 *
+	 * Wraps bx-ai's normalized deliver( GatewayEvent, GatewayContext ) call so callers
+	 * that just want "send this text to this recipient" do not have to build the
+	 * contract objects themselves.
+	 *
+	 * @name       Gateway name
+	 * @recipient  Platform recipient identifier (chat id, address, phone number)
+	 * @message    Text body
+	 * @return     Struct with success plus deliveryId or error
+	 */
+	struct function send( required string name, required string recipient, required string message ) {
+		var key = lCase( arguments.name )
+		var gateway = get( key )
+		if ( !isObject( gateway ) ) {
+			return { success: false, error: "Gateway not found" }
+		}
+		if ( !gateway.supports( "outboundMessages" ) ) {
+			return { success: false, error: "Gateway [#key#] does not support outbound messages" }
+		}
+
+		var context = new GatewayContext(
+			gateway       : key,
+			conversationID: arguments.recipient,
+			threadID      : arguments.recipient
+		)
+		var event = new GatewayEvent(
+			type: "message.requested",
+			data: { text: arguments.message }
+		)
+
+		try {
+			var result = gateway.deliver( event, context )
+			if ( !result.getSuccess() ) {
+				variables.state[ key ].lastError = result.getError()
+				return { success: false, error: result.getError(), recipient: arguments.recipient }
+			}
+			return { success: true, deliveryId: result.getDeliveryID(), recipient: arguments.recipient }
+		} catch ( any exception ) {
+			variables.state[ key ].lastError = exception.message ?: "Gateway delivery failed"
+			return { success: false, error: variables.state[ key ].lastError, recipient: arguments.recipient }
+		}
+	}
+
+	/**
+	 * Enables a gateway (persists enabled=true).
+	 */
+	struct function enable( required string name ) {
+		return setEnabled( arguments.name, true )
+	}
+
+	/**
+	 * Disables a gateway (persists enabled=false) and stops it.
+	 */
+	struct function disable( required string name ) {
+		var result = setEnabled( arguments.name, false )
+		if ( result.success ) {
+			disconnect( arguments.name )
+		}
+		return result
+	}
+
+	/**
+	 * Stops then starts a gateway.
+	 */
+	struct function restart( required string name ) {
+		disconnect( arguments.name )
+		return connect( arguments.name )
+	}
+
+	/**
+	 * Sets a gateway's enabled flag and persists it.
+	 */
+	struct function setEnabled( required string name, required boolean enabled ) {
+		var key = lCase( arguments.name )
+		if ( !isObject( get( key ) ) ) {
+			return { success: false, error: "Gateway not found" }
+		}
+		if ( !isNull( variables.configManager ) ) {
+			variables.configManager.set( "gateways.#key#.enabled", arguments.enabled )
+		}
+		return { success: true, name: key, enabled: arguments.enabled }
+	}
+
+	/**
+	 * Builds, configures and registers a gateway for a platform.
+	 *
+	 * @name    Platform name (telegram, email, discord, ...)
+	 * @config  Platform configuration; ${ENV_VAR} values are resolved from the environment
+	 * @save    Persist the config (credentials stripped) when true
+	 */
+	struct function create( required string name, struct config = {}, boolean save = true ) {
+		var key = lCase( arguments.name )
+		if ( !variables.supported.keyExists( key ) ) {
+			return { success: false, error: "Unsupported gateway: #arguments.name#" }
+		}
+
+		var gateway = createObject( "class", variables.supported[ key ] ).init()
+		gateway.configure( resolveEnvRefs( arguments.config ) )
+		register( gateway )
+
+		if ( arguments.save ) {
+			persist( key, arguments.config )
+		}
+		return { success: true, name: key, gateway: gateway }
+	}
+
+	/**
+	 * Removes a gateway from both registries and deletes its config entry.
+	 */
+	struct function remove( required string name ) {
+		var key = lCase( arguments.name )
+		if ( !variables.gateways.keyExists( key ) ) {
+			return { success: false, error: "Gateway not found" }
+		}
+
+		structDelete( variables.gateways, key )
+		structDelete( variables.state, key )
+		aiGatewayRegistry().unregister( "#key#@nanobox" )
+		if ( !isNull( variables.configManager ) ) {
+			variables.configManager.unset( "gateways.#key#" )
+		}
+		return { success: true, name: key }
+	}
+
+	/**
+	 * Loads persisted gateway configurations at startup.
+	 */
+	private void function loadConfigured() {
+		var stored = variables.configManager.get( "gateways", {} )
+		for ( var name in stored ) {
+			if ( variables.supported.keyExists( lCase( name ) ) ) {
+				create( name, stored[ name ].config ?: {}, false )
+			}
+		}
+	}
+
+	/**
+	 * Resolves ${ENV_VAR} references in config values against the environment, so
+	 * credentials live outside the config file. An unset variable resolves to an empty
+	 * string, which surfaces as a clear "not configured" error at connect time.
+	 */
+	private struct function resolveEnvRefs( required struct config ) {
+		return arguments.config.map( ( key, value ) => {
+			if ( !isSimpleValue( value ) ) {
+				return value
+			}
+			var match = reFind( "^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$", value, 1, true )
+			if ( !match.pos.len() || match.pos[ 1 ] == 0 ) {
+				return value
+			}
+			return getSystemSetting( mid( value, match.pos[ 2 ], match.len[ 2 ] ), "" )
+		} )
+	}
+
+	/**
+	 * Persists gateway config, stripping credential keys so secrets stay in the
+	 * environment rather than the config file.
+	 */
+	private void function persist( required string name, required struct config ) {
+		if ( isNull( variables.configManager ) ) {
+			return
+		}
+
+		var safeConfig = duplicate( arguments.config )
+		for ( var key in [ "botToken", "apiKey", "password", "token", "secret", "appToken", "authToken" ] ) {
+			structDelete( safeConfig, key )
+		}
+		variables.configManager.set( "gateways.#arguments.name#", { type: arguments.name, enabled: true, config: safeConfig } )
+	}
+
+}

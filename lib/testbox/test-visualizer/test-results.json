@@ -1593,7 +1593,7 @@
 	}],
 	"totalPass": 2,
 	"totalDuration": 115,
-	"version": "7.0.0+19",
+	"version": "7.1.0-snapshot",
 	"totalSkipped": 0,
 	"totalFail": 2,
 	"totalSpecs": 11,

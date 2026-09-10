@@ -59,7 +59,7 @@ component accessors="true" {
 		// internal id
 		variables.resultsID     = createUUID();
 		// TestBox version
-		variables.version       = "7.0.0";
+		variables.version       = "7.1.0-snapshot";
 		// Global test durations
 		variables.startTime     = getTickCount();
 		variables.endTime       = 0;
