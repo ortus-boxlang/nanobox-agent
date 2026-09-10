@@ -1,16 +1,60 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "TelegramGateway", () => {
-			it( "normalizes Telegram updates and advertises HITL capabilities", () => {
-				var gateway = new "models.gateway.TelegramGateway"( { botToken: "" } )
+			it( "implements bx-ai's IGateway and declares real capabilities", () => {
+				var gateway = new "models.gateway.TelegramGateway"()
+
+				expect( isInstanceOf( gateway, "IGateway" ) ).toBeTrue()
 				expect( gateway.getName() ).toBe( "telegram" )
-				expect( gateway.capabilities().hitlModes ).toInclude( "web" )
-				expect( gateway.capabilities().hitlDecision ).toBe( "suspend-resume" )
+				expect( gateway.getCapabilities() ).toInclude( "inboundMessages" )
+				expect( gateway.getCapabilities() ).toInclude( "outboundMessages" )
 			} )
-			it( "rejects connection without a token", () => {
-				var gateway = new "models.gateway.TelegramGateway"( { botToken: "" } )
-				expect( gateway.connect().connected ).toBeFalse()
-				expect( gateway.status().lastError ).toInclude( "token" )
+
+			it( "refuses to start without a bot token", () => {
+				var gateway = new "models.gateway.TelegramGateway"()
+				gateway.configure( { botToken: "" } )
+
+				expect( () => gateway.start() ).toThrow()
+				expect( gateway.isRunning() ).toBeFalse()
+			} )
+
+			it( "normalizes an inbound update into a GatewayMessage", () => {
+				var gateway = new "models.gateway.TelegramGateway"()
+				var messages = gateway.parseInbound( {
+					result: [ {
+						update_id: 42,
+						message  : { text: "hello there", chat: { id: 987 }, from: { id: 555, username: "lmajano" } }
+					} ]
+				} )
+
+				expect( messages ).toHaveLength( 1 )
+				expect( isInstanceOf( messages[ 1 ], "GatewayMessage" ) ).toBeTrue()
+				expect( messages[ 1 ].getText() ).toBe( "hello there" )
+				expect( messages[ 1 ].getContext().getThreadID() ).toBe( "987" )
+				expect( messages[ 1 ].getContext().getUserID() ).toBe( "555" )
+				expect( messages[ 1 ].getContext().getGateway() ).toBe( "telegram" )
+			} )
+
+			it( "treats a callback query as an action message", () => {
+				var gateway = new "models.gateway.TelegramGateway"()
+				var messages = gateway.parseInbound( {
+					update_id     : 43,
+					callback_query: { data: "approve", message: { chat: { id: 987 } }, from: { id: 555 } }
+				} )
+
+				expect( messages[ 1 ].getType() ).toBe( "action" )
+				expect( messages[ 1 ].getText() ).toBe( "approve" )
+			} )
+
+			it( "fails delivery when the context carries no chat id", () => {
+				var gateway = new "models.gateway.TelegramGateway"()
+				var result = gateway.deliver(
+					new bxModules.bxai.models.gateway.contracts.GatewayEvent( type: "message.requested", data: { text: "hi" } ),
+					new bxModules.bxai.models.gateway.contracts.GatewayContext( gateway: "telegram" )
+				)
+
+				expect( result.getSuccess() ).toBeFalse()
+				expect( result.getError() ).toInclude( "chat id" )
 			} )
 		} )
 	}

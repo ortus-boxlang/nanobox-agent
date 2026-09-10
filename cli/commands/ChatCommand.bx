@@ -20,7 +20,7 @@ class {
 	 * @appConfig         ConfigManager instance for provider/model resolution
 	 * @usageTracker      TokenTracker instance for recording usage
 	 * @sessionManager    Optional SessionManager for loading/saving conversation history
-	 * @secretPatterns    Optional array of regex patterns for secret detection (defaults to common API key formats)
+	 * @secretPatterns    Deprecated; bx-ai's OutputGuardMiddleware owns secret detection now
 	 * @blockedTools      Optional array of tool names to block (empty means no tools blocked)
 	 * @allowlistPath     Optional path to OsToolMiddleware allowlist JSON file
 	 * @requireApproval   When true, dangerous OS tool calls require user approval (default: true)
@@ -29,7 +29,8 @@ class {
 		variables.configManager = arguments.appConfig
 		variables.tokenTracker = arguments.usageTracker
 		variables.sessionManager = arguments.sessionManager
-		variables.securityMiddleware = new "models.middleware.SecurityMiddleware"( arguments.secretPatterns, arguments.blockedTools )
+		variables.blockedTools = arguments.blockedTools
+		variables.securityPolicy = new "models.security.SecurityPolicy"( arguments.appConfig )
 		variables.osToolMiddleware = new "models.middleware.OsToolMiddleware"( arguments.allowlistPath, arguments.requireApproval )
 		return this
 	}
@@ -60,19 +61,20 @@ class {
 		if ( isStruct( providerConfig ) && providerConfig.keyExists( "baseURL" ) ) { providerOptions.baseURL = providerConfig.baseURL }
 		if ( isStruct( providerConfig ) && providerConfig.keyExists( "apiKey" ) ) { providerOptions.apiKey = providerConfig.apiKey }
 		providerOptions.provider = serviceProvider; providerOptions[ "returnFormat" ] = "single"
-		// Run SecurityMiddleware beforeLLMCall to check for secrets in the query
-		var llmContext = { messages: arguments.query }
-		var securityResult = variables.securityMiddleware.beforeLLMCall( llmContext )
-		if ( !securityResult.continue ) { return { success: false, error: securityResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel } }
+		// bx-ai security middleware runs inside the chat request: prompt-injection
+		// sanitizing before the call, secret redaction on the response, and blocked
+		// tool-call enforcement in between.
+		providerOptions.middleware = variables.securityPolicy.build( variables.blockedTools )
 
 		// Run OsToolMiddleware beforeToolCall (no-op if no tool calls, but ensures safety)
 		var toolContext = { toolName: "", toolArgs: {} }
 		var osResult = variables.osToolMiddleware.beforeToolCall( toolContext )
-		if ( !osResult.continue ) {
-			if ( osResult.suspended ) {
-				return { success: false, error: "Approval required: " & osResult.question, suspended: true, toolName: osResult.toolName, toolArgs: osResult.toolArgs, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
+		if ( !osResult.isContinue() ) {
+			var pending = osResult.getData()
+			if ( osResult.isSuspended() ) {
+				return { success: false, error: "Approval required: " & ( pending.question ?: "" ), suspended: true, toolName: pending.toolName ?: "", toolArgs: pending.toolArgs ?: {}, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
 			}
-			return { success: false, error: osResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
+			return { success: false, error: osResult.getReason(), provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
 		}
 
 		try {
@@ -85,13 +87,6 @@ class {
 			if ( !isNull( variables.sessionManager ) && len( arguments.options.sessionId ?: "" ) ) {
 				variables.sessionManager.appendMessage( arguments.options.sessionId, { role: "user", content: arguments.query } )
 				variables.sessionManager.appendMessage( arguments.options.sessionId, { role: "assistant", content: content } )
-			}
-
-			// Run SecurityMiddleware afterAgentRun to check response for leaked secrets
-			var responseContext = { response: content }
-			var postSecurityResult = variables.securityMiddleware.afterAgentRun( responseContext )
-			if ( !postSecurityResult.continue ) {
-				return { success: false, error: postSecurityResult.message, provider: selection.provider, serviceProvider: serviceProvider, model: selection.model, namedModel: selection.namedModel }
 			}
 
 			// Record token usage via TokenTracker

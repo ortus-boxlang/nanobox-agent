@@ -1,24 +1,26 @@
 /**
- * SMSGateway — SMS/MMS messaging implementation of IGateway.
+ * SMSGateway — not yet implemented.
  *
- * Stub implementation that inherits lifecycle management from BaseGateway.
- * Provider integration (Twilio, AWS SNS, etc.) is planned for a future release.
+ * Registered so the platform is discoverable and configurable, but it declares no
+ * capabilities: bx-ai's IGateway defaults make every unsupported operation fail
+ * loudly (a failed GatewayDeliveryResult, or GatewayCapabilityNotSupported) rather
+ * than silently reporting success.
  *
  * @author Ortus Solutions
- * @version 0.1.0
+ * @version 0.2.0
  * @since 0.1.0
  */
-class extends="models.gateway.BaseGateway" {
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
-	/**
-	 * @config  Config struct; expected keys: accountSid, authToken, fromNumber (provider-specific)
-	 */
-	function init( struct config = {} ) { super.init( "sms", arguments.config ); return this }
+	function init() {
+		variables.name = "sms"
+		variables.description = "SMS (Twilio) gateway (not implemented)"
+		variables.options = {}
+		return this
+	}
 
-	/**
-	 * Returns the feature capabilities supported by SMS.
-	 *
-	 * @return Capabilities struct reflecting SMS text-only constraints (no media, reactions, threads, or buttons)
-	 */
-	struct function capabilities() { return { text: true, attachments: false, images: false, audio: false, video: false, reactions: false, threads: false, buttons: false, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
+	public array function getDeclaredCapabilities() {
+		return []
+	}
+
 }

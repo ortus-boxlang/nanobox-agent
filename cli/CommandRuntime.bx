@@ -93,7 +93,7 @@ class {
 			case "restart":
 			case "status":
 			case "doctor": return new "cli.CoreLifecycleCommand"( variables.config ).execute( command, args )
-			case "gateway": return new "cli.commands.GatewayCommand"( new "models.gateway.GatewayRegistry"( variables.config ), variables.config ).execute( action ?: "status", args )
+			case "gateway": return new "cli.commands.GatewayCommand"( new "models.gateway.GatewayManager"( variables.config ), variables.config ).execute( action ?: "status", args )
 			case "model": return new "cli.commands.ModelCommand"( variables.config ).execute( action ?: "current", args )
 			case "browser": return new "cli.commands.BrowserCommand"( variables.config ).execute( action ?: "status", args )
 			case "skill":

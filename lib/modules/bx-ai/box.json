@@ -1,7 +1,7 @@
 {
 	"name": "BoxLang AI",
-	"version": "3.3.2+17",
-	"location": "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/bx-ai/3.3.2/bx-ai-3.3.2.zip",
+	"version": "3.4.0+18",
+	"location": "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/bx-ai/3.4.0/bx-ai-3.4.0.zip",
 	"author": "Ortus Solutions",
 	"homepage": "https://github.com/ortus-boxlang/bx-ai",
 	"documentation": "https://github.com/ortus-boxlang/bx-ai",

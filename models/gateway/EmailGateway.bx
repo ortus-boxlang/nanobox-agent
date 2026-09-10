@@ -1,24 +1,26 @@
 /**
- * EmailGateway — email messaging implementation of IGateway.
+ * EmailGateway — not yet implemented.
  *
- * Stub implementation that inherits lifecycle management from BaseGateway.
- * Full SMTP/IMAP integration is planned for a future release.
+ * Registered so the platform is discoverable and configurable, but it declares no
+ * capabilities: bx-ai's IGateway defaults make every unsupported operation fail
+ * loudly (a failed GatewayDeliveryResult, or GatewayCapabilityNotSupported) rather
+ * than silently reporting success.
  *
  * @author Ortus Solutions
- * @version 0.1.0
+ * @version 0.2.0
  * @since 0.1.0
  */
-class extends="models.gateway.BaseGateway" {
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
-	/**
-	 * @config  Config struct; expected keys: host, port, username, password, from
-	 */
-	function init( struct config = {} ) { super.init( "email", arguments.config ); return this }
+	function init() {
+		variables.name = "email"
+		variables.description = "Email (IMAP/SMTP) gateway (not implemented)"
+		variables.options = {}
+		return this
+	}
 
-	/**
-	 * Returns the feature capabilities supported by the email platform.
-	 *
-	 * @return Capabilities struct reflecting email's text and attachment support (no media/reactions/threads)
-	 */
-	struct function capabilities() { return { text: true, attachments: true, images: false, audio: false, video: false, reactions: false, threads: false, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
+	public array function getDeclaredCapabilities() {
+		return []
+	}
+
 }

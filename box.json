@@ -5,7 +5,7 @@
     "language": "boxlang",
     "dependencies": {
         "testbox": "^7.0.0+19",
-        "bx-ai": "^3.3.2+17",
+        "bx-ai": "^3.4.0+18",
         "bx-sqlite": "^1.2.0+5"
     },
     "devDependencies": {

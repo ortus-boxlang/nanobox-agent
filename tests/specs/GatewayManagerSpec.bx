@@ -1,0 +1,43 @@
+class extends="testbox.system.BaseSpec" {
+	function run() {
+		describe( "GatewayManager", () => {
+			it( "registers a gateway locally and in bx-ai's gateway registry", () => {
+				var manager = new "models.gateway.GatewayManager"()
+				var gateway = aiGateway( "mock" )
+
+				expect( manager.register( gateway ).success ).toBeTrue()
+				expect( manager.list() ).toHaveLength( 1 )
+				expect( aiGatewayRegistry().has( "mock@nanobox" ) ).toBeTrue()
+			} )
+
+			it( "starts and stops a gateway through the bx-ai lifecycle", () => {
+				var manager = new "models.gateway.GatewayManager"()
+				manager.register( aiGateway( "mock" ) )
+
+				expect( manager.status( "mock" ).connected ).toBeFalse()
+				expect( manager.connect( "mock" ).connected ).toBeTrue()
+				expect( manager.disconnect( "mock" ).connected ).toBeFalse()
+			} )
+
+			it( "reports capabilities from the gateway itself", () => {
+				var manager = new "models.gateway.GatewayManager"()
+				manager.register( aiGateway( "mock" ) )
+
+				expect( manager.status( "mock" ).capabilities ).toInclude( "outboundMessages" )
+			} )
+
+			it( "resolves ${ENV_VAR} credential references from the environment", () => {
+				var manager = new "models.gateway.GatewayManager"()
+				var created = manager.create( "telegram", { botToken: "${NANOBOX_SPEC_TOKEN_UNSET}" }, false )
+
+				expect( created.success ).toBeTrue()
+				expect( created.gateway.getOptions().botToken ).toBe( "" )
+			} )
+
+			it( "rejects anything that is not a bx-ai IGateway", () => {
+				var manager = new "models.gateway.GatewayManager"()
+				expect( manager.register( { name: "nope" } ).success ).toBeFalse()
+			} )
+		} )
+	}
+}

@@ -1,140 +1,171 @@
 /**
- * TelegramGateway — Telegram Bot API implementation of IGateway.
+ * TelegramGateway — Telegram Bot API adapter built on bx-ai's IGateway contract.
  *
- * Authenticates via the Bot Token stored in config.botToken, supports sending
- * messages, and polls for incoming updates using long-polling (getUpdates).
- * Maintains an update offset so each poll returns only new messages.
+ * Authenticates via the bot token in options.botToken, delivers outbound messages
+ * through sendMessage, and normalizes inbound updates (long-polled via getUpdates,
+ * or handed in from a webhook) into bx-ai GatewayMessage instances.
  *
  * @author Ortus Solutions
- * @version 0.1.0
+ * @version 0.2.0
  * @since 0.1.0
  */
-class extends="models.gateway.BaseGateway" {
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
 	property apiBase;
 	property updateOffset;
 
-	/**
-	 * @config  Config struct; expected keys: botToken (required), apiBase (optional),
-	 *          timeout (default 15 seconds for HTTP calls)
-	 */
-	function init( struct config = {} ) {
-		super.init( "telegram", arguments.config )
-		variables.apiBase = arguments.config.apiBase ?: "https://api.telegram.org"
+	function init() {
+		variables.name = "telegram"
+		variables.description = "Telegram Bot API gateway"
+		variables.options = {}
+		variables.apiBase = "https://api.telegram.org"
 		variables.updateOffset = 0
 		return this
 	}
 
 	/**
-	 * Authenticates with the Telegram Bot API using getMe.
-	 *
-	 * Sets connected=true on success and records connectedSince.
-	 * On failure, sets lastError and returns the current status.
-	 *
-	 * @return Status struct from status()
+	 * @options  Expected keys: botToken (required), apiBase (optional), timeout (default 15s)
 	 */
-	struct function connect() {
-		if ( !len( variables.config.botToken ?: "" ) ) {
-			variables.lastError = "Telegram bot token is not configured"
-			return status()
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.apiBase = variables.options.apiBase ?: "https://api.telegram.org"
+		return this
+	}
+
+	public array function getDeclaredCapabilities() {
+		return [ "inboundMessages", "outboundMessages", "threads" ]
+	}
+
+	/**
+	 * Authenticates against the Bot API. Throws so start() leaves the gateway
+	 * not-running when credentials are missing or rejected.
+	 */
+	public void function onStart() {
+		if ( !len( variables.options.botToken ?: "" ) ) {
+			throw( type: "NanoBox.GatewayConfigError", message: "Telegram bot token is not configured" )
 		}
+
+		var response = callApi( "getMe", {} )
+		if ( !( response.ok ?: false ) ) {
+			throw(
+				type   : "NanoBox.GatewayConnectError",
+				message: response.description ?: "Telegram authentication failed"
+			)
+		}
+	}
+
+	/**
+	 * Delivers a message to a Telegram chat.
+	 *
+	 * @event    Carries the text to send in data.text
+	 * @context  Identifies the chat via threadID (falling back to conversationID)
+	 */
+	public GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var chatId = len( arguments.context.getThreadID() ) ? arguments.context.getThreadID() : arguments.context.getConversationID()
+		if ( !len( chatId ) ) {
+			return GatewayDeliveryResult.failure( "No Telegram chat id on the gateway context" )
+		}
+
+		var text = arguments.event.getData().text ?: ""
 		try {
-			var response = callApi( "getMe", {} )
-			if ( !response.ok ) { variables.lastError = response.description ?: "Telegram authentication failed"; return status() }
-			variables.connected = true
-			variables.connectedSince = now()
-			variables.lastError = ""
-			return status()
+			var response = callApi( "sendMessage", { chat_id: chatId, text: text } )
+			if ( !( response.ok ?: false ) ) {
+				return GatewayDeliveryResult.failure( response.description ?: "Telegram send failed" )
+			}
+			return new GatewayDeliveryResult(
+				success   : true,
+				deliveryID: toString( response.result.message_id ?: "" ),
+				raw       : response
+			)
 		} catch ( any exception ) {
-			variables.lastError = exception.message ?: "Telegram connection failed"
-			return status()
+			return GatewayDeliveryResult.failure( exception.message ?: "Telegram send failed" )
 		}
 	}
 
 	/**
-	 * Sends a text message to a Telegram chat.
+	 * Normalizes a raw Telegram payload into GatewayMessage instances. Accepts either a
+	 * single update (a webhook body) or a getUpdates response carrying a result array.
 	 *
-	 * @recipient  Telegram chat ID or username
-	 * @message    Text to send
-	 * @return     Struct with success flag, messageId, and recipient keys
+	 * @payload  Raw Telegram update, or a struct with a result array of updates
 	 */
-	struct function send( required string recipient, required string message ) {
-		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected" } }
-		try {
-			var response = callApi( "sendMessage", { chat_id: arguments.recipient, text: arguments.message } )
-			if ( !response.ok ) { return { success: false, error: response.description ?: "Telegram send failed" } }
-			return { success: true, messageId: response.result.message_id ?: "", recipient: arguments.recipient }
-		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram send failed" } }
+	public array function parseInbound( required any payload, struct requestContext = {} ) {
+		var updates = isStruct( arguments.payload ) && arguments.payload.keyExists( "result" ) ? arguments.payload.result : [ arguments.payload ]
+
+		return updates.map( ( update ) => {
+			var message = update.message ?: update.callback_query?.message ?: {}
+			var sender  = message.from ?: update.callback_query?.from ?: {}
+			var context = new GatewayContext(
+				gateway       : variables.name,
+				conversationID: toString( message.chat?.id ?: "" ),
+				threadID      : toString( message.chat?.id ?: "" ),
+				userID        : toString( sender.id ?: "" ),
+				identity      : { username: sender.username ?: "" },
+				raw           : update
+			)
+
+			return new GatewayMessage(
+				type   : update.keyExists( "callback_query" ) ? "action" : "message",
+				text   : message.text ?: update.callback_query?.data ?: "",
+				context: context,
+				raw    : update
+			)
+		} )
 	}
 
 	/**
-	 * Long-polls for pending updates from Telegram.
+	 * Long-polls Telegram for pending updates, advancing the internal offset so each
+	 * call only returns messages not yet seen.
 	 *
-	 * Updates the internal offset after each batch so subsequent calls return
-	 * only new messages.
-	 *
-	 * @timeout  Long-poll timeout in seconds (default 10)
-	 * @return   Struct with success flag and a normalised updates array
+	 * @timeout  Long-poll timeout in seconds
+	 * @return   Struct with success, an array of GatewayMessage, and optional error
 	 */
 	struct function poll( numeric timeout = 10 ) {
-		if ( !variables.connected ) { return { success: false, error: "Gateway is not connected", updates: [] } }
+		if ( !isRunning() ) {
+			return { success: false, error: "Gateway is not running", messages: [] }
+		}
+
 		try {
-			var response = callApi( "getUpdates", { offset: variables.updateOffset, timeout: arguments.timeout, allowed_updates: [ "message", "callback_query" ] } )
-			if ( !response.ok ) { return { success: false, error: response.description ?: "Telegram polling failed", updates: [] } }
-			var normalized = []
+			var response = callApi( "getUpdates", {
+				offset          : variables.updateOffset,
+				timeout         : arguments.timeout,
+				allowed_updates : [ "message", "callback_query" ]
+			} )
+			if ( !( response.ok ?: false ) ) {
+				return { success: false, error: response.description ?: "Telegram polling failed", messages: [] }
+			}
+
 			for ( var update in ( response.result ?: [] ) ) {
 				variables.updateOffset = max( variables.updateOffset, ( update.update_id ?: 0 ) + 1 )
-				normalized.append( normalizeUpdate( update ) )
 			}
-			return { success: true, updates: normalized }
-		} catch ( any exception ) { return { success: false, error: exception.message ?: "Telegram polling failed", updates: [] } }
-	}
 
-	/**
-	 * Returns the full capability set supported by the Telegram platform.
-	 *
-	 * @return Capabilities struct with all features enabled including HITL support
-	 */
-	struct function capabilities() { return { text: true, attachments: true, images: true, audio: true, video: true, reactions: true, threads: true, buttons: true, hitl: true, hitlModes: [ "web" ], hitlMode: "web", hitlDecision: "suspend-resume" } }
-
-	/**
-	 * Normalises a raw Telegram update into a platform-agnostic message struct.
-	 *
-	 * @update  Raw Telegram update object from the getUpdates response
-	 * @return  Struct with id, gateway, kind, chatId, userId, username, text, and raw keys
-	 */
-	private struct function normalizeUpdate( required struct update ) {
-		var message = arguments.update.message ?: arguments.update.callback_query?.message ?: {}
-		var sender = message.from ?: arguments.update.callback_query?.from ?: {}
-		return {
-			id: arguments.update.update_id ?: "",
-			gateway: "telegram",
-			kind: arguments.update.keyExists( "callback_query" ) ? "callback" : "message",
-			chatId: message.chat?.id ?: "",
-			userId: sender.id ?: "",
-			username: sender.username ?: "",
-			text: message.text ?: arguments.update.callback_query?.data ?: "",
-			raw: arguments.update
+			return { success: true, messages: parseInbound( response ) }
+		} catch ( any exception ) {
+			return { success: false, error: exception.message ?: "Telegram polling failed", messages: [] }
 		}
 	}
 
 	/**
 	 * Makes an authenticated POST request to the Telegram Bot API.
 	 *
-	 * @method      Telegram API method name (e.g. "sendMessage", "getUpdates")
+	 * @method      API method name (e.g. "sendMessage", "getUpdates")
 	 * @parameters  Request body parameters
-	 * @return      Parsed JSON response struct
 	 */
 	private struct function callApi( required string method, struct parameters = {} ) {
-		var token = variables.config.botToken ?: ""
 		var response = http(
-			url: variables.apiBase & "/bot" & token & "/" & arguments.method,
-			method: "POST",
-			timeout: variables.config.timeout ?: 15,
+			url    : variables.apiBase & "/bot" & ( variables.options.botToken ?: "" ) & "/" & arguments.method,
+			method : "POST",
+			timeout: variables.options.timeout ?: 15,
 			charset: "utf-8",
-			body: jsonSerialize( arguments.parameters ),
+			body   : jsonSerialize( arguments.parameters ),
 			headers: { "Content-Type": "application/json" }
 		)
-		var content = response.fileContent ?: response.content ?: "{}"
-		return jsonDeserialize( content )
+		return jsonDeserialize( response.fileContent ?: response.content ?: "{}" )
 	}
+
 }

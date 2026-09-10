@@ -1,0 +1,88 @@
+/**
+ * SecurityPolicy — builds NanoBox's agent security middleware from bx-ai's stack.
+ *
+ * bx-ai 3.4 ships the in-request half of NanoBox's security posture natively, so
+ * this class maps NanoBox configuration onto those middlewares rather than
+ * re-implementing the checks:
+ *
+ *   - InputSanitizerMiddleware  prompt-injection detection, unicode hygiene, and
+ *                               tool-result scanning before the LLM call
+ *   - OutputGuardMiddleware     secret/PII redaction and exfil-link stripping on
+ *                               responses
+ *   - GuardrailMiddleware       blocking dangerous tool calls by name or argument
+ *
+ * Note that only InputSanitizerMiddleware is auto-wired by bx-ai's own
+ * `security.enabled` module setting; the other two must be attached to the agent
+ * explicitly, which is what build() returns them for.
+ *
+ * On-disk scanning of skills, agent definitions and cron entries is NOT part of
+ * this: bx-ai's security is entirely in-request, so SecurityCzar remains
+ * NanoBox's own layer for that.
+ *
+ * @author Ortus Solutions
+ * @version 0.2.0
+ * @since 0.2.0
+ */
+import bxModules.bxai.models.middleware.core.GuardrailMiddleware;
+import bxModules.bxai.models.middleware.security.InputSanitizerMiddleware;
+import bxModules.bxai.models.middleware.security.OutputGuardMiddleware;
+
+class {
+
+	property config;
+
+	/**
+	 * @config  Optional ConfigManager; when absent, secure defaults are used
+	 */
+	function init( any config = null ) {
+		variables.config = arguments.config
+		return this
+	}
+
+	/**
+	 * Builds the middleware chain to attach to an agent.
+	 *
+	 * @blockedTools  Tool names that must never be called
+	 * @return        Array of bx-ai middleware instances
+	 */
+	array function build( array blockedTools = [] ) {
+		var settings = setting( "security", {} )
+		if ( structKeyExists( settings, "enabled" ) && !settings.enabled ) {
+			return []
+		}
+
+		var middleware = [
+			new InputSanitizerMiddleware(
+				action          : settings.inputAction ?: "flag",
+				normalizeUnicode: true,
+				stripZeroWidth  : true,
+				scanToolResults : true
+			),
+			new OutputGuardMiddleware(
+				action             : settings.outputAction ?: "redact",
+				mask               : settings.mask ?: "[REDACTED]",
+				stripMarkdownImages: true,
+				scanAgentOutput    : true
+			)
+		]
+
+		var blocked = arguments.blockedTools.len() ? arguments.blockedTools : ( settings.blockedTools ?: [] )
+		var argPatterns = settings.argPatterns ?: {}
+		if ( blocked.len() || !structIsEmpty( argPatterns ) ) {
+			middleware.append( new GuardrailMiddleware( blockedTools: blocked, argPatterns: argPatterns ) )
+		}
+
+		return middleware
+	}
+
+	/**
+	 * Reads a NanoBox config value, tolerating an absent ConfigManager.
+	 */
+	private any function setting( required string key, any defaultValue = "" ) {
+		if ( isNull( variables.config ) ) {
+			return arguments.defaultValue
+		}
+		return variables.config.get( arguments.key, arguments.defaultValue )
+	}
+
+}
