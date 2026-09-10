@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /next/
+
+Sitemap: https://ortus-boxlang.github.io/nanobox-agent/sitemap.xml
