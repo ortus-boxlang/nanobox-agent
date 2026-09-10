@@ -294,6 +294,16 @@ class {
 	 * @return  Struct with success flag, interactive=true, and sessionId
 	 */
 	private struct function interactiveChat( struct parsed = {} ) {
+		// Interactive chat reads keystrokes, so it needs a real terminal. Without one
+		// (a script, a CI job, a pipe) the read fails partway in; say so up front and
+		// point at the one-shot form instead.
+		if ( isNull( createObject( "java", "java.lang.System" ).console() ) ) {
+			return {
+				success: false,
+				error  : "Interactive chat requires a terminal. Use nanobox chat -q ""your question"" for a one-shot query."
+			}
+		}
+
 		var mwConfig  = variables.config.get( "nanobox.middleware", {} )
 		var tuiConfig = variables.config.get( "nanobox.tui", {} )
 
@@ -345,11 +355,17 @@ class {
 		// ── Attempt Lanterna startup ───────────────────────────────────────
 		var screen      = new "cli.util.LanternaScreen"()
 		var useLanterna = false
-		try {
-			screen.startScreen()
-			useLanterna = true
-		} catch ( any e ) {
-			// Headless or JAR missing — ANSI fallback below
+		// Only take over the terminal when there genuinely is one. System.console() is
+		// null whenever stdin/stdout are redirected - a test run, a CI job, a pipe - and
+		// starting the TUI there hands control to an event loop that blocks forever
+		// waiting on key input. The ANSI fallback below handles those cases.
+		if ( !isNull( createObject( "java", "java.lang.System" ).console() ) ) {
+			try {
+				screen.startScreen()
+				useLanterna = true
+			} catch ( any e ) {
+				// Terminal refused the alternate-screen buffer — ANSI fallback below
+			}
 		}
 
 		var renderer = new "cli.util.InteractiveChatRenderer"( interactive, theme, useLanterna ? screen : null, wrapWidth )
@@ -758,7 +774,7 @@ class {
 										fi = ( fi + 1 ) % 10
 										state.messages[ assistantMsgIdx ] = { role: "assistant", content: spinFrames2[ fi + 1 ] & "  Thinking…" }
 										renderer.renderChatOnly( state )
-										try { createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", 100 ) ) } catch ( any e2 ) { break }
+										if ( !pauseQuietly( 100 ) ) { spinActive.set( false ) }
 									}
 								}
 							)
@@ -825,6 +841,26 @@ class {
 		}
 
 		return { success: true, interactive: true, sessionId: started.sessionId }
+	}
+
+	/**
+	 * Sleeps for the given interval, reporting whether it completed rather than throwing.
+	 *
+	 * This exists as a named function purely so the try/catch lives outside the spinner
+	 * lambda: BoxLang emits bytecode that fails JVM verification ("Inconsistent stackmap
+	 * frames") for a try/catch inside a lambda body, and because that surfaces when the
+	 * class is constructed, it takes down every command this runtime dispatches.
+	 *
+	 * @millis  How long to sleep, in milliseconds
+	 * @return  true if the sleep completed, false if it was interrupted
+	 */
+	private boolean function pauseQuietly( required numeric millis ) {
+		try {
+			createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", arguments.millis ) )
+			return true
+		} catch ( any e ) {
+			return false
+		}
 	}
 
 }

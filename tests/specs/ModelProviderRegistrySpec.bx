@@ -1,22 +1,24 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Model and provider registry", () => {
 			it( "stores provider configuration and named models", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-registry-#createUUID()#" )
 				var provider = new "cli.commands.ProviderCommand"( config )
 				var model = new "cli.commands.ModelCommand"( config )
-				expect( provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1", credentialEnv: "LM_KEY" } ).success ).toBeTrue()
-				expect( model.execute( "add", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.2 }, default: true } ).success ).toBeTrue()
-				expect( model.execute( "status", {} ).namedModels[ "local-coder" ].provider ).toBe( "lmstudio" )
+				expect( provider.execute( "add", { name: live.providerName(), type: "openai-compatible", baseURL: live.baseURL(), credentialEnv: "NOVITA_API_KEY" } ).success ).toBeTrue()
+				expect( model.execute( "add", { name: "local-coder", provider: live.providerName(), model: live.model(), options: { temperature: 0.2 }, default: true } ).success ).toBeTrue()
+				expect( model.execute( "status", {} ).namedModels[ "local-coder" ].provider ).toBe( live.providerName() )
 				expect( model.execute( "current", {} ).namedModel ).toBe( "local-coder" )
 			} )
-			it( "discovers LM Studio models through openai-compatible bx-ai", () => {
+			// Live spec: lists models from a real provider. Needs NOVITA_API_KEY.
+			it( title = "discovers models through openai-compatible bx-ai", skip = live.skipUnlessAvailable(), body = () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-discovery-#createUUID()#" )
 				var provider = new "cli.commands.ProviderCommand"( config )
 				var model = new "cli.commands.ModelCommand"( config )
-				provider.execute( "add", { name: "lmstudio", type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
-				provider.execute( "set", { name: "lmstudio" } )
-				var result = model.execute( "list", { provider: "lmstudio" } )
+				provider.execute( "add", { name: live.providerName(), type: "openai-compatible", baseURL: live.baseURL(), credentialEnv: "NOVITA_API_KEY" } )
+				provider.execute( "set", { name: live.providerName() } )
+				var result = model.execute( "list", { provider: live.providerName() } )
 				expect( result.success ).toBeTrue()
 				expect( result.models ).notToBeEmpty()
 			} )

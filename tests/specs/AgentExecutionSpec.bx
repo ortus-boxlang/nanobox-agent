@@ -1,14 +1,16 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Agent execution", () => {
-			it( "runs a real configured OpenAI-compatible agent", () => {
+			// Live spec: drives a real OpenAI-compatible provider. Needs NOVITA_API_KEY.
+			it( title = "runs a real configured OpenAI-compatible agent", skip = live.skipUnlessAvailable(), body = () => {
 				var path = getTempDirectory() & "/agent-run-#createUUID()#"
 				var managerConfig = new "models.system.ConfigManager"( path & "/config" )
-				managerConfig.set( "bx-ai.defaultProvider", "lmstudio" )
-				managerConfig.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
-				managerConfig.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				managerConfig.set( "bx-ai.defaultProvider", live.providerName() )
+				managerConfig.set( "bx-ai.defaultModel", live.model() )
+				managerConfig.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var manager = new "models.agents.AgentManager"( path & "/agents", managerConfig )
-				manager.create( "local", "Local agent", "qwen/qwen3.6-35b-a3b", "Reply exactly with AGENT_RUN_OK" )
+				manager.create( "local", "Local agent", live.model(), "Reply exactly with AGENT_RUN_OK" )
 				var result = manager.run( "local", "Reply exactly with AGENT_RUN_OK" )
 				expect( result.success ).toBeTrue()
 				expect( result.agent ).toBe( "local" )

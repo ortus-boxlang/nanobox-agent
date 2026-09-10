@@ -1,18 +1,20 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "ModelCommand", () => {
 			it( "returns current configuration without contacting a provider", () => {
 				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-#createUUID()#" )
-				config.set( "bx-ai.defaultProvider", "lmstudio" )
-				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
+				config.set( "bx-ai.defaultProvider", live.providerName() )
+				config.set( "bx-ai.defaultModel", live.model() )
 				var result = new "cli.commands.ModelCommand"( config ).execute( "current", {} )
 				expect( result.success ).toBeTrue()
-				expect( result.model ).toBe( "qwen/qwen3.6-35b-a3b" )
+				expect( result.model ).toBe( live.model() )
 			} )
-			it( "discovers LM Studio models through openai-compatible service", () => {
-				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-lmstudio-#createUUID()#" )
-				config.set( "bx-ai.defaultProvider", "lmstudio" )
-				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+			// Live spec: discovers models from a real provider. Needs NOVITA_API_KEY.
+			it( title = "discovers models through the openai-compatible service", skip = live.skipUnlessAvailable(), body = () => {
+				var config = new "models.system.ConfigManager"( getTempDirectory() & "/model-live-#createUUID()#" )
+				config.set( "bx-ai.defaultProvider", live.providerName() )
+				config.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var result = new "cli.commands.ModelCommand"( config ).execute( "refresh", {} )
 				expect( result.success ).toBeTrue()
 				expect( result.serviceProvider ).toBe( "openai-compatible" )

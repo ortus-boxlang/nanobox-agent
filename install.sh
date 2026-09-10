@@ -288,7 +288,7 @@ cat > "$BX_CONFIG" <<EOF
 			"connectionString": "jdbc:sqlite:$DB_PATH"
 		}
 	},
-	"classPaths": [
+	"javaLibraryPaths": [
 		"$( $LOCAL_MODE && echo "$SCRIPT_DIR/lib/java" || echo "$VERSION_DIR/lib/java" )"
 	]
 }

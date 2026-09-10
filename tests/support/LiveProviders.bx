@@ -1,0 +1,71 @@
+/**
+ * LiveProviders — the live LLM endpoint the integration specs drive.
+ *
+ * A handful of specs exercise a real OpenAI-compatible provider end to end: agent
+ * execution, chat model selection, and model discovery. They run against Novita AI,
+ * which nanobox talks to through its generic {@code openai-compatible} provider type.
+ *
+ * The credential is never inlined. Provider config stores the literal string
+ * {@code ${NOVITA_API_KEY}} and ConfigManager resolves it from the environment on
+ * load, so these specs also cover nanobox's credential indirection.
+ *
+ * Without NOVITA_API_KEY in the environment there is nothing to assert against, so
+ * the specs skip rather than fail. Export the key and re-run to exercise them.
+ *
+ * @author Ortus Solutions
+ */
+class {
+
+	/**
+	 * Logical provider name the specs register in config.
+	 */
+	string function providerName() {
+		return "novita"
+	}
+
+	/**
+	 * OpenAI-compatible base URL. bx-ai appends /chat/completions and /models.
+	 */
+	string function baseURL() {
+		return "https://api.novita.ai/openai"
+	}
+
+	/**
+	 * The model the live specs ask for.
+	 */
+	string function model() {
+		return "deepseek/deepseek-v4.1-flash"
+	}
+
+	/**
+	 * Provider block to store under bx-ai.providers.<name>.
+	 *
+	 * @return Struct with type, baseURL, and an unresolved apiKey reference
+	 */
+	struct function providerConfig() {
+		return {
+			type   : "openai-compatible",
+			baseURL: baseURL(),
+			apiKey : "${NOVITA_API_KEY}"
+		}
+	}
+
+	/**
+	 * True when a credential is present for the live provider.
+	 *
+	 * @return Boolean availability flag
+	 */
+	boolean function isAvailable() {
+		return len( trim( getSystemSetting( "NOVITA_API_KEY", "" ) ) ) > 0
+	}
+
+	/**
+	 * TestBox skip flag: true when the live provider has no credential.
+	 *
+	 * @return Boolean skip flag
+	 */
+	boolean function skipUnlessAvailable() {
+		return !isAvailable()
+	}
+
+}

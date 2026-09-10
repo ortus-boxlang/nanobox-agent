@@ -19,7 +19,7 @@ class extends="testbox.system.BaseSpec" {
 				var cmd = new "cli.commands.ImageCommand"( variables.mockConfig )
 				var result = cmd.execute( "a test prompt", {} )
 				expect( result.success ).toBeFalse()
-				expect( result.error ).toBeEmpty().or.toInclude( "provider" )
+				expect( result.error ).toInclude( "provider" )
 			} )
 
 			it( "handles named model resolution", () => {

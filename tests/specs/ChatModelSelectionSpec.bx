@@ -1,21 +1,24 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "Chat model selection", () => {
-			it( "uses the configured default model", () => {
+			// Live spec: drives a real OpenAI-compatible provider. Needs NOVITA_API_KEY.
+			it( title = "uses the configured default model", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-default-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				config.set( "bx-ai.defaultProvider", "lmstudio" )
-				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
-				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				config.set( "bx-ai.defaultProvider", live.providerName() )
+				config.set( "bx-ai.defaultModel", live.model() )
+				config.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var result = new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly DEFAULT_CHAT_OK" )
 				expect( result.success ).toBeTrue()
-				expect( result.model ).toBe( "qwen/qwen3.6-35b-a3b" )
+				expect( result.model ).toBe( live.model() )
 			} )
-			it( "uses a named model", () => {
+			// Live spec: drives a real OpenAI-compatible provider. Needs NOVITA_API_KEY.
+			it( title = "uses a named model", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-named-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				config.set( "bx-ai.namedModels.local-coder", { name: "local-coder", provider: "lmstudio", model: "qwen/qwen3.6-35b-a3b", options: { temperature: 0.1 } } )
-				config.set( "bx-ai.providers.lmstudio", { type: "openai-compatible", baseURL: "http://localhost:1234/v1" } )
+				config.set( "bx-ai.namedModels.local-coder", { name: "local-coder", provider: live.providerName(), model: live.model(), options: { temperature: 0.1 } } )
+				config.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var result = new "cli.commands.ChatCommand"( config, new "models.util.TokenTracker"( home & "/tokens.json" ) ).execute( "Reply with exactly NAMED_CHAT_OK", { namedModel: "local-coder" } )
 				expect( result.success ).toBeTrue()
 				expect( result.namedModel ).toBe( "local-coder" )

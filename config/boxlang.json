@@ -2,7 +2,10 @@
 	"clearClassFilesOnStartup": true,
 	"classResolverCache": true,
 	"trustedCache": false,
-	"validClassExtensions": [ "bx", "cfc" ],
+	"validClassExtensions": [
+		"bx",
+		"cfc"
+	],
 	"mappings": {
 		"/testbox": "${user-dir}/lib/testbox",
 		"/tests": "${user-dir}/tests",
@@ -20,7 +23,7 @@
 			"connectionString": "jdbc:sqlite:${user-home}/.nanobox/data/nanobox.db"
 		}
 	},
-	"classPaths": [
+	"javaLibraryPaths": [
 		"${user-dir}/lib/java"
 	]
 }

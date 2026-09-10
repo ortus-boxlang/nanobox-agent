@@ -70,9 +70,14 @@ class {
 	 * @return Struct with deleted (boolean) and id keys
 	 */
 	struct function remove( required string id ) {
-		queryExecute( "DELETE FROM nanobox_user_memory WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
-		var exists = get( arguments.id )
-		return { deleted: structIsEmpty( exists ), id: arguments.id }
+		// deleted reports whether a row was actually removed, so it has to be decided
+		// before the DELETE: checking that the row is absent afterwards is trivially
+		// true for an id that never existed in the first place.
+		var existed = !structIsEmpty( get( arguments.id ) )
+		if ( existed ) {
+			queryExecute( "DELETE FROM nanobox_user_memory WHERE id = :id", { id: arguments.id }, { datasource: variables.datasource } )
+		}
+		return { deleted: existed, id: arguments.id }
 	}
 
 	/**

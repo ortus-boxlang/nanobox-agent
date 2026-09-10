@@ -4,7 +4,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "installs from HTTP URL", () => {
 				var root = getTempDirectory() & "/ms-http-" & createUUID()
 				var manager = new "models.skills.SkillManager"( root & "/.agents/skills" )
-				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var url = "https://raw.githubusercontent.com/ortus-boxlang/nanobox-agent/development/.agents/skills-custom/activation-skill/SKILL.md"
 				var result = manager.install( url )
 				expect( result.success ).toBeTrue()
 				expect( fileExists( root & "/.agents/skills-custom/SKILL/SKILL.md" ) ).toBeTrue()
@@ -13,7 +13,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "installs from HTTP URL with custom name", () => {
 				var root = getTempDirectory() & "/ms-http-named-" & createUUID()
 				var manager = new "models.skills.SkillManager"( root & "/.agents/skills" )
-				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var url = "https://raw.githubusercontent.com/ortus-boxlang/nanobox-agent/development/.agents/skills-custom/activation-skill/SKILL.md"
 				var result = manager.install( url, false, "my-custom-skill" )
 				expect( result.success ).toBeTrue()
 				expect( fileExists( root & "/.agents/skills-custom/my-custom-skill/SKILL.md" ) ).toBeTrue()
@@ -43,7 +43,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "respects force flag for existing skills", () => {
 				var root = getTempDirectory() & "/ms-force-" & createUUID()
 				var manager = new "models.skills.SkillManager"( root & "/.agents/skills" )
-				var url = "https://raw.githubusercontent.com/ortus-solutions/nanobox/main/.agents/skills/nanobox-code-review/SKILL.md"
+				var url = "https://raw.githubusercontent.com/ortus-boxlang/nanobox-agent/development/.agents/skills-custom/activation-skill/SKILL.md"
 				var result1 = manager.install( url )
 				expect( result1.success ).toBeTrue()
 				var result2 = manager.install( url )

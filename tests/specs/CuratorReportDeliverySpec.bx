@@ -12,7 +12,9 @@ class extends="testbox.system.BaseSpec" {
 				var root = getTempDirectory() & "/delivery-on-#createUUID()#"
 				var config = new "models.system.ConfigManager"( root & "/config" )
 				config.set( "curator.reportDelivery", { enabled: true, gateway: "test", recipient: "user", mode: "summary" } )
-				var registry = { get: ( name ) => new "tests.support.ReportGateway"() }
+				// Mirrors GatewayManager.send( name, recipient, message ), which is what
+				// CuratorReportManager delegates delivery to.
+				var registry = { send: ( name, recipient, message ) => new "tests.support.ReportGateway"().send( recipient, message ) }
 				var manager = new "models.skills.CuratorReportManager"( root, new "models.vault.VaultManager"( root & "/vault" ), config, registry )
 				var result = manager.write( { success: true, dryRun: false, checked: 1, changes: [] } )
 				expect( result.delivery.delivered ).toBeTrue()

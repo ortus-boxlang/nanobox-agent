@@ -1,5 +1,6 @@
 class extends="testbox.system.BaseSpec" {
 	function run() {
+		var live = new "tests.support.LiveProviders"()
 		describe( "ChatCommand", () => {
 			it( "reports missing provider without calling AI", () => {
 				var home = getTempDirectory() & "/chat-command-#createUUID()#"
@@ -10,16 +11,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.success ).toBeFalse()
 				expect( result.error ).toInclude( "No AI provider" )
 			} )
-			it( "normalizes an OpenAI-compatible provider and preserves its base URL", () => {
+			// Live spec: drives a real OpenAI-compatible provider. Needs NOVITA_API_KEY.
+			it( title = "normalizes an OpenAI-compatible provider and preserves its base URL", skip = live.skipUnlessAvailable(), body = () => {
 				var home = getTempDirectory() & "/chat-command-compatible-#createUUID()#"
 				var config = new "models.system.ConfigManager"( home )
-				config.set( "bx-ai.defaultProvider", "lmstudio" )
-				config.set( "bx-ai.defaultModel", "qwen/qwen3.6-35b-a3b" )
-				config.set( "bx-ai.providers.lmstudio.type", "openai-compatible" )
-				config.set( "bx-ai.providers.lmstudio.baseURL", "http://localhost:1234/v1" )
+				config.set( "bx-ai.defaultProvider", live.providerName() )
+				config.set( "bx-ai.defaultModel", live.model() )
+				config.set( "bx-ai.providers.#live.providerName()#", live.providerConfig() )
 				var tracker = new "models.util.TokenTracker"( home & "/tokens.json" )
 				var command = new "cli.commands.ChatCommand"( config, tracker )
-				var result = command.execute( "hello", { model: "qwen/qwen3.6-35b-a3b" } )
+				var result = command.execute( "hello", { model: live.model() } )
 				expect( result.success ).toBeTrue()
 				expect( result.serviceProvider ).toBe( "openai-compatible" )
 				expect( result.content ).notToBeEmpty()

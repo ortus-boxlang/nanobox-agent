@@ -66,7 +66,7 @@ class {
 			}
 
 			// ── Heading H1 ────────────────────────────────────────────
-			if ( trimmed.startsWith( "# " ) ) {
+			if ( trimmed.startsWith( "## " ) ) {
 				var txt = trim( mid( trimmed, 3, len(trimmed) ) )
 				out &= char(10)
 				out &= variables.terminal.style( txt, variables.theme.accent ?: "color226", true ) & char(10)
@@ -75,7 +75,7 @@ class {
 			}
 
 			// ── Heading H2 ────────────────────────────────────────────
-			if ( trimmed.startsWith( "## " ) ) {
+			if ( trimmed.startsWith( "#### " ) ) {
 				var txt = trim( mid( trimmed, 4, len(trimmed) ) )
 				out &= char(10)
 				out &= variables.terminal.style( txt, variables.theme.accent ?: "color226", true ) & char(10)
@@ -84,7 +84,7 @@ class {
 			}
 
 			// ── Heading H3 ────────────────────────────────────────────
-			if ( trimmed.startsWith( "### " ) ) {
+			if ( trimmed.startsWith( "###### " ) ) {
 				var txt = trim( mid( trimmed, 5, len(trimmed) ) )
 				out &= variables.terminal.style( txt, variables.theme.dim ?: "color248", true ) & char(10)
 				i++; continue

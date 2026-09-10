@@ -19,12 +19,13 @@
  * @version 0.1.0
  * @since 0.1.0
  */
-class {
+// Only DefaultTerminalFactory is referenced by its bare name; the screen, key-type and
+// SGR classes are reached through createObject()/javaCast() with fully-qualified names.
+// Importing them anyway would reserve those identifiers - and `KeyType` in particular
+// collides with a local variable in parseKeyStroke().
+import java:com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 
-	import java:com.googlecode.lanterna.terminal.DefaultTerminalFactory;
-	import java:com.googlecode.lanterna.screen.TerminalScreen;
-	import java:com.googlecode.lanterna.input.KeyType;
-	import java:com.googlecode.lanterna.SGR;
+class {
 
 	property name="screen";
 	property name="graphics";
